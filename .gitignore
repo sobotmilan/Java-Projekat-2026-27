@@ -28,3 +28,4 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+/src/org/unibl/etf/pj2/luka/main/tests/
