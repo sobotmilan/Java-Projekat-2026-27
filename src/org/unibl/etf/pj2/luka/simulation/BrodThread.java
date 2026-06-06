@@ -4,6 +4,9 @@ import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Polje;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
+import org.unibl.etf.pj2.luka.model.interfaces.Carina;
+import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
+import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
 
 import java.time.LocalDateTime;
@@ -16,10 +19,11 @@ public class BrodThread implements Runnable {
     private int x, y;
     private boolean isPrivezan;
     private boolean pokvaren;
+    private boolean moraNapustiti;
 
     {
         this.x = this.y = -1;
-        this.isPrivezan = this.pokvaren = false;
+        this.isPrivezan = this.pokvaren = this.moraNapustiti = false;
     }
 
     public BrodThread(Plovilo plovilo, Luka luka) {
@@ -30,46 +34,49 @@ public class BrodThread implements Runnable {
     @Override
     public void run() {
         try {
-            boolean usaoUTerminal = false;
-            while (!usaoUTerminal) {
-                for (Terminal t : luka.getTerminali()) {
+            int trenutniTerminal = 0;
+            boolean usidren = false;
+
+            while (!usidren && trenutniTerminal < luka.getTerminali().size()) {
+                Terminal t = luka.getTerminali().get(trenutniTerminal);
+
+                boolean usaoUTerminal = false;
+                while (!usaoUTerminal) {
                     if (pokusajUciUTerminal(t)) {
                         usaoUTerminal = true;
+
                         synchronized (luka.getEvidencijaUlaska()) {
-                            luka.getEvidencijaUlaska().put(plovilo.getImoBroj(), LocalDateTime.now());
+                            if (!luka.getEvidencijaUlaska().containsKey(plovilo.getImoBroj())) {
+                                luka.getEvidencijaUlaska().put(plovilo.getImoBroj(), LocalDateTime.now());
+                            }
                         }
                         break;
                     }
+
+                    Thread.sleep(1000);
                 }
-                if (!usaoUTerminal) {
-                    Thread.sleep(3000);
-                }
-            }
 
-            long sleep = (long) (1000 / plovilo.getBrzina());
-            Thread.sleep(sleep);
+                System.out.println("Brod " + plovilo.getNaziv() + " je usao u Terminal " + (trenutniTerminal + 1));
+                long sleep = (long) (1000 / plovilo.getBrzina());
+                Thread.sleep(sleep);
 
-            while (this.x < 3) {
-                int sledeciX = this.x + 1;
-                boolean pomjeren = false;
+                while (this.x < 3 && !this.moraNapustiti) {
+                    int sledeciX = this.x + 1;
+                    boolean pomjeren = false;
 
-                Terminal lockTerminal = this.trenutniTerminal;
-                if (lockTerminal != null) {
-                    synchronized (lockTerminal) {
-                        Polje[][] matrica = lockTerminal.getMatrica();
+                    synchronized (t) {
+                        Polje[][] matrica = t.getMatrica();
                         Polje poljeIspred = matrica[sledeciX][0];
 
                         if (poljeIspred.getTrenutnoPlovilo() == null) {
                             pomjeriNaPolje(sledeciX, 0);
                             pomjeren = true;
-                        }
-                        else {
+                        } else {
                             Polje lijevoPolje = matrica[this.x][1];
                             Polje lijevoNapred = matrica[sledeciX][1];
 
                             if (lijevoPolje.getTrenutnoPlovilo() == null && lijevoNapred.getTrenutnoPlovilo() == null) {
                                 System.out.println("Brod " + plovilo.getNaziv() + " zapocinje preticanje sporijeg broda!");
-
                                 if (pomjeriNaPolje(this.x, 1)) {
                                     Thread.sleep(sleep);
                                     if (pomjeriNaPolje(sledeciX, 1)) {
@@ -83,45 +90,8 @@ public class BrodThread implements Runnable {
                             }
                         }
                     }
-                }
 
-                if (pomjeren) {
-                    proveriRizikOdUdesa();
-                    Thread.sleep(sleep);
-                } else {
-                    Thread.sleep(500);
-                }
-            }
-
-            int ciljniX = -1;
-            int ciljniY = -1;
-
-            Terminal lockTerminal = this.trenutniTerminal;
-            if (lockTerminal != null) {
-                synchronized (lockTerminal) {
-                    for (int j = 2; j < 17; j++) {
-                        if (lockTerminal.getMatrica()[3][j].getOznaka().equals("D") && lockTerminal.getMatrica()[3][j].getTrenutnoPlovilo() == null) {
-                            ciljniX = 3;
-                            ciljniY = j;
-                            break;
-                        }
-                        if (lockTerminal.getMatrica()[0][j].getOznaka().equals("D") && lockTerminal.getMatrica()[0][j].getTrenutnoPlovilo() == null) {
-                            ciljniX = 0;
-                            ciljniY = j;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (ciljniY != -1) {
-                while (!pomjeriNaPolje(3, 1)) {
-                    Thread.sleep(500);
-                }
-                Thread.sleep(sleep);
-
-                while (this.y < ciljniY) {
-                    if (pomjeriNaPolje(3, this.y + 1)) {
+                    if (pomjeren) {
                         proveriRizikOdUdesa();
                         Thread.sleep(sleep);
                     } else {
@@ -129,37 +99,78 @@ public class BrodThread implements Runnable {
                     }
                 }
 
-                if (ciljniX == 0) {
-                    while (this.x > 0) {
-                        if (pomjeriNaPolje(this.x - 1, this.y)) {
+                if (this.moraNapustiti) {
+                    izadjiIzTrenutnogTerminala();
+                    trenutniTerminal++;
+                    this.moraNapustiti = false;
+                    continue;
+                }
+
+                int ciljniX = -1;
+                int ciljniY = -1;
+
+                synchronized (t) {
+                    for (int j = 2; j < 17; j++) {
+                        if (t.getMatrica()[3][j].getOznaka().equals("D") && t.getMatrica()[3][j].getTrenutnoPlovilo() == null) {
+                            ciljniX = 3;
+                            ciljniY = j;
+                            break;
+                        }
+                        if (t.getMatrica()[0][j].getOznaka().equals("D") && t.getMatrica()[0][j].getTrenutnoPlovilo() == null) {
+                            ciljniX = 0;
+                            ciljniY = j;
+                            break;
+                        }
+                    }
+                }
+
+                if (ciljniY != -1) {
+                    while (!pomjeriNaPolje(3, 1) && !this.moraNapustiti) {
+                        Thread.sleep(500);
+                    }
+                    Thread.sleep(sleep);
+
+                    while (this.y < ciljniY && !this.moraNapustiti) {
+                        if (pomjeriNaPolje(3, this.y + 1)) {
                             proveriRizikOdUdesa();
                             Thread.sleep(sleep);
                         } else {
                             Thread.sleep(500);
                         }
                     }
-                }
 
-                this.isPrivezan = true;
-                System.out.println("Brod " + plovilo.getNaziv() + " uspjesno usidren na poziciju (" + this.x + "," + this.y + ")!");
-                return;
-            }
+                    if (!this.moraNapustiti && ciljniX == 0) {
+                        while (this.x > 0 && !this.moraNapustiti) {
+                            if (pomjeriNaPolje(this.x - 1, this.y)) {
+                                proveriRizikOdUdesa();
+                                Thread.sleep(sleep);
+                            } else {
+                                Thread.sleep(500);
+                            }
+                        }
+                    }
 
-            while (this.x > 0) {
-                if (pomjeriNaPolje(this.x - 1, 1)) {
-                    proveriRizikOdUdesa();
-                    Thread.sleep(sleep);
+                    if (this.moraNapustiti) {
+                        izadjiIzTrenutnogTerminala();
+                        trenutniTerminal++;
+                        this.moraNapustiti = false;
+                        continue;
+                    }
+
+                    this.isPrivezan = true;
+                    System.out.println("Brod " + plovilo.getNaziv() + " uspjesno usidren na poziciju (" + this.x + "," + this.y + ") u Terminalu " + (trenutniTerminal + 1) + ".");
+                    usidren = true;
+                    return;
                 } else {
-                    Thread.sleep(500);
+                    System.out.println("Nema slobodnih dokova u terminalu " + (trenutniTerminal + 1) + ". Brod " + plovilo.getNaziv() + " nastavlja ka sljedecem terminalu.");
+                    izadjiIzTrenutnogTerminala();
+                    trenutniTerminal++;
                 }
             }
 
-            if (this.trenutniTerminal != null) {
-                synchronized (this.trenutniTerminal) {
-                    this.trenutniTerminal.getMatrica()[this.x][this.y].setTrenutnoPlovilo(null);
-                }
+            if (!usidren) {
+                System.out.println("Brod " + plovilo.getNaziv() + " je obisao sve terminale i napustio luku jer nema slobodnih mjesta.");
             }
-            System.out.println("Brod " + plovilo.getNaziv() + " je napustio luku jer nije bilo slobodnih mjesta.");
 
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
@@ -202,27 +213,95 @@ public class BrodThread implements Runnable {
         return false;
     }
 
+    /**
+     * Pomoćna metoda koja bezbjedno izvodi brod iz trenutne pozicije unutar matrice
+     * i izvodi ga kroz odlazni kanal (kolona 1) napolje, oslobađajući resurse terminala.
+     */
+    private void izadjiIzTrenutnogTerminala() throws InterruptedException {
+        if (this.trenutniTerminal == null) return;
+        long sleep = (long) (1000 / plovilo.getBrzina());
+
+        if (this.y == 0) {
+            while (this.x < 3) {
+                if (pomjeriNaPolje(this.x + 1, 0)) {
+                    Thread.sleep(sleep);
+                } else {
+                    Thread.sleep(500);
+                }
+            }
+            while (!pomjeriNaPolje(3, 1)) {
+                Thread.sleep(500);
+            }
+            Thread.sleep(sleep);
+        }
+
+        if (this.y > 1) {
+            if (this.x != 3) {
+                while (this.x < 3) {
+                    if (pomjeriNaPolje(this.x + 1, this.y)) {
+                        Thread.sleep(sleep);
+                    } else {
+                        Thread.sleep(500);
+                    }
+                }
+            }
+
+            while (this.y > 1) {
+                if (pomjeriNaPolje(3, this.y - 1)) {
+                    Thread.sleep(sleep);
+                } else {
+                    Thread.sleep(500);
+                }
+            }
+        }
+
+        while (this.x > 0) {
+            if (pomjeriNaPolje(this.x - 1, 1)) {
+                Thread.sleep(sleep);
+            } else {
+                Thread.sleep(500);
+            }
+        }
+
+        synchronized (this.trenutniTerminal) {
+            this.trenutniTerminal.getMatrica()[this.x][this.y].setTrenutnoPlovilo(null);
+        }
+        System.out.println("Brod " + plovilo.getNaziv() + " je napustio trenutni terminal.");
+        this.trenutniTerminal = null;
+        this.x = -1;
+        this.y = -1;
+    }
+
     private void proveriRizikOdUdesa() {
+        if (plovilo instanceof ObalskaStraza || plovilo instanceof Carina || plovilo instanceof Vatrogasci) {
+            return;
+        }
+
         int sansa = ThreadLocalRandom.current().nextInt(100);
         if (sansa < 2) {
             this.pokvaren = true;
-            this.plovilo.setRotacija(true);
-            System.err.println("DESIO SE UDES! Brod " + plovilo.getNaziv() + " se pokvario na poziciji (" + this.x + "," + this.y + ") i blokira saobracaj!");
+            // this.plovilo.setRotacija(true);
+            System.err.println("UDES! Brod " + plovilo.getNaziv() + " se pokvario na poziciji (" + this.x + "," + this.y + ") i blokira saobracaj.");
 
-            while (this.pokvaren) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
+            int trajanjeUvidjaja = ThreadLocalRandom.current().nextInt(3000, 10001);
+            try {
+                System.out.println("Sluzbena vozila hitno upucena na mjesto nesrece (" + this.x + "," + this.y + ").");
+                Thread.sleep(1500);
+                System.out.println("Uvidjaj u toku na brodu " + plovilo.getNaziv() + " (Trajanje: " + (trajanjeUvidjaja / 1000) + "s).");
+                Thread.sleep(trajanjeUvidjaja);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
             }
+
+            this.moraNapustiti = true;
+            popraviBrod();
         }
     }
 
     public synchronized void popraviBrod() {
         this.pokvaren = false;
-        this.plovilo.setRotacija(false);
-        System.out.println("Brod " + plovilo.getNaziv() + " je uspjesno popravljen i nastavlja plovidbu.");
+        // this.plovilo.setRotacija(false);
+        System.out.println("Brod " + plovilo.getNaziv() + " je uspjesno popravljen, slijedi izlazak sa terminala.");
     }
 }

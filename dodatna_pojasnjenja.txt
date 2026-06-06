@@ -1,0 +1,55 @@
+Dodatna pojašnjenja
+Ako je jedan terminal popunjen, ili ako plovilo tokom kružnog prolaska kroz terminal ne pronađe slobodan dok, ono treba da nastavi ka narednom terminalu. Da li je prihvatljivo da se prelazak između terminala modeluje logički, tako da plovilo u naredni terminal uvijek ulazi kroz standardni ulaz sa gornje/lijeve strane terminala, kao i prilikom dodavanja novog plovila? Drugim riječima, da li je u redu da se sama tranzicija između terminala ne prikazuje detaljno?
+
+Vidjece se kada se odabere naredni terminal u redu, to je dovoljno
+Kod pomorske nezgode, da li se saobraćaj na tom terminalu blokira odmah za sva ostala plovila, osim za plovila obalske straže, carine i vatrogasaca koja idu ka mjestu nezgode?
+Da, ali u terminalu.
+Ako su polja koja vode do mjesta incidenta zauzeta drugim plovilima, kako službena plovila treba da dođu do mjesta incidenta?
+Preskočite polja.
+Da li obalska straža, carina i vatrogasci moraju doći tačno na polje incidenta, ili je dovoljno da dođu na najbliža slobodna polja u blizini mjesta nezgode?
+Da dođu do plovila gdje je bio udes, poželjno polje pored.
+Nakon što službena plovila dođu do mjesta nezgode i završi se uviđaj od 3 do 10 sekundi, šta se dalje radi sa svim plovilima koja su učestvovala u incidentu - i službenim plovilima i plovilima koja su učestvovala u sudaru? Da li se uklanjaju iz incidenta/simulacije ili treba da nastave, odnosno napuste terminal normalnim kretanjem kroz kanal?
+Neka napuste terminal.
+
+
+1. TERMINAL I KRETANJE
+
+U zadatku piše:"Ukoliko je terminal popunjen, plovila mogu samo da idu na naredni terminal tj. pravo, a samo u slučaju da na terminalu postoji slobodan dok, brod skreće i pravi kružni prolazak po tom terminalu prema narednom terminalu ili izlazu."
+
+Da li ovo znači da ako na terminalu ima slobodnih dokova, brod ulazi u terminal i kružno ide do narednog terminala ili je ovdje trebalo da stoji da ulazi u terminal ide do tog slobodnog doka, a do narednog terminala ide pravo kroz kanal?
+
+Isto me zanima da li se uvijek popunjava prvi terminal u kojem postoji slobodan dok ili može da se bira bilo koji terminal u kojem postoje slobodni dokovi ili se popunjavanje vrši od posljednjeg terminala u nizu?
+
+Takođe bih voljela da provjerim za dimenzije terminala, odnosno koliko tačno ima redova i kolona, da li uzimamo ovo sa šematskog prikaza 4 reda × 17 kolona (2 kolone za kanal i ukupno 30 dokova po terminalu) ili treba da bude proizvoljna dimenzija i da li plovila mogu da se paralelno kreću u jednom smjeru ili samo jedno iza drugog?
+Terminal je baš tih dimenzija. Brod ulazi u luku u kojoj su jedan za drugim terminali. Kada prodje terminal 1, ide na terminal 2 itd.... Ako terminal ima slobodnih mjesta, onda se ulazi u terminal.
+
+2. NAPLATA LUČKIH TAKSI
+
+Htjela bih samo da provjerim da li npr. brod koji se zadrži 5 sati plaća 500 KM ili plaća 1000 KM, ili recimo 30 sati, da li placa 3000 ili se to ne smije desiti?
+Jedno je vrijeme kretanja broda u simulaciji a drugo stvarno vrijeme koje Vi trebate skalirati. Do sat vremena je 100KM, a preko naredna tarifa itd...
+
+3. TIPOVI PLOVILA
+
+Pošto neka plovila mogu da imaju višestruke tipove (kruzer i tanker mogu da budu carinski brodovi) da li treba da imamo dropdown sa svim mogućim kombinacijama pa da administrator bira ili da imamo samo npr kruzer i ispod kruzera checkbox ili je to proizvoljno?
+Kako god je Vama lakše.
+
+4. RASPORED MINIMALNOG BROJA PLOVILA PO TERMINALIMA
+
+U zadatku pise: "korisnik zadaje minimalan broj plovila koji se postavljaju na slučajan način na svaki od terminala"
+Da li to znači da se, ako je recimo taj broj 5 na svaki od terminala na slučajan način rasporedi po 5 plovila ili se ukupno 5 plovila na slučajan način raspoređuje po terminalima (npr. može da se desi da je svih 5 plovila na jednom terminalu, a na ostalima nema nijedan)?
+Taj broj je po terminalu.
+
+1. Kada ste rekli da sluzbena plovila mogu "preskociti polja", da li je prihvatljivo da ona u mom rjesenju ne preskacu bukvalno, nego traze slobodnu rutu i po potrebi preticu plovila sa manjim prioritetom?
+
+Službena plovila trebaju doći do mjesta incidenta. Jedino ako je više incidenata onda trebaju preskočiti možda jedan incident ispred drugog, malo vjerovatno ali moguće. Poželjno je da idu slobodnom rutom.
+
+2. Ako su sva polja ka incidentu zauzeta tako da slobodna ruta ne postoji, da li sluzbeno plovilo smije bukvalno proci preko zauzetih polja, ili je dovoljno da ceka/pretice po pravilima simulacije jer sam ja tako napravila?
+
+Može se i sačekati, i to je ok.
+
+3. Nakon uvidjaja, da li sluzbena plovila moraju napustiti terminal, ili je prihvatljivo da se vrate na prvi slobodan dok ako takav dok postoji?
+I jedno i drugo je ok, mada je bolje preferirati drugu opciju kako bi se mogla službena vozila ponovo aktivirati.
+
+4. Nakon uvidjaja, da li plovila koja su ucestvovala u sudaru moraju uvijek napustiti terminal, ili smiju nastaviti svoju prethodnu rutu, odnosno privezati se ako su bila dolazna plovila?
+
+Neka napuste terminal.

@@ -6,7 +6,11 @@ public class Tanker extends Plovilo {
     private double zapreminaBarel;
 
     public Tanker(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, double zapreminaBarel) {
-        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija);
+        this(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, zapreminaBarel,  10);
+    }
+
+    public Tanker(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, double zapreminaBarel, int prioritet) {
+        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, prioritet);
         this.zapreminaBarel = zapreminaBarel;
     }
 

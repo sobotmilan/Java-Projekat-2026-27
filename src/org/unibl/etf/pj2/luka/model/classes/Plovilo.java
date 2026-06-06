@@ -34,12 +34,8 @@ abstract public class Plovilo implements Serializable {
     /** Brzina kretanja plovila. */
     private double brzina;
 
-    /** Polje koje označava da li navedeno plovilo posjeduje rotaciju. Obično samo vozila u upotrebi od strane određenih državnih službi imaju rotaciju. */
-    private boolean rotacija;
-
-    {
-        rotacija = false;
-    }
+    /** Vozila sa većim prioritetom imaju nižu vrijednost u ovom polju.*/
+    private final int prioritet;
 
     /**
      * Konstruktor kojim se ručno inicijalizuju svi osnovni atributi plovila osim brzine, koja se inicijalizuje kao slučajna brojna vrijednost sa pokretnim zarezom.
@@ -50,13 +46,14 @@ abstract public class Plovilo implements Serializable {
      * @param registarskiBroj Registarska oznaka plovila.
      * @param fotografija Referenca na objekat tipa File koji čuva apstraktnu putanju do binarne datoteke koja predstavlja fotografiju plovila.
      */
-    public Plovilo(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija) {
+    public Plovilo(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, int prioritet) {
         this.naziv = naziv;
         this.imoBroj = imoBroj;
         this.brojMotora = brojMotora;
         this.registarskiBroj = registarskiBroj;
         this.fotografija = fotografija;
         this.brzina = java.util.concurrent.ThreadLocalRandom.current().nextDouble(1,50);
+        this.prioritet = prioritet;
     }
 
     /**
@@ -168,22 +165,12 @@ abstract public class Plovilo implements Serializable {
     }
 
     /**
-     * Provjerava da li plovilo trenutno ima uključenu rotaciju. Upaljena rotacija daje prioritet pri kretanju kroz plovne kanale terminala.
+     * Omogućava dobijanje vrijednosti prioriteta datog plovila. Niža vrijednost označava viši prioritet (relativno ostalim).
      *
-     * @return true ako je rotacija aktivna, u suprotnom false.
+     * @return prioritet plovila.
      * */
-    public boolean isRotacija() {
-        return rotacija;
-    }
-
-
-    /**
-     * Omogućava postavljanje rotacije na true ukoliko je rotacija aktivna, odnosno false ako je rotacija ugasena.
-     *
-     * @param rotacija Vrijednost na koju se postavlja stanje rotacije plovila.
-     */
-    public void setRotacija(boolean rotacija) {
-        this.rotacija = rotacija;
+    public int getPrioritet() {
+        return prioritet;
     }
 
     /**

@@ -1,0 +1,6 @@
+maj 29, 2026 2:19:49 PO PODNE org.unibl.etf.pj2.luka.util.LoggerUtil logError
+SEVERE: Test validation warning
+java.lang.NullPointerException: Simulating a crash for testing purposes!
+	at org.unibl.etf.pj2.luka.main.tests.LukaTest.loggerTest(LukaTest.java:50)
+	at org.unibl.etf.pj2.luka.main.tests.LukaTest.main(LukaTest.java:23)
+

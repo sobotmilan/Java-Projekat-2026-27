@@ -3,6 +3,7 @@ package org.unibl.etf.pj2.luka.model.classes;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import org.unibl.etf.pj2.luka.model.classes.Polje;
 
 public class Terminal implements Serializable {
     private static final long serialVersionUID;
@@ -55,8 +56,8 @@ public class Terminal implements Serializable {
         }
 
         for (int i = 0; i < 4; i++) {
-            matrica[i][0].setOznaka("DOWN");
-            matrica[i][1].setOznaka("UP");
+            matrica[i][0].setOznaka("v");
+            matrica[i][1].setOznaka("^");
         }
 
         int vezCounter = 1;
@@ -70,6 +71,7 @@ public class Terminal implements Serializable {
             dokovi.add(d2);
         }
 
-        matrica[2][2].setOznaka("LEFT");
+        matrica[2][2].setOznaka("->");
+        matrica[1][2].setOznaka("<-");
     }
 }

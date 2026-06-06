@@ -6,7 +6,11 @@ public class KontejnerskiBrod extends Plovilo {
     private int kapacitetTEU;
 
     public KontejnerskiBrod(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, int kapacitetTEU) {
-        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija);
+        this(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, kapacitetTEU, 10);
+    }
+
+    public KontejnerskiBrod(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, int kapacitetTEU, int prioritet) {
+        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, prioritet);
         this.kapacitetTEU = kapacitetTEU;
     }
 

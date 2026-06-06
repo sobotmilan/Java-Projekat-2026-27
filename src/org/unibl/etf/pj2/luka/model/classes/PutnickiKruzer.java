@@ -6,7 +6,11 @@ public class PutnickiKruzer extends Plovilo {
     private int brojPutnika;
 
     public PutnickiKruzer(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, int brojPutnika) {
-        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija);
+        this(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, brojPutnika, 10);
+    }
+
+    public PutnickiKruzer(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, int brojPutnika, int prioritet) {
+        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, prioritet);
         this.brojPutnika = brojPutnika;
     }
 

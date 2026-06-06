@@ -1,5 +1,7 @@
 package org.unibl.etf.pj2.luka.model.classes;
 
+import org.unibl.etf.pj2.luka.simulation.BrodThread;
+
 import java.io.Serializable;
 
 public class Polje implements Serializable {
@@ -39,4 +41,8 @@ public class Polje implements Serializable {
         this.trenutnoPlovilo = trenutnoPlovilo;
     }
 
+    @Override
+    public String toString() {
+        return oznaka;
+    }
 }
