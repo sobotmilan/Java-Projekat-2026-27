@@ -8,7 +8,7 @@ public class SerializationUtil {
     private static final String DEFAULT_PATH = "luka.ser";
 
     public static void serijalizujStanjeLuke(Luka luka) {
-        try(ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(DEFAULT_PATH))) {
+        try(FileOutputStream fos = new FileOutputStream(DEFAULT_PATH); ObjectOutputStream oos = new ObjectOutputStream(fos)) {
             oos.writeObject(luka);
         }catch(IOException ioe) {
             LoggerUtil.logError("Greska prilikom serijalizacije stanja luke!", ioe);
@@ -21,7 +21,7 @@ public class SerializationUtil {
             return null;
         }
 
-        try(ObjectInputStream ois = new ObjectInputStream(new FileInputStream(DEFAULT_PATH))) {
+        try(FileInputStream fis = new FileInputStream(DEFAULT_PATH); ObjectInputStream ois = new ObjectInputStream(fis)) {
             return (Luka) ois.readObject();
         }catch(IOException | ClassNotFoundException e) {
             LoggerUtil.logError("Greska prilikom deserijalizacije stanja luke! Pokrece se nova konfiguracija", e);
