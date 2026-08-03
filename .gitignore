@@ -29,3 +29,11 @@ bin/
 ### Mac OS ###
 .DS_Store
 /src/org/unibl/etf/pj2/luka/main/tests/
+
+target/
+*.class
+error.log
+error.log.lck
+luka.ser
+takse.csv
+*.testbackup
