@@ -10,6 +10,11 @@ public class Terminal implements Serializable {
     private final Polje[][] matrica;
     private final List<Dok> dokovi;
     private final int idTerminala;
+    public static final int KANAL_ULAZ = 2;
+    public static final int KANAL_IZLAZ = 1;
+    public static final int KOLONA_ULAZ = 0;
+    public static final int KOLONA_IZLAZ = 1;
+    private transient java.util.Set<Integer> rezervisaniVezovi;
 
     static{
         serialVersionUID = 1L;
@@ -48,6 +53,43 @@ public class Terminal implements Serializable {
         return counter;
     }
 
+    public synchronized int getBrojRaspolozivihVezova() {
+        int counter = 0;
+        for (Dok d : dokovi) {
+            if (d.isSlobodan() && !rezervisani().contains(d.getOznakaVezova())) {
+                counter++;
+            }
+        }
+        return counter;
+    }
+
+
+    private java.util.Set<Integer> rezervisani() {
+        if (rezervisaniVezovi == null) {
+            rezervisaniVezovi = new java.util.HashSet<>();
+        }
+        return rezervisaniVezovi;
+    }
+
+    public synchronized Dok rezervisiSlobodanDok(Plovilo p) {
+        if (p == null) {
+            return null;
+        }
+        for (Dok d : dokovi) {
+            if (d.isSlobodan() && !rezervisani().contains(d.getOznakaVezova())) {
+                rezervisani().add(d.getOznakaVezova());
+                return d;
+            }
+        }
+        return null;
+    }
+
+    public synchronized void otkaziRezervaciju(Dok d) {
+        if (d != null) {
+            rezervisani().remove(d.getOznakaVezova());
+        }
+    }
+
     private void initializeMatrix() {
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 17; j++) {
@@ -71,7 +113,9 @@ public class Terminal implements Serializable {
             dokovi.add(d2);
         }
 
-        matrica[2][2].setOznaka("->");
-        matrica[1][2].setOznaka("<-");
+        for (int j = 2; j < 17; j++) {
+            matrica[KANAL_IZLAZ][j].setOznaka("<-");
+            matrica[KANAL_ULAZ][j].setOznaka("->");
+        }
     }
 }

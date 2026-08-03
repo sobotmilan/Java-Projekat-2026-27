@@ -169,16 +169,64 @@ class TerminalTest {
     }
 
     @Test
-    @Tag("bug")
-    @DisplayName("BUG: terminal treba da izloži atomarnu rezervaciju doka")
-    void terminalTrebaAtomarnuRezervaciju() {
-        // Bez ove metode svaki BrodThread sam radi "pronađi slobodan dok" pa "zauzmi ga"
-        // u dva odvojena koraka, što je klasična race condition situacija:
-        // dva broda mogu pronaći isti slobodan dok prije nego ijedan stigne da ga zauzme.
-        //
-        // Očekivani potpis: public synchronized Dok rezervisiSlobodanDok(Plovilo p)
-        //
-        // Ovaj test namjerno pada dok metoda ne postoji — vidi refaktor R2 u PRONALASCI.md.
-        fail("Nedostaje Terminal.rezervisiSlobodanDok(Plovilo) — atomarna rezervacija veza (refaktor R2).");
+    @DisplayName("Rezervacija veza je atomarna — dva plovila ne mogu dobiti isti vez")
+    void rezervacijaJeAtomarna() throws InterruptedException {
+        final int brojNiti = 40;
+        final java.util.Set<Integer> dodijeljeni =
+                java.util.Collections.synchronizedSet(new java.util.HashSet<Integer>());
+        final java.util.concurrent.atomic.AtomicInteger uspjesnih =
+                new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicInteger duplikata =
+                new java.util.concurrent.atomic.AtomicInteger();
+
+        final java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch kraj = new java.util.concurrent.CountDownLatch(brojNiti);
+        java.util.concurrent.ExecutorService exec =
+                java.util.concurrent.Executors.newFixedThreadPool(16);
+
+        for (int i = 0; i < brojNiti; i++) {
+            final Plovilo p = TestFactory.kontejnerski("IMO-" + i);
+            exec.submit(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        start.await();
+                        Dok d = t.rezervisiSlobodanDok(p);
+                        if (d != null) {
+                            uspjesnih.incrementAndGet();
+                            if (!dodijeljeni.add(d.getOznakaVezova())) {
+                                duplikata.incrementAndGet();
+                            }
+                        }
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        kraj.countDown();
+                    }
+                }
+            });
+        }
+
+        start.countDown();
+        assertTrue(kraj.await(15, java.util.concurrent.TimeUnit.SECONDS));
+        exec.shutdownNow();
+
+        assertEquals(0, duplikata.get(), "Isti vez je dodijeljen dvama plovilima.");
+        assertEquals(30, uspjesnih.get(), "Svih 30 vezova je trebalo biti dodijeljeno.");
+        assertEquals(0, t.getBrojRaspolozivihVezova());
     }
+
+    @Test
+    @DisplayName("Otkazana rezervacija vraća vez u opticaj")
+    void otkazivanjeRezervacije() {
+        Dok d = t.rezervisiSlobodanDok(TestFactory.kontejnerski("1"));
+
+        assertNotNull(d);
+        assertEquals(29, t.getBrojRaspolozivihVezova());
+        assertEquals(30, t.getBrojSlobodnihVezova(), "Rezervacija ne zauzima vez fizički.");
+
+        t.otkaziRezervaciju(d);
+        assertEquals(30, t.getBrojRaspolozivihVezova());
+    }
+
 }

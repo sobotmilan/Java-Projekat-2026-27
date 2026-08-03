@@ -1,29 +1,31 @@
 package org.unibl.etf.pj2.luka.simulation;
 
+import org.unibl.etf.pj2.luka.model.classes.Dok;
 import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Polje;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
-import org.unibl.etf.pj2.luka.model.interfaces.Carina;
-import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
-import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
 
 import java.time.LocalDateTime;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class BrodThread implements Runnable {
+    private static final int MAX_POKUSAJA = 100;
+    private static final long CEKANJE_MS = 100L;
+    private static final int PRAG_PRETICANJA = 3;
+    public static volatile boolean SUDARI_OMOGUCENI = false;
+
     private final Plovilo plovilo;
     private final Luka luka;
     private Terminal trenutniTerminal;
     private int x, y;
     private boolean isPrivezan;
-    private boolean pokvaren;
     private boolean moraNapustiti;
 
     {
         this.x = this.y = -1;
-        this.isPrivezan = this.pokvaren = this.moraNapustiti = false;
+        this.isPrivezan = false;
+        this.moraNapustiti = false;
     }
 
     public BrodThread(Plovilo plovilo, Luka luka) {
@@ -34,142 +36,43 @@ public class BrodThread implements Runnable {
     @Override
     public void run() {
         try {
-            int trenutniTerminal = 0;
+            int idx = 0;
             boolean usidren = false;
 
-            while (!usidren && trenutniTerminal < luka.getTerminali().size()) {
-                Terminal t = luka.getTerminali().get(trenutniTerminal);
+            while (!usidren && idx < luka.getTerminali().size()) {
+                Terminal t = luka.getTerminali().get(idx);
 
-                boolean usaoUTerminal = false;
-                while (!usaoUTerminal) {
-                    if (pokusajUciUTerminal(t)) {
-                        usaoUTerminal = true;
-
-                        synchronized (luka.getEvidencijaUlaska()) {
-                            if (!luka.getEvidencijaUlaska().containsKey(plovilo.getImoBroj())) {
-                                luka.getEvidencijaUlaska().put(plovilo.getImoBroj(), LocalDateTime.now());
-                            }
-                        }
-                        break;
-                    }
-
-                    Thread.sleep(1000);
-                }
-
-                System.out.println("Brod " + plovilo.getNaziv() + " je usao u Terminal " + (trenutniTerminal + 1));
-                long sleep = (long) (1000 / plovilo.getBrzina());
-                Thread.sleep(sleep);
-
-                while (this.x < 3 && !this.moraNapustiti) {
-                    int sledeciX = this.x + 1;
-                    boolean pomjeren = false;
-
-                    synchronized (t) {
-                        Polje[][] matrica = t.getMatrica();
-                        Polje poljeIspred = matrica[sledeciX][0];
-
-                        if (poljeIspred.getTrenutnoPlovilo() == null) {
-                            pomjeriNaPolje(sledeciX, 0);
-                            pomjeren = true;
-                        } else {
-                            Polje lijevoPolje = matrica[this.x][1];
-                            Polje lijevoNapred = matrica[sledeciX][1];
-
-                            if (lijevoPolje.getTrenutnoPlovilo() == null && lijevoNapred.getTrenutnoPlovilo() == null) {
-                                System.out.println("Brod " + plovilo.getNaziv() + " zapocinje preticanje sporijeg broda!");
-                                if (pomjeriNaPolje(this.x, 1)) {
-                                    Thread.sleep(sleep);
-                                    if (pomjeriNaPolje(sledeciX, 1)) {
-                                        Thread.sleep(sleep);
-                                        if (matrica[sledeciX][0].getTrenutnoPlovilo() == null) {
-                                            pomjeriNaPolje(sledeciX, 0);
-                                        }
-                                        pomjeren = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (pomjeren) {
-                        proveriRizikOdUdesa();
-                        Thread.sleep(sleep);
-                    } else {
-                        Thread.sleep(500);
-                    }
-                }
-
-                if (this.moraNapustiti) {
-                    izadjiIzTrenutnogTerminala();
-                    trenutniTerminal++;
-                    this.moraNapustiti = false;
+                Dok rezervisan = t.rezervisiSlobodanDok(plovilo);
+                if (rezervisan == null) {
+                    log("Terminal " + (idx + 1) + " je pun, nastavlja pravo.");
+                    idx++;
                     continue;
                 }
 
-                int ciljniX = -1;
-                int ciljniY = -1;
-
-                synchronized (t) {
-                    for (int j = 2; j < 17; j++) {
-                        if (t.getMatrica()[3][j].getOznaka().equals("D") && t.getMatrica()[3][j].getTrenutnoPlovilo() == null) {
-                            ciljniX = 3;
-                            ciljniY = j;
-                            break;
-                        }
-                        if (t.getMatrica()[0][j].getOznaka().equals("D") && t.getMatrica()[0][j].getTrenutnoPlovilo() == null) {
-                            ciljniX = 0;
-                            ciljniY = j;
-                            break;
-                        }
-                    }
+                if (!udjiUTerminal(t)) {
+                    t.otkaziRezervaciju(rezervisan);
+                    log("Nije uspio ući u terminal " + (idx + 1) + ", nastavlja pravo.");
+                    idx++;
+                    continue;
                 }
+                evidentirajUlazak();
+                log("Ušao u terminal " + (idx + 1) + ".");
 
-                if (ciljniY != -1) {
-                    while (!pomjeriNaPolje(3, 1) && !this.moraNapustiti) {
-                        Thread.sleep(500);
-                    }
-                    Thread.sleep(sleep);
-
-                    while (this.y < ciljniY && !this.moraNapustiti) {
-                        if (pomjeriNaPolje(3, this.y + 1)) {
-                            proveriRizikOdUdesa();
-                            Thread.sleep(sleep);
-                        } else {
-                            Thread.sleep(500);
-                        }
-                    }
-
-                    if (!this.moraNapustiti && ciljniX == 0) {
-                        while (this.x > 0 && !this.moraNapustiti) {
-                            if (pomjeriNaPolje(this.x - 1, this.y)) {
-                                proveriRizikOdUdesa();
-                                Thread.sleep(sleep);
-                            } else {
-                                Thread.sleep(500);
-                            }
-                        }
-                    }
-
-                    if (this.moraNapustiti) {
-                        izadjiIzTrenutnogTerminala();
-                        trenutniTerminal++;
-                        this.moraNapustiti = false;
-                        continue;
-                    }
-
+                if (doploviDoDoka(rezervisan)) {
                     this.isPrivezan = true;
-                    System.out.println("Brod " + plovilo.getNaziv() + " uspjesno usidren na poziciju (" + this.x + "," + this.y + ") u Terminalu " + (trenutniTerminal + 1) + ".");
                     usidren = true;
-                    return;
+                    log("Usidren na vezu " + rezervisan.getOznakaVezova()
+                            + " (" + this.x + "," + this.y + ") u terminalu " + (idx + 1) + ".");
                 } else {
-                    System.out.println("Nema slobodnih dokova u terminalu " + (trenutniTerminal + 1) + ". Brod " + plovilo.getNaziv() + " nastavlja ka sljedecem terminalu.");
-                    izadjiIzTrenutnogTerminala();
-                    trenutniTerminal++;
+                    t.otkaziRezervaciju(rezervisan);
+                    log("Ne može doći do veza u terminalu " + (idx + 1) + ", nastavlja dalje.");
+                    napustiTerminal();
+                    idx++;
                 }
             }
 
             if (!usidren) {
-                System.out.println("Brod " + plovilo.getNaziv() + " je obisao sve terminale i napustio luku jer nema slobodnih mjesta.");
+                log("Obišao sve terminale i napustio luku — nema slobodnih vezova.");
             }
 
         } catch (InterruptedException ie) {
@@ -181,30 +84,199 @@ public class BrodThread implements Runnable {
 
     public boolean pokusajUciUTerminal(Terminal terminal) {
         synchronized (terminal) {
-            if (terminal.getMatrica()[0][0].getTrenutnoPlovilo() == null) {
-                terminal.getMatrica()[0][0].setTrenutnoPlovilo(this.plovilo);
+            if (terminal.getMatrica()[0][Terminal.KOLONA_ULAZ].getTrenutnoPlovilo() == null) {
+                terminal.getMatrica()[0][Terminal.KOLONA_ULAZ].setTrenutnoPlovilo(this.plovilo);
                 this.trenutniTerminal = terminal;
                 this.x = 0;
-                this.y = 0;
+                this.y = Terminal.KOLONA_ULAZ;
                 return true;
             }
         }
         return false;
     }
 
+    private boolean udjiUTerminal(Terminal t) throws InterruptedException {
+        for (int i = 0; i < MAX_POKUSAJA; i++) {
+            if (pokusajUciUTerminal(t)) {
+                return true;
+            }
+            Thread.sleep(CEKANJE_MS);
+        }
+        return false;
+    }
+
+    private void evidentirajUlazak() {
+        synchronized (luka.getEvidencijaUlaska()) {
+            if (!luka.getEvidencijaUlaska().containsKey(plovilo.getImoBroj())) {
+                luka.getEvidencijaUlaska().put(plovilo.getImoBroj(), LocalDateTime.now());
+            }
+        }
+    }
+
+    private boolean doploviDoDoka(Dok cilj) throws InterruptedException {
+        int ciljX = cilj.getLokacija().getX();
+        int ciljY = cilj.getLokacija().getY();
+        long korak = trajanjeKoraka();
+
+        if (!sidjiDoKanala(korak)) {
+            return false;
+        }
+
+        if (!ploviIstocno(ciljY, korak)) {
+            return false;
+        }
+
+        if (ciljX == 3) {
+            return pomjeriSaCekanjem(3, ciljY, korak);
+        }
+
+        if (!pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, ciljY, korak)) {
+            return false;
+        }
+        Thread.sleep(korak);
+        return pomjeriSaCekanjem(0, ciljY, korak);
+    }
+
+    private boolean sidjiDoKanala(long korak) throws InterruptedException {
+        while (this.x < Terminal.KANAL_ULAZ) {
+            if (!pomjeriSaCekanjem(this.x + 1, Terminal.KOLONA_ULAZ, korak)) {
+                return false;
+            }
+            provjeriSudar();
+            Thread.sleep(korak);
+        }
+        return true;
+    }
+
+    private boolean ploviIstocno(int ciljY, long korak) throws InterruptedException {
+        int neuspjesi = 0;
+        int ukupnoPokusaja = 0;
+
+        while (this.y < ciljY) {
+            if (++ukupnoPokusaja > MAX_POKUSAJA * 4) {
+                return false;
+            }
+
+            boolean pomjeren = false;
+
+            if (this.x == Terminal.KANAL_ULAZ) {
+                pomjeren = pomjeriNaPolje(Terminal.KANAL_ULAZ, this.y + 1);
+
+                if (!pomjeren && neuspjesi >= PRAG_PRETICANJA && smijePreticati(this.y + 1)) {
+                    pomjeren = pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y);
+                    if (pomjeren) {
+                        log("Započinje preticanje.");
+                    }
+                }
+            } else {
+                pomjeren = pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y + 1);
+                if (pomjeren) {
+                    Thread.sleep(korak);
+                    pomjeriNaPolje(Terminal.KANAL_ULAZ, this.y);
+                }
+            }
+
+            if (pomjeren) {
+                neuspjesi = 0;
+                provjeriSudar();
+                Thread.sleep(korak);
+            } else {
+                neuspjesi++;
+                Thread.sleep(CEKANJE_MS);
+            }
+        }
+
+
+        if (this.x == Terminal.KANAL_IZLAZ) {
+            pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak);
+        }
+        return true;
+    }
+
+    private boolean smijePreticati(int sledeciY) {
+        Terminal t = this.trenutniTerminal;
+        if (t == null) {
+            return false;
+        }
+        synchronized (t) {
+            Polje[][] m = t.getMatrica();
+            return m[Terminal.KANAL_IZLAZ][this.y].getTrenutnoPlovilo() == null
+                    && m[Terminal.KANAL_IZLAZ][sledeciY].getTrenutnoPlovilo() == null;
+        }
+    }
+
+    private void napustiTerminal() throws InterruptedException {
+        Terminal t = this.trenutniTerminal;
+        if (t == null) {
+            return;
+        }
+        long korak = trajanjeKoraka();
+
+        if (this.y > Terminal.KOLONA_IZLAZ) {
+            if (this.x == 3) {
+                pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak);
+                Thread.sleep(korak);
+            }
+            if (this.x != Terminal.KANAL_IZLAZ) {
+                pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, this.y, korak);
+                Thread.sleep(korak);
+            }
+
+            int pokusaja = 0;
+            while (this.y > Terminal.KOLONA_IZLAZ && pokusaja++ < MAX_POKUSAJA * 4) {
+                if (pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y - 1)) {
+                    Thread.sleep(korak);
+                } else {
+                    Thread.sleep(CEKANJE_MS);
+                }
+            }
+        }
+
+        int pokusaja = 0;
+        while (this.x > 0 && pokusaja++ < MAX_POKUSAJA * 2) {
+            if (pomjeriNaPolje(this.x - 1, Terminal.KOLONA_IZLAZ)) {
+                Thread.sleep(korak);
+            } else {
+                Thread.sleep(CEKANJE_MS);
+            }
+        }
+
+        oslobodiTrenutnoPolje();
+        log("Napustio terminal.");
+    }
+
+    private void oslobodiTrenutnoPolje() {
+        Terminal t = this.trenutniTerminal;
+        if (t == null || this.x < 0 || this.y < 0) {
+            return;
+        }
+        synchronized (t) {
+            Polje p = t.getMatrica()[this.x][this.y];
+            if (p.getTrenutnoPlovilo() == this.plovilo) {
+                p.setTrenutnoPlovilo(null);
+            }
+        }
+        this.trenutniTerminal = null;
+        this.x = -1;
+        this.y = -1;
+    }
+
     private boolean pomjeriNaPolje(int targetX, int targetY) {
-        Terminal lockTerminal = this.trenutniTerminal;
-        if (lockTerminal == null) return false;
+        Terminal t = this.trenutniTerminal;
+        if (t == null || this.x < 0 || this.y < 0) {
+            return false;
+        }
 
-        synchronized (lockTerminal) {
-            Polje[][] matrica = lockTerminal.getMatrica();
-            Polje staroPolje = matrica[this.x][this.y];
-            Polje novoPolje = matrica[targetX][targetY];
+        synchronized (t) {
+            Polje[][] matrica = t.getMatrica();
+            Polje staro = matrica[this.x][this.y];
+            Polje novo = matrica[targetX][targetY];
 
-            if (novoPolje.getTrenutnoPlovilo() == null) {
-                novoPolje.setTrenutnoPlovilo(this.plovilo);
-                staroPolje.setTrenutnoPlovilo(null);
-
+            if (novo.getTrenutnoPlovilo() == null) {
+                novo.setTrenutnoPlovilo(this.plovilo);
+                if (staro.getTrenutnoPlovilo() == this.plovilo) {
+                    staro.setTrenutnoPlovilo(null);
+                }
                 this.x = targetX;
                 this.y = targetY;
                 return true;
@@ -213,95 +285,44 @@ public class BrodThread implements Runnable {
         return false;
     }
 
-    /**
-     * Pomoćna metoda koja bezbjedno izvodi brod iz trenutne pozicije unutar matrice
-     * i izvodi ga kroz odlazni kanal (kolona 1) napolje, oslobađajući resurse terminala.
-     */
-    private void izadjiIzTrenutnogTerminala() throws InterruptedException {
-        if (this.trenutniTerminal == null) return;
-        long sleep = (long) (1000 / plovilo.getBrzina());
-
-        if (this.y == 0) {
-            while (this.x < 3) {
-                if (pomjeriNaPolje(this.x + 1, 0)) {
-                    Thread.sleep(sleep);
-                } else {
-                    Thread.sleep(500);
-                }
+    private boolean pomjeriSaCekanjem(int targetX, int targetY, long korak) throws InterruptedException {
+        for (int i = 0; i < MAX_POKUSAJA; i++) {
+            if (pomjeriNaPolje(targetX, targetY)) {
+                return true;
             }
-            while (!pomjeriNaPolje(3, 1)) {
-                Thread.sleep(500);
-            }
-            Thread.sleep(sleep);
+            Thread.sleep(CEKANJE_MS);
         }
-
-        if (this.y > 1) {
-            if (this.x != 3) {
-                while (this.x < 3) {
-                    if (pomjeriNaPolje(this.x + 1, this.y)) {
-                        Thread.sleep(sleep);
-                    } else {
-                        Thread.sleep(500);
-                    }
-                }
-            }
-
-            while (this.y > 1) {
-                if (pomjeriNaPolje(3, this.y - 1)) {
-                    Thread.sleep(sleep);
-                } else {
-                    Thread.sleep(500);
-                }
-            }
-        }
-
-        while (this.x > 0) {
-            if (pomjeriNaPolje(this.x - 1, 1)) {
-                Thread.sleep(sleep);
-            } else {
-                Thread.sleep(500);
-            }
-        }
-
-        synchronized (this.trenutniTerminal) {
-            this.trenutniTerminal.getMatrica()[this.x][this.y].setTrenutnoPlovilo(null);
-        }
-        System.out.println("Brod " + plovilo.getNaziv() + " je napustio trenutni terminal.");
-        this.trenutniTerminal = null;
-        this.x = -1;
-        this.y = -1;
+        return false;
     }
 
-    private void proveriRizikOdUdesa() {
-        if (plovilo instanceof ObalskaStraza || plovilo instanceof Carina || plovilo instanceof Vatrogasci) {
+    private long trajanjeKoraka() {
+        long korak = (long) (1000.0 / plovilo.getBrzina());
+        return Math.max(20L, Math.min(korak, 400L));
+    }
+
+    private void provjeriSudar() {
+        if (!SUDARI_OMOGUCENI) {
             return;
         }
-
-        int sansa = ThreadLocalRandom.current().nextInt(100);
-        if (sansa < 2) {
-            this.pokvaren = true;
-            // this.plovilo.setRotacija(true);
-            System.err.println("UDES! Brod " + plovilo.getNaziv() + " se pokvario na poziciji (" + this.x + "," + this.y + ") i blokira saobracaj.");
-
-            int trajanjeUvidjaja = ThreadLocalRandom.current().nextInt(3000, 10001);
-            try {
-                System.out.println("Sluzbena vozila hitno upucena na mjesto nesrece (" + this.x + "," + this.y + ").");
-                Thread.sleep(1500);
-                System.out.println("Uvidjaj u toku na brodu " + plovilo.getNaziv() + " (Trajanje: " + (trajanjeUvidjaja / 1000) + "s).");
-                Thread.sleep(trajanjeUvidjaja);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-
-            this.moraNapustiti = true;
-            popraviBrod();
-        }
     }
 
-    public synchronized void popraviBrod() {
-        this.pokvaren = false;
-        // this.plovilo.setRotacija(false);
-        System.out.println("Brod " + plovilo.getNaziv() + " je uspjesno popravljen, slijedi izlazak sa terminala.");
+    public Plovilo getPlovilo() {
+        return plovilo;
+    }
+
+    public boolean isPrivezan() {
+        return isPrivezan;
+    }
+
+    public boolean isMoraNapustiti() {
+        return moraNapustiti;
+    }
+
+    public void setMoraNapustiti(boolean moraNapustiti) {
+        this.moraNapustiti = moraNapustiti;
+    }
+
+    private void log(String poruka) {
+        System.out.println("[" + plovilo.getNaziv() + "] " + poruka);
     }
 }
