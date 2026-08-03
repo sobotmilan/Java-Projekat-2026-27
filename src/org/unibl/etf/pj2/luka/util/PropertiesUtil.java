@@ -25,8 +25,11 @@ public final class PropertiesUtil {
         Properties p = new Properties();
         try (FileInputStream fis = new FileInputStream(DEFAULT_PATH)) {
             p.load(fis);
+        } catch (java.io.FileNotFoundException fnf) {
+            LoggerUtil.logWarning("Fajl " + DEFAULT_PATH
+                    + " ne postoji, koriste se podrazumijevane vrijednosti.");
         } catch (IOException e) {
-            LoggerUtil.logError("Nije moguce procitati " + DEFAULT_PATH
+            LoggerUtil.logError("Greska pri citanju " + DEFAULT_PATH
                     + ", koriste se podrazumijevane vrijednosti.", e);
         }
 
@@ -38,9 +41,8 @@ public final class PropertiesUtil {
         String vrijednost = ucitaj().getProperty(KLJUC_BROJ_TERMINALA);
 
         if (vrijednost == null || vrijednost.trim().isEmpty()) {
-            LoggerUtil.logError("Kljuc '" + KLJUC_BROJ_TERMINALA + "' nedostaje u " + DEFAULT_PATH
-                            + ", koristi se " + PODRAZUMIJEVANI_BROJ_TERMINALA + ".",
-                    new IllegalStateException("Nedostaje kljuc: " + KLJUC_BROJ_TERMINALA));
+            LoggerUtil.logWarning("Kljuc '" + KLJUC_BROJ_TERMINALA + "' nedostaje u " + DEFAULT_PATH
+                    + ", koristi se " + PODRAZUMIJEVANI_BROJ_TERMINALA + ".");
             return PODRAZUMIJEVANI_BROJ_TERMINALA;
         }
 
@@ -48,16 +50,15 @@ public final class PropertiesUtil {
         try {
             broj = Integer.parseInt(vrijednost.trim());
         } catch (NumberFormatException nfe) {
-            LoggerUtil.logError("Neispravna vrijednost za '" + KLJUC_BROJ_TERMINALA + "': '" + vrijednost
-                    + "', koristi se " + PODRAZUMIJEVANI_BROJ_TERMINALA + ".", nfe);
+            LoggerUtil.logWarning("Neispravna vrijednost za '" + KLJUC_BROJ_TERMINALA + "': '" + vrijednost
+                    + "', koristi se " + PODRAZUMIJEVANI_BROJ_TERMINALA + ".");
             return PODRAZUMIJEVANI_BROJ_TERMINALA;
         }
 
         if (broj < MIN_TERMINALA || broj > MAX_TERMINALA) {
-            LoggerUtil.logError("Broj terminala " + broj + " je izvan opsega ["
-                            + MIN_TERMINALA + ", " + MAX_TERMINALA + "], koristi se "
-                            + PODRAZUMIJEVANI_BROJ_TERMINALA + ".",
-                    new IllegalArgumentException("Broj terminala izvan opsega: " + broj));
+            LoggerUtil.logWarning("Broj terminala " + broj + " je izvan opsega ["
+                    + MIN_TERMINALA + ", " + MAX_TERMINALA + "], koristi se "
+                    + PODRAZUMIJEVANI_BROJ_TERMINALA + ".");
             return PODRAZUMIJEVANI_BROJ_TERMINALA;
         }
 
