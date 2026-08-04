@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 (vidi `CISCENJE_I_R4_PRIPREMA.md`).
-Test paket: 93 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 1 ignorisan (F2, otvoreno pitanje).
+Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`).
+Test paket: 104 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
 
 Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** nije započeto · **RISK** namjerno odstupanje, mora se vratiti
 
@@ -63,7 +63,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove | TODO |
 | C4 | Dopuna slučajnim plovilima do minimuma | TODO |
 | C5 | Prikaz terminala, izbor kombo boksom | TODO |
-| C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju | TODO |
+| C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi |
 | C7 | 15% plovila po terminalu odlazi iz luke | TODO |
 | C8 | Dodavanje plovila tokom simulacije ako luka nije puna | TODO |
 | C9 | Novo plovilo kreće od ulaza ka prvom slobodnom doku | PART — ruta postoji u `BrodThread` |
@@ -109,7 +109,7 @@ C* (klijent GUI + prikaz) → C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu) �
 
 R4 je najveći pojedinačni blok i ima najviše nezatvorenih zahtjeva (I1–I8).
 
-## Riješeno 5. avgusta: čišćenje preostalih padova (S1–S4, S6)
+## Riješeno 4. avgusta: čišćenje preostalih padova (S1–S4, S6)
 
 Prema `CISCENJE_I_R4_PRIPREMA.md`: dodati `equals`/`hashCode` u `Plovilo` (IMO ključ),
 imenovane konstante `PRIORITET_POD_ROTACIJOM` u šest službenih klasa (razrješava
@@ -121,3 +121,14 @@ dodat u `Luka` i `Polje`, CSV izvoz sada RFC 4180 escape-uje IMO/naziv/tip i pi�
 
 Preostalo van ove runde: **S5/R3** (hardkodovane putanje `luka.ser`/`takse.csv`) — nije
 bio dio `CISCENJE_I_R4_PRIPREMA.md`, i dalje otvoren.
+
+## Riješeno 4. avgusta: C6 (`PrikazTerminala`)
+
+Novi paket `view` (van `simulation` — nema ulogu u nitima): `PrikazTerminala.render(Terminal)`
+vraća snimak matrice 4x17 kao `String[][]` (zaključan sa `synchronized (terminal)` da ne
+uhvati polovičan potez), `renderAsText(Terminal)` isto formatira za konzolu. Identitet službe
+pobjeđuje tip trupa — provjera ide `Vatrogasci` → `ObalskaStraza` → `Carina` (kroz
+`SluzbenoPlovilo`/markerske interfejse iz R1) prije pada na tip trupa (`K`/`P`/`T`), pa
+`TankerVatrogasci` pod rotacijom ispisuje `VR`, ne `T`. 11 novih determinističkih testova
+bez niti/tajmauta u `PrikazTerminalaTest`. `C5` (prikaz terminala u GUI-ju, izbor kombo
+boksom) ostaje TODO — ovo je samo model→tekst transformacija koju GUI (C5) tek treba pozvati.

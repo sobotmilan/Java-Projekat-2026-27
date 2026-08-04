@@ -109,7 +109,7 @@ Između njih drugi brod može uzeti isti dok.
 **R2:** `public synchronized Dok rezervisiSlobodanDok(Plovilo p)` na `Terminal`-u —
 pronađi i zauzmi u jednoj atomarnoj operaciji.
 
-### S1 — Duplirano knjigovodstvo vezova — ✅ RIJEŠENO (5. avgust)
+### S1 — Duplirano knjigovodstvo vezova — ✅ RIJEŠENO (4. avgust)
 
 `Luka.brojSlobodnihVezova` je bila `Map<Terminal, AtomicInteger>` popunjena nulama
 koja se nikada ne ažurira, dok `Terminal.getBrojSlobodnihVezova()` računa tačno.
@@ -117,19 +117,19 @@ Polje i njegovo punjenje u konstruktoru obrisani; test `mapaSlobodnihVezovaJeMrt
 (dolazio je do polja refleksijom) takođe obrisan jer ne postoji šta da provjeri. Jedini
 izvor istine ostaje `Terminal.getBrojSlobodnihVezova()`/`getBrojRaspolozivihVezova()`.
 
-### S2 — `Luka` i `Polje` nemaju `serialVersionUID` — ✅ RIJEŠENO (5. avgust)
+### S2 — `Luka` i `Polje` nemaju `serialVersionUID` — ✅ RIJEŠENO (4. avgust)
 
 Dodat `serialVersionUID = 1L` u obje klase. Postojeći `luka.ser` (ako je nastao prije
 ove izmjene) postaje nečitljiv — to je očekivano, aplikacija tretira `null` kao "prvo
 pokretanje".
 
-### S3 — `addToEvidencija()` nije sinhronizovana — ✅ RIJEŠENO (5. avgust)
+### S3 — `addToEvidencija()` nije sinhronizovana — ✅ RIJEŠENO (4. avgust)
 
 `Luka.evidencijaUlaska` je sada `ConcurrentHashMap`, `addToEvidencija()` koristi
 `putIfAbsent()` (atomarna provjera+upis). `BrodThread.evidentirajUlazak()` više ne radi
 ručnu `synchronized`/`containsKey`/`put` sekvencu — samo poziva `luka.addToEvidencija(...)`.
 
-### S4 — CSV se lomi na zarezu u nazivu — ✅ RIJEŠENO (5. avgust)
+### S4 — CSV se lomi na zarezu u nazivu — ✅ RIJEŠENO (4. avgust)
 
 Naziv tipa `Luka, Kraljica Mora` je proizvodio sedam kolona umjesto šest.
 `PokretacIzvjestaja.escapeCsv()` sada citira polje po RFC 4180 (navodnici kad sadrži
@@ -142,7 +142,7 @@ navodnika ostaje u tekstu). Test `nazivSaZarezomNeRazbijaCsv` je dobio pomoćnu
 `brojKolonaCsv()` koja poštuje navodnike; ista je primijenjena i u `csvImaIspravanBrojKolona`
 radi konzistentnosti.
 
-### S6 — `Plovilo` nema `equals`/`hashCode` — ✅ RIJEŠENO (5. avgust)
+### S6 — `Plovilo` nema `equals`/`hashCode` — ✅ RIJEŠENO (4. avgust)
 
 Poređenje je padalo na referentni identitet: isto plovilo učitano iz `luka.ser` u dvije
 sesije nije bilo "jednako" samo sebi. IMO broj je jedini prirodan ključ identiteta (M1),
@@ -171,7 +171,7 @@ R0 (kanal) → R2 (rezervacija doka) → R1 (interfejs) → R5 (prioritet) → R
 R0 je preduslov za sve ostalo: dok brodovi plove kroz dokove, svaki test kapaciteta
 i svaki sudar mjeri pogrešnu stvar.
 
-**Status (5. avgust):** R0, R2, R1, R5 i S1–S4 gotovi (vidi `CISCENJE_I_R4_PRIPREMA.md`
+**Status (4. avgust):** R0, R2, R1, R5 i S1–S4 gotovi (vidi `CISCENJE_I_R4_PRIPREMA.md`
 za detalje čišćenja). Test paket: **93 ukupno, 1 pad** (`sudarUkljucujeDvaPlovila`, čeka R4),
 1 ignorisan (F2 zaokruživanje, otvoreno pitanje ispod). Preostaje: S5 (hardkodovane putanje,
 R3 — nije bio dio ove runde čišćenja), zatim T1/A*/C*/F4, pa R4 (najveći pojedinačni blok).
@@ -181,7 +181,7 @@ R3 — nije bio dio ove runde čišćenja), zatim T1/A*/C*/F4, pa R4 (najveći p
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje
 zaokruživanje naviše, to je 200 KM. Test postoji kao `@Disabled` — odluči i dokumentuj.
 
-## Riješeno (5. avgust): kontradikcija u `TipoviPlovilaTest`
+## Riješeno (4. avgust): kontradikcija u `TipoviPlovilaTest`
 
 Otkriveno 4. avgusta pri radu na R1/R5: `bezRotacijeNemaPrioriteta` (protective net) i
 `poljePrioritetJeMrtvoUSluzbenimKlasama` (`@Tag("bug")`) su tražili suprotne vrijednosti
