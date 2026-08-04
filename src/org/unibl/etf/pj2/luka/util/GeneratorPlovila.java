@@ -2,7 +2,9 @@ package org.unibl.etf.pj2.luka.util;
 
 import org.unibl.etf.pj2.luka.model.classes.KontejnerskiBrod;
 import org.unibl.etf.pj2.luka.model.classes.KontejnerskiBrodObalskaStraza;
+import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
+import org.unibl.etf.pj2.luka.model.classes.Polje;
 import org.unibl.etf.pj2.luka.model.classes.PutnickiKruzer;
 import org.unibl.etf.pj2.luka.model.classes.PutnickiKruzerCarina;
 import org.unibl.etf.pj2.luka.model.classes.PutnickiKruzerObalskaStraza;
@@ -10,7 +12,9 @@ import org.unibl.etf.pj2.luka.model.classes.Tanker;
 import org.unibl.etf.pj2.luka.model.classes.TankerCarina;
 import org.unibl.etf.pj2.luka.model.classes.TankerObalskaStraza;
 import org.unibl.etf.pj2.luka.model.classes.TankerVatrogasci;
+import org.unibl.etf.pj2.luka.model.classes.Terminal;
 
+import java.io.File;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,6 +41,11 @@ public final class GeneratorPlovila {
             "Sloboda", "Bosna", "Vardar", "Jadran", "Drina", "Neretva"
     };
 
+
+    private static final File FOTOGRAFIJA_PLACEHOLDER = new File("resources/placeholder-fotografija.txt");
+
+    private static final File SPISAK_POTJERA_PLACEHOLDER = new File("resources/spisak-potjera-default.txt");
+
     private GeneratorPlovila() {
     }
 
@@ -56,13 +65,13 @@ public final class GeneratorPlovila {
         switch (rnd.nextInt(3)) {
             case 0:
                 return new KontejnerskiBrod(sledeciNaziv(rnd), imo, motorZa(imo), registarskiZa(imo),
-                        null, sledeciKapacitetTEU(rnd));
+                        FOTOGRAFIJA_PLACEHOLDER, sledeciKapacitetTEU(rnd));
             case 1:
                 return new PutnickiKruzer(sledeciNaziv(rnd), imo, motorZa(imo), registarskiZa(imo),
-                        null, sledeciBrojPutnika(rnd));
+                        FOTOGRAFIJA_PLACEHOLDER, sledeciBrojPutnika(rnd));
             default:
                 return new Tanker(sledeciNaziv(rnd), imo, motorZa(imo), registarskiZa(imo),
-                        null, sledeciZapreminaBarel(rnd));
+                        FOTOGRAFIJA_PLACEHOLDER, sledeciZapreminaBarel(rnd));
         }
     }
 
@@ -82,13 +91,16 @@ public final class GeneratorPlovila {
         switch (rnd.nextInt(3)) {
             case 0:
                 return new KontejnerskiBrodObalskaStraza(sledeciNaziv(rnd), imo, motorZa(imo),
-                        registarskiZa(imo), null, sledeciKapacitetTEU(rnd), null);
+                        registarskiZa(imo), FOTOGRAFIJA_PLACEHOLDER, sledeciKapacitetTEU(rnd),
+                        SPISAK_POTJERA_PLACEHOLDER);
             case 1:
                 return new PutnickiKruzerObalskaStraza(sledeciNaziv(rnd), imo, motorZa(imo),
-                        registarskiZa(imo), null, sledeciBrojPutnika(rnd), null);
+                        registarskiZa(imo), FOTOGRAFIJA_PLACEHOLDER, sledeciBrojPutnika(rnd),
+                        SPISAK_POTJERA_PLACEHOLDER);
             default:
                 return new TankerObalskaStraza(sledeciNaziv(rnd), imo, motorZa(imo),
-                        registarskiZa(imo), null, sledeciZapreminaBarel(rnd), null);
+                        registarskiZa(imo), FOTOGRAFIJA_PLACEHOLDER, sledeciZapreminaBarel(rnd),
+                        SPISAK_POTJERA_PLACEHOLDER);
         }
     }
 
@@ -96,16 +108,43 @@ public final class GeneratorPlovila {
         String imo = sledeciImo();
         if (rnd.nextBoolean()) {
             return new PutnickiKruzerCarina(sledeciNaziv(rnd), imo, motorZa(imo),
-                    registarskiZa(imo), null, sledeciBrojPutnika(rnd));
+                    registarskiZa(imo), FOTOGRAFIJA_PLACEHOLDER, sledeciBrojPutnika(rnd));
         }
         return new TankerCarina(sledeciNaziv(rnd), imo, motorZa(imo),
-                registarskiZa(imo), null, sledeciZapreminaBarel(rnd));
+                registarskiZa(imo), FOTOGRAFIJA_PLACEHOLDER, sledeciZapreminaBarel(rnd));
     }
 
     private static Plovilo generisiVatrogasce(Random rnd) {
         String imo = sledeciImo();
         return new TankerVatrogasci(sledeciNaziv(rnd), imo, motorZa(imo),
-                registarskiZa(imo), null, sledeciZapreminaBarel(rnd));
+                registarskiZa(imo), FOTOGRAFIJA_PLACEHOLDER, sledeciZapreminaBarel(rnd));
+    }
+
+
+    public static void obezbijediJedinstvenostImoZa(Luka luka) {
+        int maxPostojeci = 0;
+        for (Terminal t : luka.getTerminali()) {
+            for (Polje[] red : t.getMatrica()) {
+                for (Polje polje : red) {
+                    Plovilo p = polje.getTrenutnoPlovilo();
+                    if (p != null) {
+                        maxPostojeci = Math.max(maxPostojeci, parsirajImoBezbjedno(p.getImoBroj()));
+                    }
+                }
+            }
+        }
+        if (maxPostojeci > 0) {
+            int minimalniSledeci = maxPostojeci + 1;
+            SLEDECI_IMO.updateAndGet(trenutni -> Math.max(trenutni, minimalniSledeci));
+        }
+    }
+
+    private static int parsirajImoBezbjedno(String imo) {
+        try {
+            return Integer.parseInt(imo);
+        } catch (NumberFormatException | NullPointerException e) {
+            return 0;
+        }
     }
 
     private static String sledeciImo() {

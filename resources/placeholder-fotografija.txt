@@ -1,0 +1,6 @@
+Ovo je podrazumijevana fotografija koju GeneratorPlovila (C2) dodjeljuje svakom
+slučajno generisanom plovilu, jer specifikacija (M1) zahtijeva da svako plovilo ima
+fotografiju, a generator nema stvarnu fotografiju da dodijeli.
+
+Administrator kasnije treba da zamijeni ovu putanju stvarnom fotografijom kroz
+FileDialog u admin GUI-ju (A8).

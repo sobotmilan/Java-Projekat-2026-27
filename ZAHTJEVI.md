@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`).
-Test paket: 109 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
+Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2.
+Test paket: 112 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -162,3 +162,42 @@ bitna statistika): udio komercijalnih u [0.88, 0.92], svaka državna kombinacija
 nema dupliranih IMO na 10.000, IMO je sedmocifren, isti seed daje identičnu flotu (tip/IMO/
 naziv/prioritet) pri dva odvojena poziva (uz reset test-only brojača preko package-private
 `resetujImoBrojacZaTest`).
+
+## Riješeno 5. avgusta: code review ispravke na `GeneratorPlovila` (C2)
+
+Tri nalaza iz code review-a, sva tri stvarni bagovi:
+
+1. **`fotografija` je uvijek bila `null`.** M1 zahtijeva fotografiju na svakom plovilu, a R4
+   treba da je čuva u zapisu incidenta. Dodat `resources/placeholder-fotografija.txt`,
+   generator sada uvijek postavlja tu putanju umjesto `null`-a. Admin GUI (A8) je kasnije
+   zamjenjuje pravom fotografijom preko `FileDialog`-a.
+2. **`spisakPotjera` je uvijek bila `null` za obalsku stražu.** Tiho poništava cijelu poentu
+   naginjanja ka obalskoj straži (50% državnih) — I5 (potjernica) nema šta da čita. Dodat
+   `resources/spisak-potjera-default.txt` (placeholder sadržaj — stvarno parsiranje i
+   poređenje je I5/R4, još nije implementirano).
+3. **IMO kolizija sa `luka.ser`.** `SLEDECI_IMO` je statičko polje koje kreće od `1_000_000`
+   pri svakom pokretanju JVM-a — isto od čega je kretalo i u prethodnoj sesiji čiji su brodovi
+   sada u `luka.ser`. C3/C4 eksplicitno miješaju deserijalizovana i novogenerisana plovila, pa
+   bi kolizija bila izvjesna, a `equals()`/`hashCode()` (IMO ključ, S6) bi dva različita broda
+   pretvorili u jedan unos u evidenciji ili `HashSet`-u. Dodata `GeneratorPlovila.
+   obezbijediJedinstvenostImoZa(Luka)` — skenira cijelu matricu svakog terminala, pomjera
+   brojač iznad najvišeg pronađenog IMO broja. Deterministički pristup (ne probabilistički
+   pečat vremena) jer jedino deterministički garantuje da kolizije nema. **C3/C4 moraju
+   pozvati ovu metodu odmah nakon deserijalizacije, prije prvog `generisiSlucajno()`** — sama
+   metoda ne radi ništa dok se ne pozove.
+
+Test `obezbjeduJedinstvenostImoIzbjegavaKolizijuSaPostojecomLukom` simulira upravo taj
+scenario: postojeća plovila na dokovima sa IMO brojevima u opsegu koji bi brojač inače
+dodijelio, pa 100 novih generacija provjerenih protiv istog skupa.
+
+Usput uhvaćen i compile-time bug u ispravci: `AtomicInteger.updateAndGet()` lambda je
+zahtijevala efektivno final varijablu — `maxPostojeci` (loop-akumulator) nije bio, popravljeno
+izdvajanjem `minimalniSledeci` kao zasebne final vrijednosti prije poziva.
+
+**Otvorena odluka za R4** (nije bag, treba odlučiti prije R4): pri 10% državnih × 25%
+vatrogasci = 2.5% vatrogasnih plovila ukupno. Sa npr. 5 plovila po terminalu na 3 terminala
+(15 ukupno), očekivano ~0.4 vatrogasna broda — većina pokretanja simulacije neće imati
+nijednog. R4 zahtijeva slanje vatrogasaca na incident. Kad se stigne do C3/C4 (postavljanje
+minimalnog broja plovila po terminalu), treba odlučiti: (a) garantovati bar jedno plovilo
+svake službe po terminalu pri inicijalnom postavljanju, ili (b) prihvatiti da demonstracije
+često neće moći pokazati puni dispatch. Nije riješeno danas.
