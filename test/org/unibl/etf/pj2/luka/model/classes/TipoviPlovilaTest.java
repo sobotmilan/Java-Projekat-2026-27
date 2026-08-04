@@ -1,7 +1,6 @@
 package org.unibl.etf.pj2.luka.model.classes;
 
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.unibl.etf.pj2.luka.model.interfaces.Carina;
 import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
@@ -118,13 +117,20 @@ class TipoviPlovilaTest {
     }
 
     @Test
-    @Tag("bug")
-    @DisplayName("BUG: polje 'prioritet' proslijeđeno konstruktoru se nikada ne koristi")
-    void poljePrioritetJeMrtvoUSluzbenimKlasama() {
+    @DisplayName("Prioritet pod rotacijom dolazi iz imenovane konstante, ne iz konstruktora")
+    void prioritetPodRotacijomJeImenovanaKonstanta() {
         TankerVatrogasci v = TestFactory.tankerVatrogasci("1");
+        TankerObalskaStraza os = TestFactory.tankerOS("2");
+        TankerCarina c = TestFactory.tankerCarina("3");
 
-        assertEquals(1, v.getPrioritet(),
-                "Konstruktor postavlja prioritet 1, ali getPrioritet() ga ignoriše. "
-                        + "Ukloni parametar 'prioritet' iz konstruktora službenih klasa ili ga stvarno koristi.");
+        assertEquals(10, v.getPrioritet(), "Bez rotacije važi prioritet običnog plovila.");
+
+        v.setRotacija(true);
+        os.setRotacija(true);
+        c.setRotacija(true);
+
+        assertEquals(TankerVatrogasci.PRIORITET_POD_ROTACIJOM, v.getPrioritet());
+        assertEquals(TankerObalskaStraza.PRIORITET_POD_ROTACIJOM, os.getPrioritet());
+        assertEquals(TankerCarina.PRIORITET_POD_ROTACIJOM, c.getPrioritet());
     }
 }

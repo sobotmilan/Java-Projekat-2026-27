@@ -85,6 +85,12 @@ abstract public class Plovilo implements Serializable {
 
     /**
      * Omogućava postavljanje identifikatora plovila u međunarodnom saobraćaju.
+     * <p>
+     * <b>Napomena:</b> {@link #equals(Object)} i {@link #hashCode()} se računaju iz IMO broja.
+     * Ako je plovilo već ubačeno u {@link java.util.HashMap}/{@link java.util.HashSet} (npr. evidenciju
+     * ulaska), promjena IMO broja ovim setterom ga "gubi" u toj kolekciji — ostaje u starom bucket-u
+     * i više se ne pronalazi po novom ključu. Plovilo prije izmjene ukloniti iz takvih kolekcija i
+     * ponovo ga dodati poslije.
      *
      * @param imoBroj Identifikator plovila u međunarodnom saobraćaju.
      */
@@ -181,5 +187,30 @@ abstract public class Plovilo implements Serializable {
     @Override
     public String toString() {
         return String.format("[%s] %s", this.imoBroj, this.naziv);
+    }
+
+    /**
+     * Dva plovila su jednaka ako imaju isti IMO broj — on je jedinstveni međunarodni identifikator
+     * plovila (M1) i jedini prirodan ključ identiteta. Vidi napomenu na {@link #setImoBroj(String)}
+     * o posljedicama promjene IMO broja nad plovilom koje je već u hash-baziranoj kolekciji.
+     *
+     * @param o Objekat sa kojim se poredi.
+     * @return true ako su oba plovila i imaju isti, ne-null IMO broj.
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof Plovilo)) {
+            return false;
+        }
+        Plovilo drugi = (Plovilo) o;
+        return imoBroj != null && imoBroj.equals(drugi.imoBroj);
+    }
+
+    @Override
+    public int hashCode() {
+        return imoBroj == null ? 0 : imoBroj.hashCode();
     }
 }

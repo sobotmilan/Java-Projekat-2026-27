@@ -5,13 +5,16 @@ import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
 import java.io.File;
 
 public class KontejnerskiBrodObalskaStraza extends KontejnerskiBrod implements ObalskaStraza {
+    /** Prioritet plovila obalske straže dok mu je upaljena rotacija. */
+    public static final int PRIORITET_POD_ROTACIJOM = 2;
+
     private File spisakPotjera;
 
     /** Polje koje označava da li je rotacija na vozilu upaljena. */
     private boolean rotacija;
 
     public KontejnerskiBrodObalskaStraza(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, int kapacitetTEU, File spisakPotjera) {
-        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, kapacitetTEU, 2);
+        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, kapacitetTEU);
         this.spisakPotjera = spisakPotjera;
         this.rotacija = false;
     }
@@ -27,7 +30,7 @@ public class KontejnerskiBrodObalskaStraza extends KontejnerskiBrod implements O
 
     @Override
     public int getPrioritet() {
-        return isRotacija() ? 2 : 10;
+        return isRotacija() ? PRIORITET_POD_ROTACIJOM : super.getPrioritet();
     }
 
     /**

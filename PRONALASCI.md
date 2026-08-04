@@ -109,23 +109,55 @@ Između njih drugi brod može uzeti isti dok.
 **R2:** `public synchronized Dok rezervisiSlobodanDok(Plovilo p)` na `Terminal`-u —
 pronađi i zauzmi u jednoj atomarnoj operaciji.
 
-### S1 — Duplirano knjigovodstvo vezova
+### S1 — Duplirano knjigovodstvo vezova — ✅ RIJEŠENO (5. avgust)
 
-`Luka.brojSlobodnihVezova` je `Map<Terminal, AtomicInteger>` popunjena nulama
+`Luka.brojSlobodnihVezova` je bila `Map<Terminal, AtomicInteger>` popunjena nulama
 koja se nikada ne ažurira, dok `Terminal.getBrojSlobodnihVezova()` računa tačno.
-Obriši mapu.
+Polje i njegovo punjenje u konstruktoru obrisani; test `mapaSlobodnihVezovaJeMrtvaIliTacna`
+(dolazio je do polja refleksijom) takođe obrisan jer ne postoji šta da provjeri. Jedini
+izvor istine ostaje `Terminal.getBrojSlobodnihVezova()`/`getBrojRaspolozivihVezova()`.
 
-### S2 — `Luka` i `Polje` nemaju `serialVersionUID`
+### S2 — `Luka` i `Polje` nemaju `serialVersionUID` — ✅ RIJEŠENO (5. avgust)
 
-Prva izmjena bilo koje od tih klasa učiniće postojeći `luka.ser` nečitljivim.
+Dodat `serialVersionUID = 1L` u obje klase. Postojeći `luka.ser` (ako je nastao prije
+ove izmjene) postaje nečitljiv — to je očekivano, aplikacija tretira `null` kao "prvo
+pokretanje".
 
-### S3 — `addToEvidencija()` nije sinhronizovana
+### S3 — `addToEvidencija()` nije sinhronizovana — ✅ RIJEŠENO (5. avgust)
 
-`HashMap` + više niti = tihi gubitak upisa. `ConcurrentHashMap` rješava.
+`Luka.evidencijaUlaska` je sada `ConcurrentHashMap`, `addToEvidencija()` koristi
+`putIfAbsent()` (atomarna provjera+upis). `BrodThread.evidentirajUlazak()` više ne radi
+ručnu `synchronized`/`containsKey`/`put` sekvencu — samo poziva `luka.addToEvidencija(...)`.
 
-### S4 — CSV se lomi na zarezu u nazivu
+### S4 — CSV se lomi na zarezu u nazivu — ✅ RIJEŠENO (5. avgust)
 
-Naziv tipa `Luka, Kraljica Mora` proizvodi sedam kolona umjesto šest.
+Naziv tipa `Luka, Kraljica Mora` je proizvodio sedam kolona umjesto šest.
+`PokretacIzvjestaja.escapeCsv()` sada citira polje po RFC 4180 (navodnici kad sadrži
+zarez/navodnik/novi red, unutrašnji navodnici udvojeni) i primjenjuje se na IMO, naziv i tip.
+Iznos se formatira sa `Locale.US` da decimalna tačka ne postane zarez na lokalizovanim mašinama.
+
+**Zamka otkrivena pri ovom radu:** naivni `String.split(",")` u testu ne poznaje RFC 4180
+navodnike, pa bi i dalje izbrojao 7 "kolona" za red sa citiranim poljem (zarez unutar
+navodnika ostaje u tekstu). Test `nazivSaZarezomNeRazbijaCsv` je dobio pomoćnu
+`brojKolonaCsv()` koja poštuje navodnike; ista je primijenjena i u `csvImaIspravanBrojKolona`
+radi konzistentnosti.
+
+### S6 — `Plovilo` nema `equals`/`hashCode` — ✅ RIJEŠENO (5. avgust)
+
+Poređenje je padalo na referentni identitet: isto plovilo učitano iz `luka.ser` u dvije
+sesije nije bilo "jednako" samo sebi. IMO broj je jedini prirodan ključ identiteta (M1),
+pa su `equals()`/`hashCode()` dodati u `Plovilo`, računati isključivo iz `imoBroj`.
+
+**Zamka:** `setImoBroj()` postoji i mijenja polje koje sada određuje `hashCode()` — plovilo
+već ubačeno u `HashMap`/`HashSet` bi se "izgubilo" u starom bucket-u nakon izmjene IMO broja.
+Dokumentaciona odluka umjesto brisanja settera: postojeći protective-net test
+`PloviloTest.setteriRade` direktno poziva `setImoBroj()` i ne smije se dirati, pa je setter
+zadržan uz upozorenje u JavaDoc-u (opcija "B" iz `CISCENJE_I_R4_PRIPREMA.md`, ne
+preporučena opcija koja briše setter — ovdje preporučena opcija nije bila primjenjiva).
+`BrodThread.pomjeriNaPolje()` i dalje namjerno koristi `==` (referentni identitet) pri
+provjeri `staro.getTrenutnoPlovilo() == this.plovilo` — to ostaje ispravno i ne smije se
+mijenjati u `equals()`, jer bi dva različita plovila sa istim IMO brojem inače mogla da se
+pomiješaju u matrici terminala.
 
 ### S5 — Hardkodovane putanje
 
@@ -139,30 +171,30 @@ R0 (kanal) → R2 (rezervacija doka) → R1 (interfejs) → R5 (prioritet) → R
 R0 je preduslov za sve ostalo: dok brodovi plove kroz dokove, svaki test kapaciteta
 i svaki sudar mjeri pogrešnu stvar.
 
-**Status (4. avgust):** R0, R2, R1 i R5 gotovi. Preostaje R4 (najveći pojedinačni blok).
+**Status (5. avgust):** R0, R2, R1, R5 i S1–S4 gotovi (vidi `CISCENJE_I_R4_PRIPREMA.md`
+za detalje čišćenja). Test paket: **93 ukupno, 1 pad** (`sudarUkljucujeDvaPlovila`, čeka R4),
+1 ignorisan (F2 zaokruživanje, otvoreno pitanje ispod). Preostaje: S5 (hardkodovane putanje,
+R3 — nije bio dio ove runde čišćenja), zatim T1/A*/C*/F4, pa R4 (najveći pojedinačni blok).
 
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje
 zaokruživanje naviše, to je 200 KM. Test postoji kao `@Disabled` — odluči i dokumentuj.
 
-## Novo otvoreno pitanje (otkriveno 4. avgusta, pri radu na R1/R5)
+## Riješeno (5. avgust): kontradikcija u `TipoviPlovilaTest`
 
-`TipoviPlovilaTest` ima **dva testa koja se međusobno isključuju** i ne mogu oba proći:
+Otkriveno 4. avgusta pri radu na R1/R5: `bezRotacijeNemaPrioriteta` (protective net) i
+`poljePrioritetJeMrtvoUSluzbenimKlasama` (`@Tag("bug")`) su tražili suprotne vrijednosti
+za `getPrioritet()` na istom, netaknutom objektu — 10 naspram 1.
 
-- `bezRotacijeNemaPrioriteta` (bez oznake, trenutno prolazi — zaštitna mreža) očekuje da
-  novokreiran `TankerVatrogasci` (rotacija ugašena, podrazumijevano) ima `getPrioritet() == 10`.
-- `poljePrioritetJeMrtvoUSluzbenimKlasama` (`@Tag("bug")`, trenutno pada) očekuje da **isto**
-  novokreirano plovilo, i dalje bez rotacije, ima `getPrioritet() == 1` — tvrdeći da je
-  vrijednost proslijeđena konstruktoru (`super(..., 1)`) "mrtav kod" jer je override
-  `isRotacija() ? 1 : 10` ignoriše.
-
-Ovo nije samo duplikacija magičnog broja — test doslovno traži da prioritet važi i **bez**
-upaljene rotacije, što je suprotno M5 iz specifikacije ("ukoliko je upaljena rotacija, ta
-plovila imaju prioritet") i suprotno `bezRotacijeNemaPrioriteta`. Nisam dirao ni kod ni
-test za ovo jer nije bio dio R1/R5 obima i jer bi "popravka" u bilo kom smjeru pokvarila
-jedan od druga dva testa. Moguća čista popravka (van obima za danas): promijeniti
-override u `isRotacija() ? super.getPrioritet() : 10` da konstruktorska vrijednost
-prestane biti mrtvi kod *kada je rotacija upaljena*, ali to i dalje ne bi zadovoljilo
-`poljePrioritetJeMrtvoUSluzbenimKlasama` u trenutnom obliku — taj test bi tada trebalo
-prepisati ili izbrisati. Odluči i dokumentuj, kao i za F2 iznad.
+Razriješeno po analizi iz `CISCENJE_I_R4_PRIPREMA.md`: `bezRotacijeNemaPrioriteta` je bio
+u pravu (M5 — prioritet važi samo *pod rotacijom*), a pravi problem je bio što su
+konstruktori šest službenih klasa prosljeđivali `super(..., N)` vrijednost koju override
+`getPrioritet()` nikad nije čitao — mrtav parametar, ne mrtvo pravilo. Ispravka: svaka
+službena klasa sada ima imenovanu `public static final int PRIORITET_POD_ROTACIJOM`, a
+override glasi `isRotacija() ? PRIORITET_POD_ROTACIJOM : super.getPrioritet()` —
+konstruktor službene klase više uopšte ne prosljeđuje prioritet; poziva se
+šestoargumentski `super(...)` osnovnog tipa (`KontejnerskiBrod`/`PutnickiKruzer`/`Tanker`),
+koji već postavlja 10 kao podrazumijevani prioritet u `Plovilo`. Test `poljePrioritetJeMrtvoUSluzbenimKlasama`
+zamijenjen sa `prioritetPodRotacijomJeImenovanaKonstanta`, koji provjerava i slučaj bez
+rotacije (10) i slučaj sa rotacijom (poređenje protiv imenovane konstante, ne magičnog broja).

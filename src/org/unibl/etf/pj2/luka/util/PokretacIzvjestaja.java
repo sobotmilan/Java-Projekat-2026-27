@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 public class PokretacIzvjestaja {
     private static final String DEFAULT_PATH;
@@ -55,9 +56,36 @@ public class PokretacIzvjestaja {
                 pw.println("IMO Broj,Naziv,Tip,Vrijeme ulaska,Vrijeme izlaska,Iznos");
             }
 
-            pw.printf("%s,%s,%s,%s,%s,%.2f%n", plovilo.getImoBroj(), plovilo.getNaziv(), plovilo.getClass().getSimpleName(), vrijemeUlaska.toString(), vrijemeIzlaska.toString(), iznos);
+            pw.printf(Locale.US, "%s,%s,%s,%s,%s,%.2f%n",
+                    escapeCsv(plovilo.getImoBroj()),
+                    escapeCsv(plovilo.getNaziv()),
+                    escapeCsv(plovilo.getClass().getSimpleName()),
+                    vrijemeUlaska.toString(),
+                    vrijemeIzlaska.toString(),
+                    iznos);
         } catch(IOException ioe) {
             LoggerUtil.logError("Greska prilikom evidentiranja takse u CSV-u!", ioe);
         }
+    }
+
+    /**
+     * Priprema jednu vrijednost za upis u CSV prema RFC 4180: polje se navodi pod navodnicima
+     * ako sadrži zarez, navodnik ili novi red, a unutrašnji navodnici se udvajaju.
+     *
+     * @param vrijednost Sirova vrijednost polja.
+     * @return Vrijednost bezbjedna za upis kao jedna CSV kolona.
+     */
+    private static String escapeCsv(String vrijednost) {
+        if (vrijednost == null) {
+            return "";
+        }
+        boolean trebaNavodnike = vrijednost.contains(",")
+                || vrijednost.contains("\"")
+                || vrijednost.contains("\n")
+                || vrijednost.contains("\r");
+        if (!trebaNavodnike) {
+            return vrijednost;
+        }
+        return "\"" + vrijednost.replace("\"", "\"\"") + "\"";
     }
 }

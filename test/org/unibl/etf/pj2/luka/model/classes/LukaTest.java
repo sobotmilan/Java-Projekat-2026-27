@@ -147,27 +147,4 @@ class LukaTest {
         assertTrue(java.lang.reflect.Modifier.isStatic(f.getModifiers()));
         assertTrue(java.lang.reflect.Modifier.isFinal(f.getModifiers()));
     }
-
-    @Test
-    @Tag("bug")
-    @DisplayName("BUG: mapa brojSlobodnihVezova u Luci je mrtav kod")
-    void mapaSlobodnihVezovaJeMrtvaIliTacna() throws Exception {
-        // Konstruktor puni Map<Terminal, AtomicInteger> nulama i nikada ih ne ažurira,
-        // dok Terminal.getBrojSlobodnihVezova() računa tačnu vrijednost.
-        // Dva izvora istine za isti podatak — jedan od njih mora otići.
-        Luka luka = TestFactory.luka(2);
-
-        java.lang.reflect.Field f = Luka.class.getDeclaredField("brojSlobodnihVezova");
-        f.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        java.util.Map<Terminal, java.util.concurrent.atomic.AtomicInteger> mapa =
-                (java.util.Map<Terminal, java.util.concurrent.atomic.AtomicInteger>) f.get(luka);
-
-        for (Terminal t : luka.getTerminali()) {
-            assertEquals(t.getBrojSlobodnihVezova(), mapa.get(t).get(),
-                    "Mapa u Luci tvrdi da terminal " + t.getIdTerminala()
-                            + " ima drugačiji broj slobodnih vezova nego sam terminal. "
-                            + "Obriši mapu i oslanjaj se na Terminal.getBrojSlobodnihVezova().");
-        }
-    }
 }

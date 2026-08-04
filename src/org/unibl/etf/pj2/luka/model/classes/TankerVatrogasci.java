@@ -5,11 +5,14 @@ import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 import java.io.File;
 
 public class TankerVatrogasci extends Tanker implements Vatrogasci {
+    /** Prioritet vatrogasnog plovila dok mu je upaljena rotacija. */
+    public static final int PRIORITET_POD_ROTACIJOM = 1;
+
     /** Polje koje označava da li je rotacija na vozilu upaljena. */
     private boolean rotacija;
 
     public TankerVatrogasci(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, double zapreminaBarel) {
-        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, zapreminaBarel, 1);
+        super(naziv, imoBroj, brojMotora, registarskiBroj, fotografija, zapreminaBarel);
         this.rotacija = false;
     }
 
@@ -24,7 +27,7 @@ public class TankerVatrogasci extends Tanker implements Vatrogasci {
 
     @Override
     public int getPrioritet() {
-        return isRotacija() ? 1 : 10;
+        return isRotacija() ? PRIORITET_POD_ROTACIJOM : super.getPrioritet();
     }
 
     /**

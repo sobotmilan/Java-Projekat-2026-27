@@ -1,10 +1,12 @@
 package org.unibl.etf.pj2.luka.model.classes;
 
-import org.unibl.etf.pj2.luka.simulation.BrodThread;
-
+import java.io.Serial;
 import java.io.Serializable;
 
 public class Polje implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     private final int x;
     private final int y;
     private String oznaka;

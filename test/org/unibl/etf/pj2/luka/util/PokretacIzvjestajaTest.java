@@ -45,6 +45,26 @@ class PokretacIzvjestajaTest {
                 TestFactory.kontejnerski("1234567"), ULAZAK, ULAZAK.plusHours(sati));
     }
 
+    /**
+     * Broji logičke kolone u jednom CSV redu prema RFC 4180 — zarezi unutar navodnika
+     * (npr. u imenu escape-ovanom zbog zareza) se ne računaju kao granica kolone.
+     * Obično {@code String.split(",")} to ne zna, pa bi naivno prijavio previše kolona
+     * čim je neko polje ispravno citirano.
+     */
+    private static int brojKolonaCsv(String red) {
+        int kolone = 1;
+        boolean uNavodnicima = false;
+        for (int i = 0; i < red.length(); i++) {
+            char c = red.charAt(i);
+            if (c == '"') {
+                uNavodnicima = !uNavodnicima;
+            } else if (c == ',' && !uNavodnicima) {
+                kolone++;
+            }
+        }
+        return kolone;
+    }
+
     // ------------------------------------------------------------------
     // BUCKET A — tarifne stepenice
     // ------------------------------------------------------------------
@@ -169,7 +189,7 @@ class PokretacIzvjestajaTest {
 
         List<String> linije = Files.readAllLines(CSV);
         for (String l : linije) {
-            assertEquals(6, l.split(",", -1).length, "Neispravan broj kolona u redu: " + l);
+            assertEquals(6, brojKolonaCsv(l), "Neispravan broj kolona u redu: " + l);
         }
     }
 
@@ -187,8 +207,7 @@ class PokretacIzvjestajaTest {
     }
 
     @Test
-    @Tag("bug")
-    @DisplayName("BUG: naziv plovila sa zarezom razbija CSV")
+    @DisplayName("Naziv plovila sa zarezom ne razbija CSV")
     void nazivSaZarezomNeRazbijaCsv() throws Exception {
         KontejnerskiBrod b = TestFactory.kontejnerski("1234567");
         b.setNaziv("Luka, Kraljica Mora");
@@ -198,7 +217,12 @@ class PokretacIzvjestajaTest {
         List<String> linije = Files.readAllLines(CSV);
         String red = linije.get(1);
 
-        assertEquals(6, red.split(",", -1).length,
+        // Naivni String.split(",") ne poznaje RFC 4180 navodnike, pa bi i nakon ispravnog
+        // escape-ovanja izbrojao 7 "kolona" jer zarez unutar navodnika ostaje u tekstu.
+        // brojKolonaCsv() poštuje navodnike i broji stvarne logičke kolone.
+        assertEquals(6, brojKolonaCsv(red),
                 "Naziv sa zarezom mora biti u navodnicima ili escape-ovan — inače CSV ima 7 kolona.");
+        assertTrue(red.contains("\"Luka, Kraljica Mora\""),
+                "Naziv sa zarezom treba da bude pod navodnicima u CSV-u (RFC 4180).");
     }
 }

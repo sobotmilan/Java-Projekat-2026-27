@@ -1,25 +1,22 @@
 package org.unibl.etf.pj2.luka.model.classes;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Luka implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     private final List<Terminal> terminali;
     private final Map<String, LocalDateTime> evidencijaUlaska;
-    private final Map<Terminal, AtomicInteger> brojSlobodnihVezova;
 
     public Luka(List<Terminal> terminali, Map<String, LocalDateTime> evidencijaUlaska) {
         this.terminali = terminali;
-        this.evidencijaUlaska = evidencijaUlaska;
-        this.brojSlobodnihVezova = new HashMap<Terminal, AtomicInteger>();
-        for(Iterator<Terminal> iter = terminali.iterator(); iter.hasNext(); ) {
-            this.brojSlobodnihVezova.put(iter.next(), new AtomicInteger(0));
-        }
+        this.evidencijaUlaska = new ConcurrentHashMap<String, LocalDateTime>(evidencijaUlaska);
     }
 
     public List<Terminal> getTerminali() {
@@ -39,7 +36,7 @@ public class Luka implements Serializable {
     }
 
     public void addToEvidencija(String imoBroj, LocalDateTime time) {
-        this.evidencijaUlaska.put(imoBroj, time);
+        this.evidencijaUlaska.putIfAbsent(imoBroj, time);
     }
 
 }

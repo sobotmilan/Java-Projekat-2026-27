@@ -107,11 +107,7 @@ public class BrodThread implements Runnable {
     }
 
     private void evidentirajUlazak() {
-        synchronized (luka.getEvidencijaUlaska()) {
-            if (!luka.getEvidencijaUlaska().containsKey(plovilo.getImoBroj())) {
-                luka.getEvidencijaUlaska().put(plovilo.getImoBroj(), LocalDateTime.now());
-            }
-        }
+        luka.addToEvidencija(plovilo.getImoBroj(), LocalDateTime.now());
     }
 
     private boolean doploviDoDoka(Dok cilj) throws InterruptedException {

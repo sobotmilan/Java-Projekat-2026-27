@@ -1,7 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 4. avgust 2026, poslije R0 + R2 + R1 + R5.
+Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 (vidi `CISCENJE_I_R4_PRIPREMA.md`).
+Test paket: 93 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 1 ignorisan (F2, otvoreno pitanje).
 
 Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** nije započeto · **RISK** namjerno odstupanje, mora se vratiti
 
@@ -108,10 +109,15 @@ C* (klijent GUI + prikaz) → C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu) �
 
 R4 je najveći pojedinačni blok i ima najviše nezatvorenih zahtjeva (I1–I8).
 
-## Novo otkriveno pri radu na R1/R5 (4. avgust)
+## Riješeno 5. avgusta: čišćenje preostalih padova (S1–S4, S6)
 
-`TipoviPlovilaTest.poljePrioritetJeMrtvoUSluzbenimKlasama` (bug-tagged) traži da
-`getPrioritet()` vrati konstruktorsku vrijednost (npr. 1 za vatrogasce) **i bez** upaljene
-rotacije — što je direktno u suprotnosti sa `bezRotacijeNemaPrioriteta` (protective net,
-trenutno prolazi) i sa M5/tekstom specifikacije. Vidi "Novo otvoreno pitanje" u
-`PRONALASCI.md` — nije diran ni kod ni test, čeka odluku.
+Prema `CISCENJE_I_R4_PRIPREMA.md`: dodati `equals`/`hashCode` u `Plovilo` (IMO ključ),
+imenovane konstante `PRIORITET_POD_ROTACIJOM` u šest službenih klasa (razrješava
+kontradikciju iz prošle sesije — vidi "Riješeno" u `PRONALASCI.md`), `Luka.evidencijaUlaska`
+sada `ConcurrentHashMap`, obrisana mrtva mapa `brojSlobodnihVezova`, `serialVersionUID`
+dodat u `Luka` i `Polje`, CSV izvoz sada RFC 4180 escape-uje IMO/naziv/tip i piše iznos sa
+`Locale.US`. Test paket pao sa 94 na 93 (obrisan test za mrtvu mapu), sa 7 padova na 1
+(`sudarUkljucujeDvaPlovila`, čeka R4).
+
+Preostalo van ove runde: **S5/R3** (hardkodovane putanje `luka.ser`/`takse.csv`) — nije
+bio dio `CISCENJE_I_R4_PRIPREMA.md`, i dalje otvoren.
