@@ -98,7 +98,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 ## Otvorena odstupanja koja se moraju zatvoriti
 
 1. **I1 — sudari isključeni.** `BrodThread.SUDARI_OMOGUCENI = false`. Vratiti na `true` u R4.
-2. **F2 — zaokruživanje.** `Duration.toHours()` reže naniže, pa 90 min = 100 KM. Odlučiti i dokumentovati.
+2. ~~**F2 — zaokruživanje.** `Duration.toHours()` reže naniže, pa 90 min = 100 KM.~~ Riješeno, korištena Math.ceil() metoda i princip "plafona" za računanje tarife.
 3. **M6 — spisak potjernica se ne čita.** Fajl se čuva, sadržaj se nikad ne parsira.
 4. **T1 — properties se ne čita.** Broj terminala je trenutno hardkodovan kroz `TestFactory`.
 
