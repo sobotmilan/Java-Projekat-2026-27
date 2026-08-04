@@ -65,10 +65,6 @@ class PokretacIzvjestajaTest {
         return kolone;
     }
 
-    // ------------------------------------------------------------------
-    // BUCKET A — tarifne stepenice
-    // ------------------------------------------------------------------
-
     @Test
     @DisplayName("Zadržavanje kraće od sata naplaćuje se kao jedan sat")
     void minimalnaTarifa() {
@@ -144,10 +140,6 @@ class PokretacIzvjestajaTest {
         assertEquals(500.0, PokretacIzvjestaja.izracunajTaksuZaPlovilo(TestFactory.tanker("3"), ULAZAK, izlazak), 0.001);
     }
 
-    // ------------------------------------------------------------------
-    // BUCKET A — CSV
-    // ------------------------------------------------------------------
-
     @Test
     @DisplayName("Prvi upis kreira CSV sa zaglavljem")
     void prviUpisKreiraZaglavlje() throws Exception {
@@ -193,12 +185,8 @@ class PokretacIzvjestajaTest {
         }
     }
 
-    // ------------------------------------------------------------------
-    // BUCKET C — otvorena pitanja interpretacije
-    // ------------------------------------------------------------------
-
     @Test
-    @Disabled("Odluka o zaokruživanju: Duration.toHours() reže naniže. Odluči i dokumentuj prije predaje.")
+//    @Disabled("Odluka o zaokruživanju: Duration.toHours() reže naniže. Odluči i dokumentuj prije predaje.")
     @DisplayName("C: nepun sat se zaokružuje naviše (90 min = 2 sata = 200 KM)")
     void nepunSatSeZaokruzujeNavise() {
         double t = PokretacIzvjestaja.izracunajTaksuZaPlovilo(

@@ -25,8 +25,8 @@ public class PokretacIzvjestaja {
             return 0.0;
         }
 
-        long brojSati = Duration.between(vrijemeUlaska, vrijemeIzlaska).toHours();
-        if(brojSati == 0) {
+        long brojSati = (long) Math.ceil(Duration.between(vrijemeUlaska, vrijemeIzlaska).toMinutes() / 60.0);
+        if (brojSati < 1) {
             brojSati = 1;
         }
 
