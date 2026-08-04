@@ -1,8 +1,11 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`).
-Test paket: 104 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
+Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`).
+Test paket: 109 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
+Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
+je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
+u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
 
 Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** nije započeto · **RISK** namjerno odstupanje, mora se vratiti
 
@@ -59,7 +62,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | # | Zahtjev | Status |
 |---|---|---|
 | C1 | Korisnik zadaje minimalan broj plovila **po terminalu** | TODO |
-| C2 | Slučajan tip, 90% komercijalna | TODO |
+| C2 | Slučajan tip, 90% komercijalna | DONE — `util.GeneratorPlovila.generisiSlucajno()`/`(Random)`, testovi |
 | C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove | TODO |
 | C4 | Dopuna slučajnim plovilima do minimuma | TODO |
 | C5 | Prikaz terminala, izbor kombo boksom | TODO |
@@ -132,3 +135,30 @@ pobjeđuje tip trupa — provjera ide `Vatrogasci` → `ObalskaStraza` → `Cari
 `TankerVatrogasci` pod rotacijom ispisuje `VR`, ne `T`. 11 novih determinističkih testova
 bez niti/tajmauta u `PrikazTerminalaTest`. `C5` (prikaz terminala u GUI-ju, izbor kombo
 boksom) ostaje TODO — ovo je samo model→tekst transformacija koju GUI (C5) tek treba pozvati.
+
+## Riješeno 5. avgusta: C2 (`GeneratorPlovila`)
+
+`util.GeneratorPlovila.generisiSlucajno()` / `generisiSlucajno(Random)` (C2). Komercijalno/
+državno se baca **prvo i nezavisno** (90/10 tačno po konstrukciji), tek onda se unutar državne
+grane bira služba pa dozvoljeni trup za tu službu (M3: vatrogasci samo tanker; obalska straža
+kontejnerski/kruzer/tanker; carina kruzer/tanker) — suprotan redoslijed bi mogao proizvesti
+nepostojeću kombinaciju (npr. vatrogasni kruzer). IMO brojevi jedinstveni preko `AtomicInteger`
+brojača (7 cifara), nezavisno od predatog `Random`-a — ponovljivost seed-a pokriva samo izbor
+tipa/naziva/brojčanih atributa, ne i IMO (koji po prirodi mora biti jedinstven, ne reproduktivan).
+
+**Odluka o raspodjeli unutar državnih 10%** (spec ne propisuje omjer): obalska straža 50%,
+carina 25%, vatrogasci 25% — namjerno naklonjeno obalskoj straži jer jedino ona nosi spisak
+potjernica (M6), pa veći udio povećava šansu da se scenario potjere (I5) stvarno pojavi tokom
+demonstracije. Sve tri konstante (`UDIO_KOMERCIJALNIH`, `UDIO_OBALSKA_STRAZA`, `UDIO_CARINA`)
+su javne radi transparentnosti i eventualne izmjene.
+
+**Bug uhvaćen prije commit-a:** prva verzija je čitala IMO brojač DRUGI PUT (za motor/registarski
+broj) nakon što ga je `sledeciImo()` već inkrementirao — motor/registarski bi time referencirali
+sljedeći, ne trenutni IMO. Ispravljeno hvatanjem `imo` u lokalnu varijablu jednom po plovilu i
+izvođenjem motora/registarskog iz nje, umjesto ponovnog čitanja dijeljenog brojača.
+
+5 novih determinističkih testova (`GeneratorPlovilaTest`, fiksni seed, 10.000 uzoraka gdje je
+bitna statistika): udio komercijalnih u [0.88, 0.92], svaka državna kombinacija dozvoljena,
+nema dupliranih IMO na 10.000, IMO je sedmocifren, isti seed daje identičnu flotu (tip/IMO/
+naziv/prioritet) pri dva odvojena poziva (uz reset test-only brojača preko package-private
+`resetujImoBrojacZaTest`).
