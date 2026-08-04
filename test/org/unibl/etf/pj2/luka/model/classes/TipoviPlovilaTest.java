@@ -1,25 +1,20 @@
 package org.unibl.etf.pj2.luka.model.classes;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.unibl.etf.pj2.luka.model.interfaces.Carina;
 import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
+import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 import org.unibl.etf.pj2.luka.testutil.TestFactory;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Testovi hijerarhije tipova plovila, markerskih interfejsa i prioriteta pod rotacijom.
- */
 @DisplayName("Tipovi plovila i prioriteti")
 class TipoviPlovilaTest {
-
-    // ------------------------------------------------------------------
-    // BUCKET A — dozvoljene kombinacije tipova iz specifikacije
-    // ------------------------------------------------------------------
 
     @Test
     @DisplayName("Kontejnerski brod može biti samo obalska straža")
@@ -62,10 +57,6 @@ class TipoviPlovilaTest {
         assertEquals(TestFactory.SPISAK, os.getSpisakPotjera());
     }
 
-    // ------------------------------------------------------------------
-    // BUCKET A — prioriteti
-    // ------------------------------------------------------------------
-
     @Test
     @DisplayName("Bez upaljene rotacije službeno plovilo ima prioritet običnog plovila")
     void bezRotacijeNemaPrioriteta() {
@@ -87,7 +78,6 @@ class TipoviPlovilaTest {
         os.setRotacija(true);
         c.setRotacija(true);
 
-        // Niža vrijednost = viši prioritet.
         assertTrue(v.getPrioritet() < os.getPrioritet(), "Vatrogasci moraju imati viši prioritet od obalske straže.");
         assertTrue(os.getPrioritet() < c.getPrioritet(), "Obalska straža mora imati viši prioritet od carine.");
         assertTrue(c.getPrioritet() < obican.getPrioritet(), "Carina pod rotacijom mora imati viši prioritet od komercijalnog plovila.");
@@ -111,48 +101,28 @@ class TipoviPlovilaTest {
         assertFalse(TestFactory.tankerCarina("3").isRotacija());
     }
 
-    // ------------------------------------------------------------------
-    // BUCKET C — testovi koji zahtijevaju refaktor R1 (vidi PRONALASCI.md)
-    // Otkomentarisati tek nakon uvođenja interfejsa SluzbenoPlovilo.
-    // ------------------------------------------------------------------
-
     @Test
-    @Disabled("Zahtijeva refaktor R1: zajednički interfejs SluzbenoPlovilo sa isRotacija()/setRotacija().")
     @DisplayName("R1: rotacija se može uključiti polimorfno, bez instanceof lanca")
     void rotacijaSeMozeUkljucitiPolimorfno() {
-        // Trenutno je nemoguće: setRotacija() postoji zasebno na 6 klasa i nije u nadtipu.
-        // Zbog toga je linija `this.plovilo.setRotacija(true)` u BrodThread-u zakomentarisana.
-        //
-        // Nakon refaktora ovo treba da radi:
-        //
-        // List<Plovilo> sluzbena = List.of(
-        //         TestFactory.tankerVatrogasci("1"),
-        //         TestFactory.tankerOS("2"),
-        //         TestFactory.kruzerCarina("3"));
-        //
-        // for (Plovilo p : sluzbena) {
-        //     assertTrue(p instanceof SluzbenoPlovilo);
-        //     ((SluzbenoPlovilo) p).setRotacija(true);
-        //     assertTrue(((SluzbenoPlovilo) p).isRotacija());
-        //     assertTrue(p.getPrioritet() < 10);
-        // }
-        fail("Test nije implementiran — čeka refaktor R1.");
-    }
+        List<Plovilo> sluzbena = List.of(
+                TestFactory.tankerVatrogasci("1"),
+                TestFactory.tankerOS("2"),
+                TestFactory.kruzerCarina("3"));
 
-    // ------------------------------------------------------------------
-    // BUCKET B — mrtvo polje u modelu
-    // ------------------------------------------------------------------
+        for (Plovilo p : sluzbena) {
+            assertTrue(p instanceof SluzbenoPlovilo);
+            ((SluzbenoPlovilo) p).setRotacija(true);
+            assertTrue(((SluzbenoPlovilo) p).isRotacija());
+            assertTrue(p.getPrioritet() < 10);
+        }
+    }
 
     @Test
     @Tag("bug")
     @DisplayName("BUG: polje 'prioritet' proslijeđeno konstruktoru se nikada ne koristi")
     void poljePrioritetJeMrtvoUSluzbenimKlasama() {
-        // TankerVatrogasci poziva super(..., 1), ali getPrioritet() je override-ovan
-        // i vraća isRotacija() ? 1 : 10 — vrijednost iz konstruktora se ignoriše.
-        // Time postoje dva izvora istine za istu stvar.
         TankerVatrogasci v = TestFactory.tankerVatrogasci("1");
 
-        // Ovo pada dok postoji duplirana logika: konstruktor kaže 1, getter kaže 10.
         assertEquals(1, v.getPrioritet(),
                 "Konstruktor postavlja prioritet 1, ali getPrioritet() ga ignoriše. "
                         + "Ukloni parametar 'prioritet' iz konstruktora službenih klasa ili ga stvarno koristi.");

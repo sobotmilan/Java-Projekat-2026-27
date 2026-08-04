@@ -11,42 +11,25 @@ import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Testovi kretanja brodova i konkurentnog pristupa matrici terminala.
- *
- * <p>Ovi testovi su najvažniji u paketu jer je {@link BrodThread} do sada bio pisan
- * bez ijednog izvršavanja pod opterećenjem — {@code Main} je ostao prazan.</p>
- *
- * <p>Testovi koriste {@link Uzorkovac}, pomoćnu nit koja periodično snima stanje matrice
- * i akumulira prekršaje invarijanti. Time se provjeravaju svojstva koja se ne mogu
- * provjeriti tek na kraju simulacije (npr. "brod nikada ne smije proći kroz dok").</p>
- */
 @DisplayName("BrodThread — kretanje i konkurentnost")
 class BrodThreadTest {
 
     private static final int TIMEOUT_SEC = 40;
 
-    // ==================================================================
-    // Pomoćna infrastruktura
-    // ==================================================================
-
-    /**
-     * Nit koja periodično snima stanje svih terminala i biljezi prekršaje invarijanti.
-     */
     private static final class Uzorkovac implements Runnable {
         private final Luka luka;
         private volatile boolean radi = true;
 
-        /** Prekršaji tipa: dvije reference na isto plovilo istovremeno u matrici. */
+
         final List<String> duplikati = Collections.synchronizedList(new ArrayList<String>());
 
-        /** Za svako plovilo, skup dok-polja koje je ikada zauzelo (idTerminala:x,y). */
+
         final Map<String, Set<String>> dokPoljaPoPlovilu = new ConcurrentHashMap<>();
 
-        /** Da li je ijedno plovilo ikada viđeno u horizontalnom kanalu (red 1 ili 2, kolona >= 3). */
+
         volatile boolean vidjenUHorizontalnomKanalu = false;
 
-        /** Minimalan broj slobodnih vezova ikada izmjeren, po terminalu. */
+
         final Map<Integer, Integer> minSlobodnihVezova = new ConcurrentHashMap<>();
 
         Uzorkovac(Luka luka) {
@@ -120,7 +103,6 @@ class BrodThreadTest {
         }
     }
 
-    /** Pokreće zadata plovila kao niti i čeka da sve završe ili istekne timeout. */
     private static boolean pokreniIsacekaj(Luka luka, List<Plovilo> plovila, Uzorkovac uzorkovac)
             throws InterruptedException {
 
@@ -165,10 +147,6 @@ class BrodThreadTest {
         }
         return lista;
     }
-
-    // ==================================================================
-    // BUCKET A — ulazak u terminal
-    // ==================================================================
 
     @Test
     @DisplayName("Prvo plovilo uspješno ulazi na ulazno polje terminala")
@@ -237,10 +215,6 @@ class BrodThreadTest {
         }
     }
 
-    // ==================================================================
-    // BUCKET A — osnovna simulacija
-    // ==================================================================
-
     @Test
     @DisplayName("Jedan brod u praznoj luci se priveže i nit se uredno završi")
     void jedanBrodSePrivezuje() throws Exception {
@@ -300,17 +274,10 @@ class BrodThreadTest {
         assertTrue(t.getBrojSlobodnihVezova() <= 30);
     }
 
-    // ==================================================================
-    // BUCKET B — prekršaji pravila kretanja
-    // ==================================================================
-
     @Test
     @Tag("bug")
     @DisplayName("BUG: brod prolazi kroz dokove umjesto kroz horizontalni kanal")
     void brodNeSmijeProlazitiKrozDokove() throws Exception {
-        // Svako plovilo smije zauzeti najviše JEDNO dok-polje u cijelom svom životu:
-        // ono na kojem se konačno priveže. Ako je zauzelo više njih, kretalo se
-        // uzduž reda 3 (ili 0), tj. kroz dokove drugih brodova.
         Luka luka = TestFactory.luka(1);
         Uzorkovac uzorkovac = new Uzorkovac(luka);
 
@@ -394,24 +361,57 @@ class BrodThreadTest {
     @Tag("bug")
     @DisplayName("BUG: sudar mora uključiti dva plovila pri mimoilaženju, ne jedno samo")
     void sudarUkljucujeDvaPlovila() {
-        // proveriRizikOdUdesa() je privatna metoda koja jednostrano proglašava kvar
-        // na jednom brodu, uspava sopstvenu nit i ne obavještava nikoga.
-        // Specifikacija traži: sudar pri MIMOILAŽENJU dva broda (2%), slanje najbliže
-        // patrole obalske straže, carine i vatrogasaca pod rotacijom, blokadu saobraćaja
-        // na tom terminalu i evidenciju u binarnom fajlu.
-        //
-        // Ovaj test namjerno pada dok ne postoji zaseban model incidenta.
         fail("Nedostaje klasa Incident i koordinator uviđaja — vidi refaktor R4 u PRONALASCI.md. "
                 + "Trenutna implementacija je Thread.sleep() unutar jedne niti, bez ijednog drugog učesnika.");
     }
 
     @Test
-    @Tag("bug")
-    @DisplayName("BUG: prioritet pod rotacijom ne utiče na kretanje")
-    void rotacijaDajePrednostUKanalu() throws Exception {
-        // getPrioritet() postoji na svim službenim klasama i vraća ispravne vrijednosti,
-        // ali BrodThread ga nikada ne čita. Vatrogasno plovilo pod rotacijom
-        // trenutno čeka u redu isto kao i teretni brod.
+    @DisplayName("R5: obično plovilo ustupa prolaz plovilu pod rotacijom koje je iza njega u kanalu")
+    void obicnoPloviloUstupaProlazPloviluPodRotacijom() {
+        Terminal t = TestFactory.luka(1).getTerminali().get(0);
+        TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("HITNO-1");
+        vatrogasci.setRotacija(true);
+        Plovilo obicno = TestFactory.kontejnerski("SPORI-1");
+
+        t.getMatrica()[Terminal.KANAL_ULAZ][5].setTrenutnoPlovilo(vatrogasci);
+        t.getMatrica()[Terminal.KANAL_ULAZ][6].setTrenutnoPlovilo(obicno);
+
+        assertTrue(BrodThread.ustupaProlaz(t, Terminal.KANAL_ULAZ, 6, obicno),
+                "Obično plovilo mora ustupiti prolaz kada je plovilo pod rotacijom neposredno iza njega.");
+    }
+
+    @Test
+    @DisplayName("R5: plovilo pod rotacijom ne ustupa prolaz nikome")
+    void ploviloPodRotacijomNeUstupaProlaz() {
+        Terminal t = TestFactory.luka(1).getTerminali().get(0);
+        TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("HITNO-1");
+        vatrogasci.setRotacija(true);
+        Plovilo obicno = TestFactory.kontejnerski("SPORI-1");
+
+        t.getMatrica()[Terminal.KANAL_ULAZ][5].setTrenutnoPlovilo(obicno);
+        t.getMatrica()[Terminal.KANAL_ULAZ][6].setTrenutnoPlovilo(vatrogasci);
+
+        assertFalse(BrodThread.ustupaProlaz(t, Terminal.KANAL_ULAZ, 6, vatrogasci),
+                "Plovilo pod rotacijom ima prioritet i ne treba nikome da ustupa prolaz.");
+    }
+
+    @Test
+    @DisplayName("R5: obično plovilo ne ustupa prolaz drugom običnom plovilu")
+    void obicnoPloviloNeUstupaProlazObicnom() {
+        Terminal t = TestFactory.luka(1).getTerminali().get(0);
+        Plovilo prvo = TestFactory.kontejnerski("SPORI-1");
+        Plovilo drugo = TestFactory.kontejnerski("SPORI-2");
+
+        t.getMatrica()[Terminal.KANAL_ULAZ][5].setTrenutnoPlovilo(prvo);
+        t.getMatrica()[Terminal.KANAL_ULAZ][6].setTrenutnoPlovilo(drugo);
+
+        assertFalse(BrodThread.ustupaProlaz(t, Terminal.KANAL_ULAZ, 6, drugo),
+                "Dva obična plovila se ne ustupaju prolaz jedno drugom.");
+    }
+
+    @Test
+    @DisplayName("R5: plovilo pod rotacijom uspješno završi simulaciju usred sporog saobraćaja")
+    void ploviloPodRotacijomZavrsavaSimulaciju() throws Exception {
         Luka luka = TestFactory.luka(1);
         TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("HITNO-1");
         vatrogasci.setRotacija(true);
@@ -425,12 +425,10 @@ class BrodThreadTest {
         }
         plovila.add(vatrogasci);
 
-        pokreniIsacekaj(luka, plovila, null);
+        assertTrue(pokreniIsacekaj(luka, plovila, null),
+                "Simulacija se nije završila u zadatom vremenu.");
 
-        // Provjera da kod uopšte konsultuje prioritet:
-        String izvor = BrodThread.class.getName();
-        assertTrue(false,
-                "BrodThread nikada ne poziva getPrioritet() — pretraži " + izvor
-                        + " i uvjeri se. Pravilo preticanja pod rotacijom nije implementirano (refaktor R5).");
+        Terminal t = luka.getTerminali().get(0);
+        assertEquals(24, t.getBrojSlobodnihVezova(), "Svih 6 plovila je trebalo da se priveže.");
     }
 }

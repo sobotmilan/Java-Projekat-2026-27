@@ -54,22 +54,40 @@ nema binarnog fajla. Specifikacija traži sve četiri stvari.
 **R4:** klasa `Incident` (učesnici, vrijeme, fotografije, `Serializable`) +
 koordinator koji bira najbliža službena plovila i drži blokadu na nivou terminala.
 
-### K3 — Rotacija se ne može uključiti polimorfno
+### K3 — Rotacija se ne može uključiti polimorfno — ✅ RIJEŠENO (4. avgust)
 
-`setRotacija()`/`isRotacija()` su duplirani u šest klasa i nema ih u nadtipu.
-Zato je u `BrodThread`-u linija `this.plovilo.setRotacija(true)` **zakomentarisana** —
-kod nije mogao da je pozove.
+`setRotacija()`/`isRotacija()` su bili duplirani u šest klasa i nisu postojali u nadtipu.
 
-**R1:** `public interface SluzbenoPlovilo { boolean isRotacija(); void setRotacija(boolean); }`,
-pa neka `ObalskaStraza`, `Carina` i `Vatrogasci` naslijede taj interfejs.
-Time nestaje i šest kopija istog polja.
+**R1 urađeno:** dodat `SluzbenoPlovilo` (`model/interfaces/SluzbenoPlovilo.java`) sa
+`isRotacija()`/`setRotacija(boolean)`. `ObalskaStraza`, `Carina` i `Vatrogasci` sada
+`extends SluzbenoPlovilo` — sve šest konkretnih klasa već su imale tačno te metode, pa
+im nije trebala nikakva izmjena da bi zadovoljile interfejs. Šest kopija polja `rotacija`
+**ostaje** (Java nema višestruko nasljeđivanje stanja, a klase već nasljeđuju tri različita
+konkretna tipa — `KontejnerskiBrod`/`PutnickiKruzer`/`Tanker`); dobitak je što pozivalac sada
+može da radi `if (plovilo instanceof SluzbenoPlovilo sp) sp.setRotacija(true);` bez
+`instanceof` lanca po sve tri kombinacije. Test `TipoviPlovilaTest.rotacijaSeMozeUkljucitiPolimorfno`
+otključan i prolazi.
 
-### K4 — Prioritet je mrtav kod
+### K4 — Prioritet je mrtav kod — ✅ RIJEŠENO (4. avgust)
 
-`getPrioritet()` je ispravno implementiran svuda i **nigdje se ne poziva**.
-Pravilo da plovilo pod rotacijom pretiče, a ostali staju, ne postoji.
+`getPrioritet()` je ispravno implementiran svuda, ali se do danas nigdje nije pozivao.
 
-**R5:** čitanje prioriteta u logici preticanja.
+**R5 urađeno:** `BrodThread.ploviIstocno()` sada čita `plovilo.getPrioritet()`:
+- plovilo pod aktivnom rotacijom (`getPrioritet() < 10`) preskače prag `PRAG_PRETICANJA`
+  i pokušava preticanje čim je blokirano;
+- obično plovilo (`getPrioritet() == 10`) provjerava novi statički helper
+  `BrodThread.ustupaProlaz(terminal, x, y, trenutni)` — ako je plovilo pod rotacijom
+  neposredno iza njega u istoj traci, ono se ne pomjera taj korak (ostaje na postojećem polju).
+- Testovi `BrodThreadTest.obicnoPloviloUstupaProlazPloviluPodRotacijom`,
+  `ploviloPodRotacijomNeUstupaProlaz`, `obicnoPloviloNeUstupaProlazObicnom` i
+  `ploviloPodRotacijomZavrsavaSimulaciju` zamjenjuju stari placeholder test
+  (koji je bio hardkodovan da uvijek padne — `assertTrue(false, ...)` — i nije mogao
+  proći ni nakon ispravke koda).
+
+Napomena: kada dva plovila pod rotacijom istovremeno konkurišu za isti prolaz, trenutna
+logika ne poredi njihov međusobni rang (vatrogasci > OS > carina) — obje se tretiraju
+kao "ne ustupaju nikome". Ovo nije pokriveno testom i ostaje da se razmotri u R4, kada
+koordinator uviđaja počne stvarno da uključuje rotaciju na više plovila istovremeno.
 
 ### K5 — Trka pri rezervaciji doka
 
@@ -109,7 +127,30 @@ R0 (kanal) → R2 (rezervacija doka) → R1 (interfejs) → R5 (prioritet) → R
 R0 je preduslov za sve ostalo: dok brodovi plove kroz dokove, svaki test kapaciteta
 i svaki sudar mjeri pogrešnu stvar.
 
+**Status (4. avgust):** R0, R2, R1 i R5 gotovi. Preostaje R4 (najveći pojedinačni blok).
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje
 zaokruživanje naviše, to je 200 KM. Test postoji kao `@Disabled` — odluči i dokumentuj.
+
+## Novo otvoreno pitanje (otkriveno 4. avgusta, pri radu na R1/R5)
+
+`TipoviPlovilaTest` ima **dva testa koja se međusobno isključuju** i ne mogu oba proći:
+
+- `bezRotacijeNemaPrioriteta` (bez oznake, trenutno prolazi — zaštitna mreža) očekuje da
+  novokreiran `TankerVatrogasci` (rotacija ugašena, podrazumijevano) ima `getPrioritet() == 10`.
+- `poljePrioritetJeMrtvoUSluzbenimKlasama` (`@Tag("bug")`, trenutno pada) očekuje da **isto**
+  novokreirano plovilo, i dalje bez rotacije, ima `getPrioritet() == 1` — tvrdeći da je
+  vrijednost proslijeđena konstruktoru (`super(..., 1)`) "mrtav kod" jer je override
+  `isRotacija() ? 1 : 10` ignoriše.
+
+Ovo nije samo duplikacija magičnog broja — test doslovno traži da prioritet važi i **bez**
+upaljene rotacije, što je suprotno M5 iz specifikacije ("ukoliko je upaljena rotacija, ta
+plovila imaju prioritet") i suprotno `bezRotacijeNemaPrioriteta`. Nisam dirao ni kod ni
+test za ovo jer nije bio dio R1/R5 obima i jer bi "popravka" u bilo kom smjeru pokvarila
+jedan od druga dva testa. Moguća čista popravka (van obima za danas): promijeniti
+override u `isRotacija() ? super.getPrioritet() : 10` da konstruktorska vrijednost
+prestane biti mrtvi kod *kada je rotacija upaljena*, ali to i dalje ne bi zadovoljilo
+`poljePrioritetJeMrtvoUSluzbenimKlasama` u trenutnom obliku — taj test bi tada trebalo
+prepisati ili izbrisati. Odluči i dokumentuj, kao i za F2 iznad.

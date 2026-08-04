@@ -13,6 +13,7 @@ public class BrodThread implements Runnable {
     private static final int MAX_POKUSAJA = 100;
     private static final long CEKANJE_MS = 100L;
     private static final int PRAG_PRETICANJA = 3;
+    private static final int PRIORITET_BEZ_ROTACIJE = 10;
     public static volatile boolean SUDARI_OMOGUCENI = false;
 
     private final Plovilo plovilo;
@@ -151,6 +152,7 @@ public class BrodThread implements Runnable {
     private boolean ploviIstocno(int ciljY, long korak) throws InterruptedException {
         int neuspjesi = 0;
         int ukupnoPokusaja = 0;
+        boolean imamPrioritet = plovilo.getPrioritet() < PRIORITET_BEZ_ROTACIJE;
 
         while (this.y < ciljY) {
             if (++ukupnoPokusaja > MAX_POKUSAJA * 4) {
@@ -160,12 +162,18 @@ public class BrodThread implements Runnable {
             boolean pomjeren = false;
 
             if (this.x == Terminal.KANAL_ULAZ) {
-                pomjeren = pomjeriNaPolje(Terminal.KANAL_ULAZ, this.y + 1);
+                boolean moraUstupitiProlaz = !imamPrioritet
+                        && ustupaProlaz(this.trenutniTerminal, this.x, this.y, this.plovilo);
 
-                if (!pomjeren && neuspjesi >= PRAG_PRETICANJA && smijePreticati(this.y + 1)) {
+                if (!moraUstupitiProlaz) {
+                    pomjeren = pomjeriNaPolje(Terminal.KANAL_ULAZ, this.y + 1);
+                }
+
+                boolean pragZaPreticanjeIspunjen = imamPrioritet || neuspjesi >= PRAG_PRETICANJA;
+                if (!pomjeren && pragZaPreticanjeIspunjen && smijePreticati(this.y + 1)) {
                     pomjeren = pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y);
                     if (pomjeren) {
-                        log("Započinje preticanje.");
+                        log("Započinje preticanje" + (imamPrioritet ? " (prioritet pod rotacijom)." : "."));
                     }
                 }
             } else {
@@ -202,6 +210,28 @@ public class BrodThread implements Runnable {
             Polje[][] m = t.getMatrica();
             return m[Terminal.KANAL_IZLAZ][this.y].getTrenutnoPlovilo() == null
                     && m[Terminal.KANAL_IZLAZ][sledeciY].getTrenutnoPlovilo() == null;
+        }
+    }
+
+    /**
+     * Provjerava da li plovilo na poziciji ({@code x}, {@code y}) treba da ustupi prolaz plovilu
+     * pod aktivnom rotacijom koje se nalazi neposredno iza njega u istoj traci kanala. Plovilo pod
+     * rotacijom ima prioritet pri preticanju, pa ostala plovila moraju da se zaustave na postojećem
+     * polju dok ono ne prođe (R5, {@link Plovilo#getPrioritet()}).
+     *
+     * @param terminal Terminal čija se matrica provjerava.
+     * @param x Red u kojem se plovilo trenutno nalazi.
+     * @param y Kolona u kojoj se plovilo trenutno nalazi.
+     * @param trenutni Plovilo čije se kretanje provjerava.
+     * @return true ako trenutni treba da ustupi prolaz, u suprotnom false.
+     */
+    static boolean ustupaProlaz(Terminal terminal, int x, int y, Plovilo trenutni) {
+        if (terminal == null || y <= 0 || trenutni.getPrioritet() < PRIORITET_BEZ_ROTACIJE) {
+            return false;
+        }
+        synchronized (terminal) {
+            Plovilo iza = terminal.getMatrica()[x][y - 1].getTrenutnoPlovilo();
+            return iza != null && iza.getPrioritet() < PRIORITET_BEZ_ROTACIJE;
         }
     }
 

@@ -1,7 +1,7 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 3. avgust 2026, poslije R0.
+Stanje: 4. avgust 2026, poslije R0 + R2 + R1 + R5.
 
 Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** nije započeto · **RISK** namjerno odstupanje, mora se vratiti
 
@@ -14,8 +14,8 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | M1 | Naziv, IMO, broj motora, fotografija, registarski broj | DONE | `Plovilo` |
 | M2 | Kontejnerski (TEU), kruzer (putnici), tanker (bareli) | DONE | 3 podklase |
 | M3 | Kombinacije: kont→OS; kruzer→OS,carina; tanker→OS,carina,vatrogasci | DONE | 6 podklasa |
-| M4 | Rotacija na državnim plovilima | PART | polje postoji, nema zajednički interfejs (**R1**) |
-| M5 | Prioritet vatrogasci > obalska straža > carina | PART | `getPrioritet()` tačan, nigdje se ne poziva (**R5**) |
+| M4 | Rotacija na državnim plovilima | DONE | `SluzbenoPlovilo` (**R1**), `ObalskaStraza`/`Carina`/`Vatrogasci` ga nasljeđuju |
+| M5 | Prioritet vatrogasci > obalska straža > carina | DONE | `getPrioritet()` se čita u `BrodThread.ploviIstocno()` (**R5**) |
 | M6 | Obalska straža nosi fajl sa IMO brojevima za potjernicom | PART | polje postoji, sadržaj se ne čita |
 | M7 | Jedinstvena slučajna brzina | DONE | `Plovilo`, test |
 
@@ -103,7 +103,15 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 
 ## Redoslijed preostalog rada
 
-R1 + R5 (interfejs + prioritet) → T1 (properties) → A* (admin GUI) →
+~~R1 + R5 (interfejs + prioritet)~~ **gotovo 4. avgusta** → T1 (properties) → A* (admin GUI) →
 C* (klijent GUI + prikaz) → C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu) → **R4 (incidenti)**
 
 R4 je najveći pojedinačni blok i ima najviše nezatvorenih zahtjeva (I1–I8).
+
+## Novo otkriveno pri radu na R1/R5 (4. avgust)
+
+`TipoviPlovilaTest.poljePrioritetJeMrtvoUSluzbenimKlasama` (bug-tagged) traži da
+`getPrioritet()` vrati konstruktorsku vrijednost (npr. 1 za vatrogasce) **i bez** upaljene
+rotacije — što je direktno u suprotnosti sa `bezRotacijeNemaPrioriteta` (protective net,
+trenutno prolazi) i sa M5/tekstom specifikacije. Vidi "Novo otvoreno pitanje" u
+`PRONALASCI.md` — nije diran ni kod ni test, čeka odluku.
