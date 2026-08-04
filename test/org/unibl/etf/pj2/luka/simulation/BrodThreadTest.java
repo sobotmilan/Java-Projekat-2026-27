@@ -381,8 +381,8 @@ class BrodThreadTest {
     }
 
     @Test
-    @DisplayName("R5: plovilo pod rotacijom ne ustupa prolaz nikome")
-    void ploviloPodRotacijomNeUstupaProlaz() {
+    @DisplayName("R5: plovilo pod rotacijom ne ustupa prolaz običnom plovilu iza sebe")
+    void ploviloPodRotacijomNeUstupaProlazObicnom() {
         Terminal t = TestFactory.luka(1).getTerminali().get(0);
         TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("HITNO-1");
         vatrogasci.setRotacija(true);
@@ -392,7 +392,39 @@ class BrodThreadTest {
         t.getMatrica()[Terminal.KANAL_ULAZ][6].setTrenutnoPlovilo(vatrogasci);
 
         assertFalse(BrodThread.ustupaProlaz(t, Terminal.KANAL_ULAZ, 6, vatrogasci),
-                "Plovilo pod rotacijom ima prioritet i ne treba nikome da ustupa prolaz.");
+                "Plovilo pod rotacijom ima viši prioritet od običnog plovila i ne treba da mu ustupa prolaz.");
+    }
+
+    @Test
+    @DisplayName("R5: redoslijed prioriteta se poštuje i među službenim plovilima pod rotacijom (carina ustupa vatrogascima)")
+    void carinaUstupaProlazVatrogascimaPodRotacijom() {
+        Terminal t = TestFactory.luka(1).getTerminali().get(0);
+        TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("HITNO-1");
+        vatrogasci.setRotacija(true);
+        TankerCarina carina = TestFactory.tankerCarina("CAR-1");
+        carina.setRotacija(true);
+
+        t.getMatrica()[Terminal.KANAL_ULAZ][5].setTrenutnoPlovilo(vatrogasci);
+        t.getMatrica()[Terminal.KANAL_ULAZ][6].setTrenutnoPlovilo(carina);
+
+        assertTrue(BrodThread.ustupaProlaz(t, Terminal.KANAL_ULAZ, 6, carina),
+                "Carina pod rotacijom mora ustupiti prolaz vatrogascima pod rotacijom iza nje (viši prioritet).");
+    }
+
+    @Test
+    @DisplayName("R5: redoslijed prioriteta se poštuje i među službenim plovilima pod rotacijom (vatrogasci ne ustupaju carini)")
+    void vatrogasciNeUstupajuProlazCariniPodRotacijom() {
+        Terminal t = TestFactory.luka(1).getTerminali().get(0);
+        TankerCarina carina = TestFactory.tankerCarina("CAR-1");
+        carina.setRotacija(true);
+        TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("HITNO-1");
+        vatrogasci.setRotacija(true);
+
+        t.getMatrica()[Terminal.KANAL_ULAZ][5].setTrenutnoPlovilo(carina);
+        t.getMatrica()[Terminal.KANAL_ULAZ][6].setTrenutnoPlovilo(vatrogasci);
+
+        assertFalse(BrodThread.ustupaProlaz(t, Terminal.KANAL_ULAZ, 6, vatrogasci),
+                "Vatrogasci pod rotacijom imaju najviši prioritet i ne ustupaju prolaz carini iza sebe.");
     }
 
     @Test

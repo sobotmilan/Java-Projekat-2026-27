@@ -79,15 +79,27 @@ otključan i prolazi.
   `BrodThread.ustupaProlaz(terminal, x, y, trenutni)` — ako je plovilo pod rotacijom
   neposredno iza njega u istoj traci, ono se ne pomjera taj korak (ostaje na postojećem polju).
 - Testovi `BrodThreadTest.obicnoPloviloUstupaProlazPloviluPodRotacijom`,
-  `ploviloPodRotacijomNeUstupaProlaz`, `obicnoPloviloNeUstupaProlazObicnom` i
+  `ploviloPodRotacijomNeUstupaProlazObicnom`, `obicnoPloviloNeUstupaProlazObicnom` i
   `ploviloPodRotacijomZavrsavaSimulaciju` zamjenjuju stari placeholder test
   (koji je bio hardkodovan da uvijek padne — `assertTrue(false, ...)` — i nije mogao
   proći ni nakon ispravke koda).
 
-Napomena: kada dva plovila pod rotacijom istovremeno konkurišu za isti prolaz, trenutna
-logika ne poredi njihov međusobni rang (vatrogasci > OS > carina) — obje se tretiraju
-kao "ne ustupaju nikome". Ovo nije pokriveno testom i ostaje da se razmotri u R4, kada
-koordinator uviđaja počne stvarno da uključuje rotaciju na više plovila istovremeno.
+**Ispravka (4. avgust, poslije code review-a):** prva verzija `ustupaProlaz()` je
+poredila `iza.getPrioritet()` protiv konstante `10` umjesto protiv `trenutni.getPrioritet()`,
+pa je svako plovilo pod rotacijom (uključujući carinu, prioritet 3) rano izlazilo iz
+metode i **nikada** nije ustupalo prolaz — ni vatrogascima (prioritet 1) iza sebe.
+Ranija verzija je i keširala `imamPrioritet` van `while` petlje u `ploviIstocno()`, pa
+plovilo kojem bi R4 upalio rotaciju usred tranzita ne bi dobilo prioritet do sljedećeg
+poziva metode. Oba su ispravljena: `ustupaProlaz()` sada poredi `iza.getPrioritet() <
+trenutni.getPrioritet()` (redoslijed vatrogasci > OS > carina > komercijalno ispada
+prirodno iz poređenja, bez posebnog slučaja), a `imamPrioritet` se čita svaki korak
+petlje. Dodati testovi `carinaUstupaProlazVatrogascimaPodRotacijom` i
+`vatrogasciNeUstupajuProlazCariniPodRotacijom` pokrivaju redoslijed među samim
+službenim plovilima — direktno relevantno za R4, gdje će se vatrogasci, obalska
+straža i carina istovremeno slati na isti incident i takmičiti za iste ćelije kanala.
+
+Preostalo, van obima za danas: šest kopija polja `rotacija` i dalje postoje (interfejs
+je riješio polimorfni pristup, ne i deduplikaciju — vidi napomenu u R1 gore).
 
 ### K5 — Trka pri rezervaciji doka
 
