@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1.
-Test paket: 135 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
+Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4).
+Test paket: 141 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -374,17 +374,47 @@ Blokira se **samo terminal na kojem je incident** (I3/I4). `wait()`/`notifyAll()
 
 **Kritično:** `PrikazTerminala.render()` uzima isti ključ. Ako se ikad uđe u `wait()` ili `Thread.sleep()` **držeći** `synchronized (terminal)`, GUI se zamrzava. Trenutno nijedan `synchronized (terminal)` blok u `BrodThread`-u ne spava — to svojstvo mora ostati.
 
-### D5 — Determinizam sudara u testovima
+### D5 — Determinizam sudara u testovima — ✅ RIJEŠENO (5. avgust, priprema — logika uviđaja i dalje čeka R4)
 
-Sudar ima vjerovatnoću 2%, pa je svaki test koji ga čeka nasumičan. Uvesti tačku ubrizgavanja prije pisanja logike:
+Sudar ima vjerovatnoću 2%, pa bi svaki test koji ga čeka bio nasumičan. Tačka ubrizgavanja
+uvedena prije pisanja logike, tačno kako je predloženo:
 
 ```java
 public static volatile double VJEROVATNOCA_SUDARA = 0.02;
 ```
 
-Testovi postavljaju `1.0` (garantovan sudar) ili `0.0` (bez šuma). Isto važi za trajanje uviđaja (3–10s) — konstanta koju test može spustiti na ~50ms, inače paket traje minutama.
+plus izvor slučajnosti po niti, injektabilan preko `BrodThread.setGeneratorSudara(Random)`
+(podrazumijevano `ThreadLocalRandom.current()`, nepredvidiv po dizajnu dok se eksplicitno ne
+zamijeni). `provjeriSudar()` je promijenjen iz `void` u `boolean` — i dalje je čist placeholder
+(nema `Incident`-a, dispečovanja ni blokade terminala, to ostaje za R4), sada samo vraća ishod:
+`SUDARI_OMOGUCENI == false` ⇒ uvijek `false` (I1 i dalje na snazi), inače
+`generatorSudara.nextDouble() < VJEROVATNOCA_SUDARA`. Vidljivost paket-privatna (bez modifikatora),
+po uzoru na već postojeći `ustupaProlaz()` — testovi u istom paketu (`simulation`) pozivaju
+direktno, bez pokretanja cijele niti.
 
-Bez ovoga R4 testovi su i nestabilni i spori.
+Trajanje uviđaja dobilo četiri imenovane konstante umjesto inline literala, sve `public static
+volatile` (ne `final` — testovi ih moraju moći spustiti na ~50ms):
+
+```java
+public static volatile long MIN_TRAJANJE_UVIDJAJA_MS = 3000L;           // I3, opšti incident
+public static volatile long MAX_TRAJANJE_UVIDJAJA_MS = 10000L;
+public static volatile long MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 3000L; // I5, uže od opšteg
+public static volatile long MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 5000L;
+```
+
+Nijedna od ove četiri konstante se još nigdje ne koristi za stvarno uspavljivanje niti tokom
+uviđaja — to je R4. Ova runda je samo definisala mjesto gdje ta vrijednost živi, da se ne mora
+naknadno tražiti po kodu i pretvarati inline `3000`/`10000` literale u konstante usred pisanja
+logike uviđaja.
+
+6 novih testova u `BrodThreadTest` (D5 sekcija): vjerovatnoća `1.0` garantuje sudar na 100
+uzastopnih provjera, `0.0` nikad ne prijavljuje sudar, `SUDARI_OMOGUCENI == false` nadjačava čak
+i vjerovatnoću `1.0` (I1 test), isti seed (`new Random(42)`) ubrizgan u dva različita `BrodThread`
+daje identičan niz od 200 ishoda, podrazumijevane vrijednosti svih pet konstanti, i da se sve
+četiri trajanja uviđaja mogu privremeno spustiti na 50ms (svaki test čuva staru vrijednost i vraća
+je u `finally`, jer su ovo dijeljena statička polja preko cijelog test paketa).
+
+Bez ovoga bi R4 testovi bili i nestabilni i spori.
 
 ### D6 — Šta ide u binarni fajl incidenta?
 

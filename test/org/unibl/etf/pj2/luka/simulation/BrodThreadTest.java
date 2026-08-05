@@ -663,4 +663,131 @@ class BrodThreadTest {
             exec.awaitTermination(5, TimeUnit.SECONDS);
         }
     }
+
+    // ------------------------------------------------------------------
+    // D5 — determinizam sudara: injektovan Random + mutabilna vjerovatnoća/trajanje uviđaja
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("D5: provjeriSudar() uvijek prijavljuje sudar kad je vjerovatnoća 1.0")
+    void provjeriSudarUvijekPrijavljujeKadJeVjerovatnocaJedan() {
+        boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
+        double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
+        try {
+            BrodThread.SUDARI_OMOGUCENI = true;
+            BrodThread.VJEROVATNOCA_SUDARA = 1.0;
+
+            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-1"), TestFactory.luka(1));
+            bt.setGeneratorSudara(new Random(1));
+
+            for (int i = 0; i < 100; i++) {
+                assertTrue(bt.provjeriSudar(), "Vjerovatnoća 1.0 mora garantovati sudar na svakoj provjeri.");
+            }
+        } finally {
+            BrodThread.SUDARI_OMOGUCENI = staroSudari;
+            BrodThread.VJEROVATNOCA_SUDARA = staraVjerovatnoca;
+        }
+    }
+
+    @Test
+    @DisplayName("D5: provjeriSudar() nikad ne prijavljuje sudar kad je vjerovatnoća 0.0")
+    void provjeriSudarNikadNePrijavljujeKadJeVjerovatnocaNula() {
+        boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
+        double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
+        try {
+            BrodThread.SUDARI_OMOGUCENI = true;
+            BrodThread.VJEROVATNOCA_SUDARA = 0.0;
+
+            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-2"), TestFactory.luka(1));
+            bt.setGeneratorSudara(new Random(2));
+
+            for (int i = 0; i < 100; i++) {
+                assertFalse(bt.provjeriSudar(), "Vjerovatnoća 0.0 ne smije nikad prijaviti sudar.");
+            }
+        } finally {
+            BrodThread.SUDARI_OMOGUCENI = staroSudari;
+            BrodThread.VJEROVATNOCA_SUDARA = staraVjerovatnoca;
+        }
+    }
+
+    @Test
+    @DisplayName("D5: provjeriSudar() je uvijek false kad su sudari globalno onemogućeni (I1), bez obzira na vjerovatnoću")
+    void provjeriSudarJeIskljucenKadSuSudariOnemoguceni() {
+        boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
+        double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
+        try {
+            BrodThread.SUDARI_OMOGUCENI = false;
+            BrodThread.VJEROVATNOCA_SUDARA = 1.0;
+
+            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-3"), TestFactory.luka(1));
+            bt.setGeneratorSudara(new Random(3));
+
+            for (int i = 0; i < 20; i++) {
+                assertFalse(bt.provjeriSudar(),
+                        "I1: dok je SUDARI_OMOGUCENI isključeno, sudara ne smije biti ni uz vjerovatnoću 1.0.");
+            }
+        } finally {
+            BrodThread.SUDARI_OMOGUCENI = staroSudari;
+            BrodThread.VJEROVATNOCA_SUDARA = staraVjerovatnoca;
+        }
+    }
+
+    @Test
+    @DisplayName("D5: isti seed ubrizgan u dva plovila daje identičan niz ishoda sudara")
+    void istiSeedDajeIdenticanNizIshodaSudara() {
+        boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
+        double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
+        try {
+            BrodThread.SUDARI_OMOGUCENI = true;
+            BrodThread.VJEROVATNOCA_SUDARA = 0.5;
+
+            BrodThread prvi = new BrodThread(TestFactory.kontejnerski("D5-4A"), TestFactory.luka(1));
+            prvi.setGeneratorSudara(new Random(42));
+            BrodThread drugi = new BrodThread(TestFactory.kontejnerski("D5-4B"), TestFactory.luka(1));
+            drugi.setGeneratorSudara(new Random(42));
+
+            for (int i = 0; i < 200; i++) {
+                assertEquals(prvi.provjeriSudar(), drugi.provjeriSudar(),
+                        "Isti seed mora dati isti niz ishoda na poziciji " + i + ".");
+            }
+        } finally {
+            BrodThread.SUDARI_OMOGUCENI = staroSudari;
+            BrodThread.VJEROVATNOCA_SUDARA = staraVjerovatnoca;
+        }
+    }
+
+    @Test
+    @DisplayName("D5: podrazumijevana vjerovatnoća sudara je 2% (I1), a trajanja uviđaja imaju dokumentovane podrazumijevane vrijednosti")
+    void podrazumijevaneVrijednostiZaD5() {
+        assertEquals(0.02, BrodThread.VJEROVATNOCA_SUDARA, 0.0000001);
+        assertEquals(3000L, BrodThread.MIN_TRAJANJE_UVIDJAJA_MS);
+        assertEquals(10000L, BrodThread.MAX_TRAJANJE_UVIDJAJA_MS);
+        assertEquals(3000L, BrodThread.MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS);
+        assertEquals(5000L, BrodThread.MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS);
+    }
+
+    @Test
+    @DisplayName("D5: trajanja uviđaja se mogu spustiti na ~50ms radi bržih testova (nisu final)")
+    void trajanjaUvidjajaSeMoguSpustitiRadiTestova() {
+        long staroMin = BrodThread.MIN_TRAJANJE_UVIDJAJA_MS;
+        long staroMax = BrodThread.MAX_TRAJANJE_UVIDJAJA_MS;
+        long staroMinPotjera = BrodThread.MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS;
+        long staroMaxPotjera = BrodThread.MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS;
+        try {
+            BrodThread.MIN_TRAJANJE_UVIDJAJA_MS = 50L;
+            BrodThread.MAX_TRAJANJE_UVIDJAJA_MS = 50L;
+            BrodThread.MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 50L;
+            BrodThread.MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 50L;
+
+            assertEquals(50L, BrodThread.MIN_TRAJANJE_UVIDJAJA_MS);
+            assertEquals(50L, BrodThread.MAX_TRAJANJE_UVIDJAJA_MS);
+            assertEquals(50L, BrodThread.MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS);
+            assertEquals(50L, BrodThread.MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS);
+        } finally {
+            BrodThread.MIN_TRAJANJE_UVIDJAJA_MS = staroMin;
+            BrodThread.MAX_TRAJANJE_UVIDJAJA_MS = staroMax;
+            BrodThread.MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = staroMinPotjera;
+            BrodThread.MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = staroMaxPotjera;
+        }
+    }
 }

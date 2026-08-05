@@ -8,6 +8,8 @@ import org.unibl.etf.pj2.luka.model.classes.Terminal;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
 
 import java.time.LocalDateTime;
+import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class BrodThread implements Runnable {
     private static final int MAX_POKUSAJA = 100;
@@ -15,6 +17,17 @@ public class BrodThread implements Runnable {
     private static final int PRAG_PRETICANJA = 3;
     private static final int PRIORITET_BEZ_ROTACIJE = 10;
     public static volatile boolean SUDARI_OMOGUCENI = false;
+
+    /** Vjerovatnoća sudara po provjeri (I1: 2%). Nije final — testovi je postavljaju na 1.0/0.0 radi determinizma (D5). */
+    public static volatile double VJEROVATNOCA_SUDARA = 0.02;
+
+    /** Trajanje uviđaja za opšti incident (I3), u milisekundama. Testovi spuštaju na ~50ms da paket ne traje minutama. */
+    public static volatile long MIN_TRAJANJE_UVIDJAJA_MS = 3000L;
+    public static volatile long MAX_TRAJANJE_UVIDJAJA_MS = 10000L;
+
+    /** Trajanje uviđaja kad je u pitanju plovilo sa potjernice (I5) — uže od opšteg incidenta. */
+    public static volatile long MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 3000L;
+    public static volatile long MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 5000L;
 
     private final Plovilo plovilo;
     private final Luka luka;
@@ -25,12 +38,15 @@ public class BrodThread implements Runnable {
     private volatile boolean isPrivezan;
     private volatile boolean moraNapustiti;
     private volatile Zadatak zadatak;
+    /** Izvor slučajnosti za provjeru sudara — injektabilan preko {@link #setGeneratorSudara(Random)} radi ponovljivih testova (D5). */
+    private volatile Random generatorSudara;
 
     {
         this.x = this.y = -1;
         this.isPrivezan = false;
         this.moraNapustiti = false;
         this.zadatak = Zadatak.KA_DOKU;
+        this.generatorSudara = ThreadLocalRandom.current();
     }
 
     public BrodThread(Plovilo plovilo, Luka luka) {
@@ -375,10 +391,32 @@ public class BrodThread implements Runnable {
         return Math.max(20L, Math.min(korak, 400L));
     }
 
-    private void provjeriSudar() {
+    /**
+     * Provjerava da li je u ovom koraku kretanja došlo do sudara. I dalje samo placeholder za
+     * R4: vraća ishod "bacanja kockice", ali ne pokreće nikakvu obradu (nema {@code Incident}
+     * objekta, dispečovanja službenih plovila ni blokade terminala) — to je predmet R4.
+     * Paket-privatna vidljivost namjerno, po uzoru na {@link #ustupaProlaz}, da bi testovi mogli
+     * direktno provjeriti determinizam bez pokretanja cijele niti.
+     *
+     * @return true ako je slučajno izvučena vrijednost pogodila prag {@link #VJEROVATNOCA_SUDARA},
+     *         inače false. Uvijek false dok je {@link #SUDARI_OMOGUCENI} isključeno (I1).
+     */
+    boolean provjeriSudar() {
         if (!SUDARI_OMOGUCENI) {
-            return;
+            return false;
         }
+        return generatorSudara.nextDouble() < VJEROVATNOCA_SUDARA;
+    }
+
+    /**
+     * Ubrizgava izvor slučajnosti koji {@link #provjeriSudar()} koristi za sudare — testovi ga
+     * sjeme radi ponovljivog niza ishoda (D5). Podrazumijevano je svaka nit svoj
+     * {@link ThreadLocalRandom}, nepredvidiv po dizajnu.
+     *
+     * @param generatorSudara Izvor slučajnosti koji zamjenjuje podrazumijevani.
+     */
+    public void setGeneratorSudara(Random generatorSudara) {
+        this.generatorSudara = generatorSudara;
     }
 
     public Plovilo getPlovilo() {
