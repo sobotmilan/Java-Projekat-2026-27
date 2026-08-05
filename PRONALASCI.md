@@ -208,3 +208,7 @@ konstruktor službene klase više uopšte ne prosljeđuje prioritet; poziva se
 koji već postavlja 10 kao podrazumijevani prioritet u `Plovilo`. Test `poljePrioritetJeMrtvoUSluzbenimKlasama`
 zamijenjen sa `prioritetPodRotacijomJeImenovanaKonstanta`, koji provjerava i slučaj bez
 rotacije (10) i slučaj sa rotacijom (poređenje protiv imenovane konstante, ne magičnog broja).
+
+### OTVORENO PITANJE
+
+Package cycle — `model.classes.Luka` imports `simulation.BrodThread`, and `BrodThread` imports `Luka`. Caused by putting `aktivnaPlovila` on `Luka`. Compiles fine, but it's simulation state on a model class. Cleaner alternative if time permits: move the registry to `PokretacSimulacije`. Noted as a known design compromise, not a bug.

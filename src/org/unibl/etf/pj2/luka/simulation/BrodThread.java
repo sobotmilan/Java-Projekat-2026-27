@@ -22,7 +22,7 @@ public class BrodThread implements Runnable {
     private final Object parkLock = new Object();
     private Terminal trenutniTerminal;
     private volatile int x, y;
-    private boolean isPrivezan;
+    private volatile boolean isPrivezan;
     private volatile boolean moraNapustiti;
     private volatile Zadatak zadatak;
 
@@ -61,6 +61,9 @@ public class BrodThread implements Runnable {
     public void run() {
         luka.getAktivnaPlovila().add(this);
         try {
+            if(isPrivezan) {
+                evidentirajUlazak();
+            }
             boolean usidren = this.isPrivezan || udjiULuku();
 
             if (usidren) {
@@ -391,7 +394,13 @@ public class BrodThread implements Runnable {
     }
 
     public void setMoraNapustiti(boolean moraNapustiti) {
-        this.moraNapustiti = moraNapustiti;
+        if(moraNapustiti) {
+            zatraziNapustanje();
+        }else {
+            synchronized (parkLock) {
+                this.moraNapustiti = false;
+            }
+        }
     }
 
     public Zadatak getZadatak() {
