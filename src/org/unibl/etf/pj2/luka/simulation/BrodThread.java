@@ -46,7 +46,7 @@ public class BrodThread implements Runnable {
         this.isPrivezan = false;
         this.moraNapustiti = false;
         this.zadatak = Zadatak.KA_DOKU;
-        this.generatorSudara = ThreadLocalRandom.current();
+//        this.generatorSudara = ThreadLocalRandom.current();
     }
 
     public BrodThread(Plovilo plovilo, Luka luka) {
@@ -405,7 +405,7 @@ public class BrodThread implements Runnable {
         if (!SUDARI_OMOGUCENI) {
             return false;
         }
-        return generatorSudara.nextDouble() < VJEROVATNOCA_SUDARA;
+        return generator().nextDouble() < VJEROVATNOCA_SUDARA;
     }
 
     /**
@@ -459,5 +459,10 @@ public class BrodThread implements Runnable {
 
     private void log(String poruka) {
         System.out.println("[" + plovilo.getNaziv() + "] " + poruka);
+    }
+
+    private Random generator() {
+        Random r = this.generatorSudara;
+        return r != null ? r : ThreadLocalRandom.current();
     }
 }

@@ -145,18 +145,21 @@ public final class PokretacSimulacije {
         return plovila;
     }
 
+    //WARNING: SETUP-ONLY METODA, NE POZIVATI DOK TRAJE SIMULACIJE I POSTOJE AKTIVNE KORISNICKE NITI ! ! !
     private static void rasporediNaSlucajneDokove(Luka luka, List<Plovilo> flota, Random rnd) {
         for (Plovilo p : flota) {
             Dok dok = slucajanSlobodanDok(luka, rnd);
             if (dok == null) {
                 LoggerUtil.logWarning("Zatečeno plovilo " + p.getImoBroj()
                         + " nije moglo biti smješteno — nema slobodnih vezova u novoj strukturi luke.");
+                flota.remove(p);
                 continue;
             }
             dok.getLokacija().setTrenutnoPlovilo(p);
         }
     }
 
+    //WARNING: SETUP-ONLY METODA, NE POZIVATI DOK TRAJE SIMULACIJE I POSTOJE AKTIVNE KORISNICKE NITI ! ! !
     private static void dopuniDoMinimuma(Luka luka, int minimumPoTerminalu, Random rnd) {
         for (Terminal t : luka.getTerminali()) {
             int trenutno = brojDokovanihPlovila(t);

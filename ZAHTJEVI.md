@@ -59,17 +59,17 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 
 ## Korisnička aplikacija
 
-| # | Zahtjev | Status |
-|---|---|---|
-| C1 | Korisnik zadaje minimalan broj plovila **po terminalu** | DONE — `PokretacSimulacije.pripremiPocetnoStanje(int minimumPoTerminalu)` uzima taj broj kao parametar; poziv iz GUI-ja (unos vrijednosti) je dio C5, još TODO |
-| C2 | Slučajan tip, 90% komercijalna | DONE — `util.GeneratorPlovila.generisiSlucajno()`/`(Random)`, testovi |
-| C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove | DONE — `simulation.PokretacSimulacije`, testovi |
-| C4 | Dopuna slučajnim plovilima do minimuma | DONE — isto, testovi |
-| C5 | Prikaz terminala, izbor kombo boksom | TODO |
-| C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi |
-| C7 | 15% plovila po terminalu odlazi iz luke | TODO |
-| C8 | Dodavanje plovila tokom simulacije ako luka nije puna | TODO |
-| C9 | Novo plovilo kreće od ulaza ka prvom slobodnom doku | PART — ruta postoji u `BrodThread` |
+| # | Zahtjev                                                                                                                                         | Status |
+|---|-------------------------------------------------------------------------------------------------------------------------------------------------|---|
+| C1 | Korisnik zadaje minimalan broj plovila **po terminalu**                                                                                         | DONE — `PokretacSimulacije.pripremiPocetnoStanje(int minimumPoTerminalu)` uzima taj broj kao parametar; poziv iz GUI-ja (unos vrijednosti) je dio C5, još TODO |
+| C2 | Slučajan tip, 90% komercijalna                                                                                                                  | DONE — `util.GeneratorPlovila.generisiSlucajno()`/`(Random)`, testovi |
+| C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove                                                                                    | DONE — `simulation.PokretacSimulacije`, testovi |
+| C4 | Dopuna slučajnim plovilima do minimuma                                                                                                          | DONE — isto, testovi |
+| C5 | Prikaz terminala, izbor kombo boksom                                                                                                            | TODO |
+| C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju                                                                                                  | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi |
+| C7 | 15% plovila po terminalu odlazi iz luke                                                                                                         | TODO |
+| C8 | Dodavanje plovila tokom simulacije ako luka nije puna, MORA KORISTITI TERMINAL.REZERVISISLOBODANDOK() I DRZATI TERMINAL LOCK, NE SETUP HELPERE! | TODO |
+| C9 | Novo plovilo kreće od ulaza ka prvom slobodnom doku                                                                                             | PART — ruta postoji u `BrodThread` |
 
 ## Incidenti
 
@@ -432,3 +432,7 @@ Profesor je oba rješenja odobrio, uz preferencu:
 ### Podsjetnik — vratiti sudare
 
 `BrodThread.SUDARI_OMOGUCENI` je trenutno `false` (privremeno isključeno radi determinizma testova poslije R0). Mora nazad na `true` kad R4 bude gotov. To je jedino namjerno odstupanje od specifikacije koje trenutno postoji u projektu (I1).
+
+### NOVA OTVORENA ODLUKA
+
+Ulazni timestampovi se prenose kroz sesije iz "luka.ser" (omogucava perzistenciju simulacije), tako da plovilo koje je juce dokovano sada placa stvarne protekle sate, a ne striktno sate unutar simulacije. Da li resetovati brojac pri ponovnom pokretanju, ili koristiti neku vrstu vremenskog skaliranja unutar simulacije koje ce garantovati realne cijene i realne sate naplacene, a ne ekstremno velike vrijednosti samo zato sto je laptop ostao ugasen par dana?

@@ -212,3 +212,4 @@ rotacije (10) i slučaj sa rotacijom (poređenje protiv imenovane konstante, ne 
 ### OTVORENO PITANJE
 
 Package cycle — `model.classes.Luka` imports `simulation.BrodThread`, and `BrodThread` imports `Luka`. Caused by putting `aktivnaPlovila` on `Luka`. Compiles fine, but it's simulation state on a model class. Cleaner alternative if time permits: move the registry to `PokretacSimulacije`. Noted as a known design compromise, not a bug.
+iPostoji ciklus uvozenja - Luka uvozi BrodThread, BrodThread uvozi Luku. Donijeti odluku, nije nužno "bug"...
