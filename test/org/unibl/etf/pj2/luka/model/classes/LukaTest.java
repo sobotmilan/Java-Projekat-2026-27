@@ -78,6 +78,14 @@ class LukaTest {
     }
 
     @Test
+    @DisplayName("Registar aktivnih plovila je inicijalno prazan, ali nikad null")
+    void aktivnaPlovilaJeInicijalnoPrazna() {
+        Luka luka = TestFactory.luka(1);
+        assertNotNull(luka.getAktivnaPlovila());
+        assertTrue(luka.getAktivnaPlovila().isEmpty());
+    }
+
+    @Test
     @DisplayName("Luka je puna kada nijedan terminal nema slobodan vez")
     void punaLuka() {
         Luka luka = TestFactory.luka(2);
@@ -141,7 +149,7 @@ class LukaTest {
     @DisplayName("BUG: Luka nema serialVersionUID — luka.ser puca pri svakoj izmjeni klase")
     void lukaImaSerialVersionUID() throws Exception {
         // Bez eksplicitnog serialVersionUID, JVM ga računa iz strukture klase.
-        // Čim dodaš jedno polje u Luku, stari luka.ser postaje nečitljiv
+        // Čim se doda jedno polje u Luku, stari luka.ser postaje nečitljiv
         // (InvalidClassException), a to je fajl koji nosi cijelo stanje aplikacije.
         java.lang.reflect.Field f = Luka.class.getDeclaredField("serialVersionUID");
         assertTrue(java.lang.reflect.Modifier.isStatic(f.getModifiers()));

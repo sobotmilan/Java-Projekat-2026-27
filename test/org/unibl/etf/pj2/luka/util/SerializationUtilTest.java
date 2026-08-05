@@ -194,4 +194,24 @@ class SerializationUtilTest {
         assertNotNull(spisak, "Spisak potjernica se izgubio pri deserijalizaciji.");
         assertEquals(TestFactory.SPISAK, spisak, "Putanja do spiska potjernica se promijenila pri round-tripu.");
     }
+
+    @Test
+    @Order(8)
+    @DisplayName("Registar aktivnih plovila (transient) preživljava deserijalizaciju kao prazan, ne kao null")
+    void aktivnaPlovilaPrezivljavaKaoPrazanSkup() {
+        // aktivnaPlovila je transient (BrodThread nije Serializable) i NAMJERNO NIJE FINAL -
+        // final polje sa inline inicijalizatorom se nikad ne bi ponovo postavilo u readObject().
+        Luka original = TestFactory.luka(1);
+        original.getTerminali().get(0).getDokovi().get(0).getLokacija()
+                .setTrenutnoPlovilo(TestFactory.kontejnerski("6666666"));
+
+        SerializationUtil.serijalizujStanjeLuke(original);
+        Luka ucitana = SerializationUtil.ucitajStanjeLuke();
+
+        assertNotNull(ucitana);
+        assertNotNull(ucitana.getAktivnaPlovila(),
+                "Registar ne smije ostati null nakon deserijalizacije — readObject() ga mora ponovo inicijalizovati.");
+        assertTrue(ucitana.getAktivnaPlovila().isEmpty(),
+                "Žive niti iz prethodne sesije ne postoje više — registar mora krenuti prazan.");
+    }
 }

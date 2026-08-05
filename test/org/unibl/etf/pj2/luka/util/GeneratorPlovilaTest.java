@@ -171,7 +171,7 @@ class GeneratorPlovilaTest {
             postojeciImo.add(imo);
         }
 
-        // Brojač generatora bi bez ovog poziva krenuo od 1_000_000 — direktno u koliziju.
+        // Brojač generatora bi bez ovog poziva krenuo od 1_000_000 - direktno u koliziju.
         GeneratorPlovila.obezbijediJedinstvenostImoZa(luka);
 
         Random rnd = new Random(7);
@@ -181,5 +181,69 @@ class GeneratorPlovilaTest {
             assertTrue(sviImo.add(p.getImoBroj()),
                     "IMO kolizija sa postojećom lukom: " + p.getImoBroj());
         }
+    }
+
+    @Test
+    @DisplayName("O1: brojač IMO se pomjera iznad plovila zabilježenih u evidenciji ulaska, ne samo na dokovima")
+    void obezbjeduJedinstvenostImoSkeniraIEvidencijuUlaska() {
+        // Plovilo koje je već napustilo luku ostaje samo u evidenciji ulaska (F1) - nije više
+        // ni na jednom doku. O1 iz ZAHTJEVI.md: bez ovog skeniranja, novo plovilo bi moglo dobiti
+        // IMO otišlog plovila i naslijediti njegov stari vremenski pečat u evidenciji (S6 equals/hashCode).
+        GeneratorPlovila.resetujImoBrojacZaTest(2_000_000);
+
+        Luka luka = TestFactory.luka(1);
+        Set<String> postojeciImo = new HashSet<>();
+        for (int i = 0; i < 5; i++) {
+            String imo = String.valueOf(2_000_000 + i);
+            luka.addToEvidencija(imo, java.time.LocalDateTime.now());
+            postojeciImo.add(imo);
+        }
+
+        GeneratorPlovila.obezbijediJedinstvenostImoZa(luka);
+
+        Random rnd = new Random(8);
+        Set<String> sviImo = new HashSet<>(postojeciImo);
+        for (int i = 0; i < 100; i++) {
+            Plovilo p = GeneratorPlovila.generisiSlucajno(rnd);
+            assertTrue(sviImo.add(p.getImoBroj()),
+                    "IMO kolizija sa plovilom koje je već napustilo luku: " + p.getImoBroj());
+        }
+    }
+
+    @Test
+    @DisplayName("Harnes pripreme simulacije (PokretacSimulacije) poziva obezbijediJedinstvenostImoZa prije dopune — nema kolizije")
+    void pripremaPocetnogStanjaIzbjegavaImoKolizijuSaZatecenomFlotom() {
+        // Integracioni test na nivou C1/C3/C4 harnesa: bez poziva na obezbijediJedinstvenostImoZa
+        // prije popunjavanja terminala (C4), generator bi vrlo vjerovatno dodijelio IMO koji se
+        // poklapa sa nekim iz zatečene flote (C3), pošto oba kreću iz istog opsega brojača.
+        GeneratorPlovila.resetujImoBrojacZaTest(3_000_000);
+
+        Luka postojeca = TestFactory.luka(1);
+        Terminal t0 = postojeca.getTerminali().get(0);
+        Set<String> zatecenaImo = new HashSet<>();
+        for (int i = 0; i < 5; i++) {
+            String imo = String.valueOf(3_000_000 + i);
+            t0.getDokovi().get(i).getLokacija().setTrenutnoPlovilo(TestFactory.kontejnerski(imo));
+            zatecenaImo.add(imo);
+        }
+
+        Luka nova = org.unibl.etf.pj2.luka.simulation.PokretacSimulacije
+                .pripremiPocetnoStanje(postojeca, 1, 20, new Random(9));
+
+        Set<String> vidjeniImo = new HashSet<>();
+        for (Terminal t : nova.getTerminali()) {
+            for (Dok d : t.getDokovi()) {
+                Plovilo p = d.getLokacija().getTrenutnoPlovilo();
+                if (p != null) {
+                    assertTrue(vidjeniImo.add(p.getImoBroj()), "Duplirani IMO u novoj luci: " + p.getImoBroj());
+                }
+            }
+        }
+
+        assertTrue(vidjeniImoSadrziSve(vidjeniImo, zatecenaImo));
+    }
+
+    private static boolean vidjeniImoSadrziSve(Set<String> viddeni, Set<String> ocekivani) {
+        return viddeni.containsAll(ocekivani);
     }
 }

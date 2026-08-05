@@ -176,6 +176,16 @@ za detalje čišćenja). Test paket: **93 ukupno, 1 pad** (`sudarUkljucujeDvaPlo
 1 ignorisan (F2 zaokruživanje, otvoreno pitanje ispod). Preostaje: S5 (hardkodovane putanje,
 R3 — nije bio dio ove runde čišćenja), zatim T1/A*/C*/F4, pa R4 (najveći pojedinačni blok).
 
+**Status (5. avgust):** dodato C2 (`GeneratorPlovila`), C6 (`PrikazTerminala`), T1/C1/C3/C4
+(`PokretacSimulacije`) i temeljni dio D3 iz K2 (enum `Zadatak`, `BrodThread` se više ne gasi pri
+privezivanju nego parkira u `PRIVEZAN`, `Luka.aktivnaPlovila` kao registar za D2) — detalji u
+`ZAHTJEVI.md`, sekcije "Riješeno 5. avgusta". Test paket: **135 ukupno, 1 pad** (isti,
+`sudarUkljucujeDvaPlovila`, čeka R4). K2/R4 ostaje najveći preostali blok, ali D3 (kako plovilo
+mijenja cilj usred rute) i D2 (gdje se traži najbliža patrola) sada imaju infrastrukturu koju
+uviđaj treba samo da iskoristi (`Zadatak.KA_INCIDENTU`/`NA_INCIDENTU` postoje kao vrijednosti
+enuma ali ih još ništa ne postavlja; `getX()`/`getY()`/`getTrenutniTerminal()` na `BrodThread`-u
+i `Luka.getAktivnaPlovila()` su spremni za pretragu najbliže patrole).
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje

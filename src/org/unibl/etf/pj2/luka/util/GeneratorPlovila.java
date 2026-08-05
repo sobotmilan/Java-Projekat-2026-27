@@ -133,6 +133,9 @@ public final class GeneratorPlovila {
                 }
             }
         }
+        for (String imo : luka.getEvidencijaUlaska().keySet()) {
+            maxPostojeci = Math.max(maxPostojeci, parsirajImoBezbjedno(imo));
+        }
         if (maxPostojeci > 0) {
             int minimalniSledeci = maxPostojeci + 1;
             SLEDECI_IMO.updateAndGet(trenutni -> Math.max(trenutni, minimalniSledeci));

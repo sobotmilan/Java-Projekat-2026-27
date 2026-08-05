@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.unibl.etf.pj2.luka.model.classes.*;
 import org.unibl.etf.pj2.luka.testutil.TestFactory;
+import org.unibl.etf.pj2.luka.view.PrikazTerminala;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -103,6 +105,14 @@ class BrodThreadTest {
         }
     }
 
+    /**
+     * Od uvođenja parkiranog stanja (PRIVEZAN) nit broda se više ne završava kada se plovilo
+     * priveže — ostaje blokirana u {@code wait()} dok je neko (R4/C7/C8) ne pozove da napusti
+     * terminal. {@code ExecutorService.awaitTermination()} zato više nije ispravan signal da je
+     * "simulacija gotova": vraćao bi false čak i kad su se sva plovila uspješno privezala.
+     * Umjesto toga se čeka da svako plovilo ili bude privezano ({@link BrodThread#isPrivezan()})
+     * ili je njegova nit već završila bez privezivanja ({@link Future#isDone()}).
+     */
     private static boolean pokreniIsacekaj(Luka luka, List<Plovilo> plovila, Uzorkovac uzorkovac)
             throws InterruptedException {
 
@@ -115,19 +125,43 @@ class BrodThreadTest {
             nitUzorkovaca.start();
         }
 
+        List<BrodThread> brodovi = new ArrayList<>();
+        List<Future<?>> futures = new ArrayList<>();
         for (Plovilo p : plovila) {
-            exec.submit(new BrodThread(p, luka));
+            BrodThread bt = new BrodThread(p, luka);
+            brodovi.add(bt);
+            futures.add(exec.submit(bt));
         }
-        exec.shutdown();
 
-        boolean zavrsilo = exec.awaitTermination(TIMEOUT_SEC, TimeUnit.SECONDS);
+        boolean sviSlegnuti = sacekajDaSviSlegnu(brodovi, futures, TIMEOUT_SEC * 1000L);
+
         exec.shutdownNow();
+        exec.awaitTermination(5, TimeUnit.SECONDS);
 
         if (uzorkovac != null) {
             uzorkovac.stani();
             nitUzorkovaca.join(1000);
         }
-        return zavrsilo;
+        return sviSlegnuti;
+    }
+
+    private static boolean sacekajDaSviSlegnu(List<BrodThread> brodovi, List<Future<?>> futures, long timeoutMs)
+            throws InterruptedException {
+        long krajnjeVrijeme = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < krajnjeVrijeme) {
+            boolean sviSlegnuti = true;
+            for (int i = 0; i < brodovi.size(); i++) {
+                if (!brodovi.get(i).isPrivezan() && !futures.get(i).isDone()) {
+                    sviSlegnuti = false;
+                    break;
+                }
+            }
+            if (sviSlegnuti) {
+                return true;
+            }
+            Thread.sleep(20);
+        }
+        return false;
     }
 
     private static List<Plovilo> komercijalna(int n) {
@@ -462,5 +496,171 @@ class BrodThreadTest {
 
         Terminal t = luka.getTerminali().get(0);
         assertEquals(24, t.getBrojSlobodnihVezova(), "Svih 6 plovila je trebalo da se priveže.");
+    }
+
+    private static void cekajPrivezivanje(BrodThread bt, long timeoutMs) throws InterruptedException {
+        long krajnjeVrijeme = System.currentTimeMillis() + timeoutMs;
+        while (!bt.isPrivezan() && System.currentTimeMillis() < krajnjeVrijeme) {
+            Thread.sleep(20);
+        }
+        assertTrue(bt.isPrivezan(), "Plovilo se nije privezalo u zadatom vremenu.");
+    }
+
+    private static void cekajZadatak(BrodThread bt, Zadatak ocekivani, long timeoutMs) throws InterruptedException {
+        long krajnjeVrijeme = System.currentTimeMillis() + timeoutMs;
+        while (bt.getZadatak() != ocekivani && System.currentTimeMillis() < krajnjeVrijeme) {
+            Thread.sleep(20);
+        }
+        assertEquals(ocekivani, bt.getZadatak());
+    }
+
+    @Test
+    @DisplayName("Nakon privezivanja plovilo ulazi u stanje PRIVEZAN i nit ostaje živa (ne završava se)")
+    void ploviloUlaziUParkiranoStanjeNakonPrivezivanja() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("1111111"), luka);
+
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            cekajPrivezivanje(bt, 10_000);
+            cekajZadatak(bt, Zadatak.PRIVEZAN, 5_000);
+
+            assertFalse(future.isDone(), "Nit ne smije završiti odmah nakon privezivanja — mora ostati parkirana.");
+        } finally {
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    @DisplayName("zatraziNapustanje() budi parkiranu nit, koja onda napušta terminal i završava")
+    void zatraziNapustanjeBudiParkiranuNitINapustaTerminal() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("2222222"), luka);
+
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            cekajPrivezivanje(bt, 10_000);
+            assertEquals(29, t.getBrojSlobodnihVezova(), "Plovilo je trebalo zauzeti tačno jedan vez.");
+
+            bt.zatraziNapustanje();
+            future.get(10, TimeUnit.SECONDS);
+
+            assertEquals(Zadatak.NAPUSTA, bt.getZadatak());
+            assertEquals(30, t.getBrojSlobodnihVezova(), "Plovilo je trebalo osloboditi vez nakon napuštanja.");
+        } finally {
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    @DisplayName("KRITIČNO: parkirano čekanje ne drži zaključan terminal — PrikazTerminala.render() ne blokira")
+    void parkiranoCekanjeNeBlokiraRenderTerminala() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("3333333"), luka);
+
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            cekajPrivezivanje(bt, 10_000);
+
+            assertTimeout(Duration.ofSeconds(2), () -> PrikazTerminala.render(t),
+                    "render() se zaglavio dok je plovilo parkirano — wait() je vjerovatno pozvan unutar synchronized(terminal).");
+        } finally {
+            bt.zatraziNapustanje();
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    @DisplayName("Plovilo koje nikad ne uđe u terminal ima koordinate (-1,-1) prije pokretanja niti")
+    void koordinatePrijePokretanjaSuMinusJedan() {
+        Luka luka = TestFactory.luka(1);
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("4444444"), luka);
+
+        assertEquals(-1, bt.getX());
+        assertEquals(-1, bt.getY());
+        assertEquals(Zadatak.KA_DOKU, bt.getZadatak(), "Početni zadatak mora biti KA_DOKU.");
+    }
+
+    @Test
+    @DisplayName("Konstruktor za već privezano plovilo (C3/C4 seeding) startuje direktno u stanju PRIVEZAN")
+    void predokovaniKonstruktorPocinjeDirektnoPrivezan() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        Dok dok = TestFactory.prviSlobodanDok(t);
+        Plovilo p = TestFactory.tankerVatrogasci("5555555");
+        dok.getLokacija().setTrenutnoPlovilo(p);
+
+        BrodThread bt = new BrodThread(p, luka, t, dok);
+        assertTrue(bt.isPrivezan(), "Konstruktor mora odmah postaviti isPrivezan na true.");
+        assertEquals(dok.getLokacija().getX(), bt.getX());
+        assertEquals(dok.getLokacija().getY(), bt.getY());
+
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            cekajZadatak(bt, Zadatak.PRIVEZAN, 5_000);
+            assertTrue(luka.getAktivnaPlovila().contains(bt),
+                    "Predokovano plovilo mora biti registrovano u Luka.getAktivnaPlovila().");
+            assertFalse(future.isDone(), "Nit predokovanog plovila ne smije završiti dok je parkirana.");
+        } finally {
+            bt.zatraziNapustanje();
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    @DisplayName("Luka.getAktivnaPlovila() registruje nit dok radi i uklanja je nakon napuštanja terminala")
+    void aktivnaPlovilaSeRegistrujuIUklanjaju() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("6666666"), luka);
+
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            cekajPrivezivanje(bt, 10_000);
+            assertTrue(luka.getAktivnaPlovila().contains(bt),
+                    "Privezano plovilo mora ostati registrovano dok je parkirano.");
+
+            bt.zatraziNapustanje();
+            future.get(10, TimeUnit.SECONDS);
+
+            assertFalse(luka.getAktivnaPlovila().contains(bt),
+                    "Plovilo koje je napustilo terminal ne smije ostati u registru živih niti.");
+        } finally {
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    @DisplayName("Plovilo koje ne uspije da se priveže (pun terminal) se ipak uklanja iz registra po završetku")
+    void aktivnaPlovilaSeUklanjajuIKadPloviloOdustane() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        TestFactory.popuniSveDokove(t);
+
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("7777777"), luka);
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            future.get(20, TimeUnit.SECONDS);
+
+            assertFalse(bt.isPrivezan());
+            assertEquals(Zadatak.KA_DOKU, bt.getZadatak(), "Plovilo koje odustane nikad nije bilo privezano.");
+            assertFalse(luka.getAktivnaPlovila().contains(bt),
+                    "Plovilo koje je odustalo ne smije ostati u registru živih niti.");
+        } finally {
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
     }
 }

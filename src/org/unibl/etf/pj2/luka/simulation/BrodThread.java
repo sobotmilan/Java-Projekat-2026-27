@@ -18,15 +18,19 @@ public class BrodThread implements Runnable {
 
     private final Plovilo plovilo;
     private final Luka luka;
+    /** Zaključavanje isključivo za parkirano čekanje (PRIVEZAN) — NIKAD synchronized(terminal), da render ne blokira. */
+    private final Object parkLock = new Object();
     private Terminal trenutniTerminal;
-    private int x, y;
+    private volatile int x, y;
     private boolean isPrivezan;
-    private boolean moraNapustiti;
+    private volatile boolean moraNapustiti;
+    private volatile Zadatak zadatak;
 
     {
         this.x = this.y = -1;
         this.isPrivezan = false;
         this.moraNapustiti = false;
+        this.zadatak = Zadatak.KA_DOKU;
     }
 
     public BrodThread(Plovilo plovilo, Luka luka) {
@@ -34,45 +38,37 @@ public class BrodThread implements Runnable {
         this.luka = luka;
     }
 
+    /**
+     * Konstruktor za plovilo koje je već fizički postavljeno na dok (početno postavljanje
+     * flote pri pokretanju simulacije — C3/C4), umjesto da prolazi kroz kanal do njega.
+     * Pozivalac je odgovoran da prethodno postavi {@code plovilo} u ćeliju matrice na
+     * {@code dok.getLokacija()}.
+     *
+     * @param plovilo Plovilo koje se već nalazi na doku.
+     * @param luka Luka kojoj terminal pripada.
+     * @param terminal Terminal na kojem se dok nalazi.
+     * @param dok Dok na kojem je plovilo već usidreno.
+     */
+    public BrodThread(Plovilo plovilo, Luka luka, Terminal terminal, Dok dok) {
+        this(plovilo, luka);
+        this.trenutniTerminal = terminal;
+        this.x = dok.getLokacija().getX();
+        this.y = dok.getLokacija().getY();
+        this.isPrivezan = true;
+    }
+
     @Override
     public void run() {
+        luka.getAktivnaPlovila().add(this);
         try {
-            int idx = 0;
-            boolean usidren = false;
+            boolean usidren = this.isPrivezan || udjiULuku();
 
-            while (!usidren && idx < luka.getTerminali().size()) {
-                Terminal t = luka.getTerminali().get(idx);
-
-                Dok rezervisan = t.rezervisiSlobodanDok(plovilo);
-                if (rezervisan == null) {
-                    log("Terminal " + (idx + 1) + " je pun, nastavlja pravo.");
-                    idx++;
-                    continue;
-                }
-
-                if (!udjiUTerminal(t)) {
-                    t.otkaziRezervaciju(rezervisan);
-                    log("Nije uspio ući u terminal " + (idx + 1) + ", nastavlja pravo.");
-                    idx++;
-                    continue;
-                }
-                evidentirajUlazak();
-                log("Ušao u terminal " + (idx + 1) + ".");
-
-                if (doploviDoDoka(rezervisan)) {
-                    this.isPrivezan = true;
-                    usidren = true;
-                    log("Usidren na vezu " + rezervisan.getOznakaVezova()
-                            + " (" + this.x + "," + this.y + ") u terminalu " + (idx + 1) + ".");
-                } else {
-                    t.otkaziRezervaciju(rezervisan);
-                    log("Ne može doći do veza u terminalu " + (idx + 1) + ", nastavlja dalje.");
-                    napustiTerminal();
-                    idx++;
-                }
-            }
-
-            if (!usidren) {
+            if (usidren) {
+                this.zadatak = Zadatak.PRIVEZAN;
+                cekajNapustanje();
+                this.zadatak = Zadatak.NAPUSTA;
+                napustiTerminal();
+            } else {
                 log("Obišao sve terminale i napustio luku — nema slobodnih vezova.");
             }
 
@@ -80,6 +76,69 @@ public class BrodThread implements Runnable {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             LoggerUtil.logError("Kriticna greska u kretanju broda: " + plovilo.getNaziv(), e);
+        } finally {
+            luka.getAktivnaPlovila().remove(this);
+        }
+    }
+
+    private boolean udjiULuku() throws InterruptedException {
+        int idx = 0;
+
+        while (idx < luka.getTerminali().size()) {
+            Terminal t = luka.getTerminali().get(idx);
+
+            Dok rezervisan = t.rezervisiSlobodanDok(plovilo);
+            if (rezervisan == null) {
+                log("Terminal " + (idx + 1) + " je pun, nastavlja pravo.");
+                idx++;
+                continue;
+            }
+
+            if (!udjiUTerminal(t)) {
+                t.otkaziRezervaciju(rezervisan);
+                log("Nije uspio ući u terminal " + (idx + 1) + ", nastavlja pravo.");
+                idx++;
+                continue;
+            }
+            evidentirajUlazak();
+            log("Ušao u terminal " + (idx + 1) + ".");
+
+            if (doploviDoDoka(rezervisan)) {
+                this.isPrivezan = true;
+                log("Usidren na vezu " + rezervisan.getOznakaVezova()
+                        + " (" + this.x + "," + this.y + ") u terminalu " + (idx + 1) + ".");
+                return true;
+            } else {
+                t.otkaziRezervaciju(rezervisan);
+                log("Ne može doći do veza u terminalu " + (idx + 1) + ", nastavlja dalje.");
+                napustiTerminal();
+                idx++;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Parkira nit dok se plovilo ne pozove da napusti terminal ({@link #zatraziNapustanje()}).
+     * KRITIČNO: {@code wait()} se poziva na {@link #parkLock}, nikad na terminalu — inače bi
+     * {@code PrikazTerminala.render()}, koji uzima isti ključ, blokirao GUI za trajanje čekanja.
+     */
+    private void cekajNapustanje() throws InterruptedException {
+        synchronized (parkLock) {
+            while (!moraNapustiti) {
+                parkLock.wait();
+            }
+        }
+    }
+
+    /**
+     * Budi parkiranu nit i pokreće je ka izlazu iz terminala. Poziva ga R4 (uviđaj) ili
+     * C7/C8 (odlazak/dopuna) nad plovilom koje je trenutno u stanju {@link Zadatak#PRIVEZAN}.
+     */
+    public void zatraziNapustanje() {
+        synchronized (parkLock) {
+            this.moraNapustiti = true;
+            parkLock.notifyAll();
         }
     }
 
@@ -333,6 +392,22 @@ public class BrodThread implements Runnable {
 
     public void setMoraNapustiti(boolean moraNapustiti) {
         this.moraNapustiti = moraNapustiti;
+    }
+
+    public Zadatak getZadatak() {
+        return zadatak;
+    }
+
+    public int getX() {
+        return x;
+    }
+
+    public int getY() {
+        return y;
+    }
+
+    public Terminal getTrenutniTerminal() {
+        return trenutniTerminal;
     }
 
     private void log(String poruka) {

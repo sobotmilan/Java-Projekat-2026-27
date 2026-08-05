@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2.
-Test paket: 112 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
+Stanje: 5. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1.
+Test paket: 135 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4), 0 ignorisano (F2 riješen).
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -27,7 +27,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 
 | # | Zahtjev | Status | Gdje |
 |---|---|---|---|
-| T1 | Broj terminala iz properties fajla | TODO | `luka.properties` postoji, niko ga ne čita |
+| T1 | Broj terminala iz properties fajla | DONE | `PokretacSimulacije.pripremiPocetnoStanje(int)` čita `PropertiesUtil.getBrojTerminala()` |
 | T2 | Oblik terminala 4×17, 30 dokova | DONE | `Terminal`, test |
 | T3 | Plovidba desnom stranom kanala | DONE | R0, red 2 istočno / red 1 zapadno |
 | T4 | Preticanje preko jednog polja lijevo, ako nema suprotnog smjera | DONE | `smijePreticati()` |
@@ -61,10 +61,10 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 
 | # | Zahtjev | Status |
 |---|---|---|
-| C1 | Korisnik zadaje minimalan broj plovila **po terminalu** | TODO |
+| C1 | Korisnik zadaje minimalan broj plovila **po terminalu** | DONE — `PokretacSimulacije.pripremiPocetnoStanje(int minimumPoTerminalu)` uzima taj broj kao parametar; poziv iz GUI-ja (unos vrijednosti) je dio C5, još TODO |
 | C2 | Slučajan tip, 90% komercijalna | DONE — `util.GeneratorPlovila.generisiSlucajno()`/`(Random)`, testovi |
-| C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove | TODO |
-| C4 | Dopuna slučajnim plovilima do minimuma | TODO |
+| C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove | DONE — `simulation.PokretacSimulacije`, testovi |
+| C4 | Dopuna slučajnim plovilima do minimuma | DONE — isto, testovi |
 | C5 | Prikaz terminala, izbor kombo boksom | TODO |
 | C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi |
 | C7 | 15% plovila po terminalu odlazi iz luke | TODO |
@@ -103,14 +103,17 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 1. **I1 — sudari isključeni.** `BrodThread.SUDARI_OMOGUCENI = false`. Vratiti na `true` u R4.
 2. ~~**F2 — zaokruživanje.** `Duration.toHours()` reže naniže, pa 90 min = 100 KM.~~ Riješeno, korištena Math.ceil() metoda i princip "plafona" za računanje tarife.
 3. **M6 — spisak potjernica se ne čita.** Fajl se čuva, sadržaj se nikad ne parsira.
-4. **T1 — properties se ne čita.** Broj terminala je trenutno hardkodovan kroz `TestFactory`.
+4. ~~**T1 — properties se ne čita.**~~ Riješeno 5. avgusta — vidi ispod. `TestFactory.luka(n)` i dalje hardkoduje broj terminala, ali to je namjerno (test fabrika), ne proizvodni kod.
 
 ## Redoslijed preostalog rada
 
-~~R1 + R5 (interfejs + prioritet)~~ **gotovo 4. avgusta** → T1 (properties) → A* (admin GUI) →
-C* (klijent GUI + prikaz) → C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu) → **R4 (incidenti)**
+~~R1 + R5 (interfejs + prioritet)~~ **gotovo 4. avgusta** → ~~T1 (properties) → C1/C3/C4 (harnes)~~
+**gotovo 5. avgusta** → A* (admin GUI) → C5/C8 (klijent GUI + prikaz + dodavanje tokom rada) →
+C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu) → **R4 (incidenti)**
 
-R4 je najveći pojedinačni blok i ima najviše nezatvorenih zahtjeva (I1–I8).
+R4 je najveći pojedinačni blok i ima najviše nezatvorenih zahtjeva (I1–I8). `Zadatak`/parkiranje
+i `Luka.aktivnaPlovila` (vidi ispod) su urađeni unaprijed baš zbog R4 — da se ne mora naknadno
+mijenjati životni ciklus `BrodThread`-a usred pisanja logike uviđaja.
 
 ## Riješeno 4. avgusta: čišćenje preostalih padova (S1–S4, S6)
 
@@ -201,3 +204,201 @@ nijednog. R4 zahtijeva slanje vatrogasaca na incident. Kad se stigne do C3/C4 (p
 minimalnog broja plovila po terminalu), treba odlučiti: (a) garantovati bar jedno plovilo
 svake službe po terminalu pri inicijalnom postavljanju, ili (b) prihvatiti da demonstracije
 često neće moći pokazati puni dispatch. Nije riješeno danas.
+
+## Riješeno 5. avgusta: T1/C1/C3/C4 (simulacioni harnes) + priprema za R4
+
+Novi paket-lokalni pandan za pokretanje simulacije: `simulation.PokretacSimulacije`. Wire-uje
+`PropertiesUtil.getBrojTerminala()` (T1, do sada niko nije čitao), zatim izvlači zatečenu flotu
+iz deserijalizovanog `luka.ser` i raspoređuje je na slučajne dokove nove strukture terminala
+(C3), pa dopunjava svaki terminal do korisnički zadatog minimuma slučajno generisanim plovilima
+preko `GeneratorPlovila.generisiSlucajno()` (C1/C4). `GeneratorPlovila.obezbijediJedinstvenostImoZa()`
+se poziva odmah nakon deserijalizacije, prije prve generacije — bez ovog redoslijeda bi C3/C4
+gotovo izvjesno proizveli IMO koliziju (isti opseg brojača kao zatečena flota).
+
+Podijeljeno na dvije javne metode radi testabilnosti: `pripremiPocetnoStanje(int)` je pravi
+ulaz (čita `luka.properties` i `luka.ser` sa diska), a `pripremiPocetnoStanje(Luka, int, int, Random)`
+je čista varijanta bez I/O-a koju testovi pozivaju direktno — isti obrazac kao
+`GeneratorPlovila.generisiSlucajno()` / `generisiSlucajno(Random)`.
+
+**Bitna napomena o rasporedu (C3):** ako se broj terminala između sesija promijenio (T1 se
+izmijeni u `luka.properties`), zatečena flota se prenosi na *novu* strukturu terminala, ne na
+staru — otud raspoređivanje na slučajan dok umjesto vraćanja na tačno onaj dok na kojem je
+plovilo bilo prije. Ako nova struktura ima manje ukupnog kapaciteta od broja zatečenih plovila,
+višak se tiho izostavlja uz upozorenje u `error.log` (nema specifikacije šta raditi u tom rubnom
+slučaju — kapacitet 30×broj_terminala je u praksi uvijek dovoljan za realne vrijednosti C1).
+
+### Zadatak / PRIVEZAN — BrodThread se više ne gasi kad se plovilo priveže
+
+Ovo je preduslov koji je zahtijevao R4 (D3 iz `PRONALASCI.md`), urađen sada da se ne mora
+naknadno mijenjati životni ciklus niti usred pisanja logike uviđaja:
+
+- Novi enum `simulation.Zadatak { KA_DOKU, PRIVEZAN, KA_INCIDENTU, NA_INCIDENTU, NAPUSTA }`.
+- `BrodThread.run()` više se ne završava kad `doploviDoDoka()` uspije. Umjesto toga nit uđe u
+  `Zadatak.PRIVEZAN` i parkira se u `wait()` na **posebnom `parkLock` objektu, nikad na
+  `synchronized(terminal)`** — to je kritično svojstvo iz D4: `PrikazTerminala.render()` uzima
+  isti ključ terminala, pa bi `wait()` unutar te sinhronizacije zamrznuo GUI za trajanje
+  čekanja. Regresioni test `parkiranoCekanjeNeBlokiraRenderTerminala` direktno provjerava da
+  `render()` vrati rezultat u razumnom vremenu dok je brod parkiran.
+- `zatraziNapustanje()` budi parkiranu nit (`moraNapustiti = true` + `notifyAll()` na
+  `parkLock`), nakon čega nit prelazi u `Zadatak.NAPUSTA` i poziva postojeći `napustiTerminal()`.
+  Ovo je kuka koju će R4 (uviđaj) i C7/C8 (odlazak/dopuna) koristiti da reaktiviraju privezano
+  plovilo — do sada ništa u kodu to ne poziva osim testova i `PokretacSimulacije` internih tokova.
+- Novi konstruktor `BrodThread(Plovilo, Luka, Terminal, Dok)` za plovilo koje je **već fizički**
+  postavljeno na dok (C3/C4 seeding) — nit odmah kreće u `PRIVEZAN`, bez ponovnog prolaska kroz
+  ulazni kanal. Koristi ga `PokretacSimulacije.pokreniPrivezanaPlovila(Luka)`.
+- `getX()`/`getY()`/`getTrenutniTerminal()` sada javni — priprema za D2 (R4: pretraga najbliže
+  patrole na nivou luke, filtrirana po terminalu preko `getTrenutniTerminal()`).
+
+**Posljedica po postojeće testove:** `BrodThreadTest.pokreniIsacekaj()` je ranije čekao
+`ExecutorService.awaitTermination()` kao signal da je "simulacija gotova" — sa parkiranjem to
+više ne funkcioniše (nit koja se uspješno privezala se više nikad sama ne gasi). Zamijenjeno
+anketiranjem: čeka se da svako plovilo ili bude privezano (`isPrivezan()`) ili je njegova nit
+već završila bez privezivanja (`Future.isDone()`). Ovo ne mijenja semantiku nijednog postojećeg
+testa (svi provjeravaju stanje matrice terminala, ne završetak niti), samo tačku na kojoj se
+smatra da je test spreman za asertacije. `exec.shutdownNow()` na kraju i dalje prekida sve
+parkirane niti (InterruptedException iz `wait()` se hvata u `run()` i nit se uredno gasi) — bez
+toga bi 100+ testova ostavljalo zombi niti blokirane zauvijek.
+
+### Luka.aktivnaPlovila — registar živih niti (priprema za D2)
+
+`Luka` sada nosi `transient Set<BrodThread> aktivnaPlovila` (`ConcurrentHashMap.newKeySet()`).
+`BrodThread.run()` se registruje na početku i uklanja u `finally` bloku, bez obzira da li se
+plovilo privezalo, odustalo, ili je parkiranje prekinuto. Osnova za R4 pretragu najbliže patrole
+na nivou cijele luke (D2 iz `PRONALASCI.md`) — sa ~2.5% vatrogasnih plovila, pretraga samo unutar
+jednog terminala vrlo često neće naći nijedno.
+
+**Namjerno nije `final`**, iako bi konceptualno trebalo biti: inline inicijalizator transient
+polja se nikad ne izvršava pri deserijalizaciji (samo pri običnoj konstrukciji), pa bi `final`
+polje ostalo trajno `null` nakon učitavanja `luka.ser`. Riješeno inicijalizacijom u konstruktoru
+i ponovo u novom `readObject()`. Test `aktivnaPlovilaPrezivljavaKaoPrazanSkup` u
+`SerializationUtilTest` direktno provjerava da registar nakon deserijalizacije bude prazan skup,
+ne `null` — žive niti iz prethodne sesije očigledno ne postoje više nakon ponovnog pokretanja JVM-a.
+
+Napomena: `Luka` (u `model.classes`) sada uvozi `BrodThread` (iz `simulation`), što stvara
+kružnu zavisnost paketa (`simulation` već zavisi od `model.classes` za `Terminal`/`Plovilo`/itd.).
+Legalno u Javi, ali vrijedi zabilježiti — direktno je zahtijevano ovom odlukom (živi registar niti
+mora biti tipiziran kao `Set<BrodThread>`, ne generički `Set<Object>` ili slično).
+
+### Test paket: 112 → 135 (23 nova, 0 novih padova)
+
+Novi testovi: 7 u `BrodThreadTest` (parkiranje, `zatraziNapustanje`, ne-blokiranje rendera,
+predokovani konstruktor, registracija/deregistracija u `aktivnaPlovila` — i za uspješno i za
+neuspješno privezivanje), 1 u `LukaTest`, 1 u `SerializationUtilTest`, 2 u `GeneratorPlovilaTest`
+(O1 fix + integracioni test da harnes zaista poziva `obezbijediJedinstvenostImoZa` prije dopune),
+12 u novom `PokretacSimulacijeTest` (T1, C1/C4 dopuna, C3 prenos i preraspodjela pri promjeni
+broja terminala, C3+C4 zajedno — zatečena flota se računa u minimum, ne dodaje preko njega,
+pokretanje niti za privezana plovila, validacija granica). Puni paket ponovljen tri puta zaredom
+bez varijacije (135/135, 1 očekivani pad) radi provjere da nova konkurentnost (parkiranje,
+anketiranje u `pokreniIsacekaj`) nije unijela nestabilnost pored postojeće (O3, nepromijenjeno).
+
+## Otvoreni nalazi (nisu bagovi danas, postaju bagovi kasnije)
+
+### O1 — `obezbijediJedinstvenostImoZa()` ne skenira evidenciju ulaska — ✅ RIJEŠENO (5. avgust)
+
+Metoda je skenirala samo matricu svakog terminala (privezana plovila i ona u kanalu), ne i
+`Luka.getEvidencijaUlaska()`, gdje ostaju IMO brojevi plovila koja su **već napustila luku** —
+ta mapa je osnov za obračun lučkih taksi (F1). Postalo bi stvaran problem čim C7/E1 počnu
+uklanjati plovila iz luke: novogenerisano plovilo bi dobilo IMO otišlog plovila, `putIfAbsent`
+u `addToEvidencija` bi zadržao **stari** vremenski pečat, i novi brod bi bio naplaćen za tuđe
+zadržavanje. Ispravljeno dodavanjem petlje po `evidencijaUlaska.keySet()` u `obezbijediJedinstvenostImoZa()`.
+Test `obezbjeduJedinstvenostImoSkeniraIEvidencijuUlaska` u `GeneratorPlovilaTest`.
+
+### O2 — `resources/` nije na classpath-u
+
+`pom.xml` nadjačava `<sourceDirectory>src</sourceDirectory>` i nema `<resources>` blok, pa se `resources/placeholder-fotografija.txt` i `resources/spisak-potjera-default.txt` **ne kopiraju u `target/`**.
+
+Trenutno radi jer se putanje razrješavaju kao obične relativne putanje u odnosu na radni direktorijum, a to je korijen projekta i u IntelliJ-u i pri pokretanju testova.
+
+Puca ako se projekat ikada spakuje u jar ili pokrene iz drugog radnog direktorijuma — dakle potencijalno pri predaji ili na tuđoj mašini. Riješiti prije predaje, dodavanjem u `pom.xml`:
+
+```xml
+<resources>
+    <resource>
+        <directory>resources</directory>
+    </resource>
+</resources>
+```
+
+i čitanjem preko `getResourceAsStream()` umjesto `new File()`.
+
+### O3 — Nestabilan test `ploviloPodRotacijomZavrsavaSimulaciju`
+
+Zabilježen **jedan** pad tokom punog paketa nakon C2. Nije reprodukovan u 20+ uzastopnih izolovanih pokretanja (4.7s–6.3s, sva prošla). Poruka greške izgubljena zbog isteka sesije — nije poznato koja od dvije tvrdnje je pala:
+
+- `"Simulacija se nije završila u zadatom vremenu"` → niti se nisu okončale u 40s (zastoj),
+- `expected 24 but was 25` → plovilo je odustalo na ulazu (`udjiUTerminal`, granica 100 × 100ms = 10s), otkazalo rezervaciju i napustilo luku neusidreno.
+
+**Hipoteza (nije potvrđena):** pravilo ustupanja iz R5 zamrzne komercijalno plovilo dok je plovilo pod rotacijom neposredno iza njega. Ako je istovremeno suprotni kanal (red 1) zauzet drugim plovilom u preticanju, plovilo pod rotacijom ne može proći, a ono ispred stoji upravo zato što je ono iza njega. Oba čekaju do granice `ukupnoPokusaja` (400 × ~100ms ≈ 40s), što je tačno na pragu timeout-a testa.
+
+Napomena: pun paket je drugačije okruženje od izolovanog pokretanja — više niti u gašenju iz prethodnih testova, veće opterećenje procesora. Reprodukovati pod tim uslovima (pun paket, 10 ponavljanja), ne pojedinačno.
+
+Relevantno za R4: tri službena plovila koja se istovremeno probijaju ka jednom incidentu je najgori mogući slučaj za ovu klasu zastoja.
+
+### O4 — R5 nije potvrđen u pokretu
+
+Tri testa `ustupaProlaz` su deterministična i prolaze, ali testiraju metodu izolovano. U dosadašnjim integracionim pokretanjima log nikada nije prikazao preticanje po prioritetu (`Započinje preticanje` se pojavljivao samo iz grane `neuspjesi >= PRAG_PRETICANJA`, dakle kod običnih plovila). Pravilo je dokazano jedinično, nedokazano u simulaciji.
+
+---
+
+## Odluke koje treba donijeti prije R4
+
+Specifikacija zadaje cilj, ali ne i mehanizam. Ovih sedam odluka oblikuju strukturu koda i treba ih donijeti **prije** pisanja logike uviđaja, a ne tokom.
+
+### D1 — Ko posjeduje incident?
+
+Sudar uključuje dva plovila, svako u svojoj niti. Nijedno ne može prirodno „posjedovati" incident jer bi tada gašenje te niti ugasilo i uviđaj. Opcije:
+
+- koordinator po terminalu (`KoordinatorUvidjaja`),
+- statički registar na nivou luke,
+- sam `Terminal` dobija stanje incidenta.
+
+Ova odluka određuje strukturu svega ostalog u R4.
+
+### D2 — Gdje se traži najbliža patrola?
+
+Za „najbližu patrolu" treba registar živih `BrodThread`-ova sa čitljivim pozicijama — ne postoji. Po terminalu ili na nivou cijele luke?
+
+Pri 2.5% vatrogasnih plovila terminal često neće imati nijedno, pa pretraga vjerovatno mora biti na nivou luke. To povlači i pitanje kako službeno plovilo prelazi između terminala (profesor je dozvolio logički prelaz — vidi `dodatna_pojasnjenja.txt`, pitanje 1).
+
+Udaljenost: Manhattan rastojanje do ćelije incidenta je dovoljno.
+
+### D3 — Kako plovilo mijenja cilj usred rute?
+
+`BrodThread.run()` je trenutno pravolinijski: rezerviši → uđi → doplovi → gotovo. Usidreno službeno plovilo mora da se odveže i krene ka incidentu. Treba mu stanje, npr. `enum Zadatak { KA_DOKU, KA_INCIDENTU, NA_INCIDENTU, NAPUSTA }` i provjera tog stanja unutar petlji kretanja.
+
+Najveća pojedinačna izmjena u R4 i glavni razlog procjene od 12–16 sati.
+
+### D4 — Kako se blokira saobraćaj?
+
+Blokira se **samo terminal na kojem je incident** (I3/I4). `wait()`/`notifyAll()` na terminalu je pravi primitiv — aktivno čekanje bi trošilo procesor tokom uviđaja od 3–10s.
+
+**Kritično:** `PrikazTerminala.render()` uzima isti ključ. Ako se ikad uđe u `wait()` ili `Thread.sleep()` **držeći** `synchronized (terminal)`, GUI se zamrzava. Trenutno nijedan `synchronized (terminal)` blok u `BrodThread`-u ne spava — to svojstvo mora ostati.
+
+### D5 — Determinizam sudara u testovima
+
+Sudar ima vjerovatnoću 2%, pa je svaki test koji ga čeka nasumičan. Uvesti tačku ubrizgavanja prije pisanja logike:
+
+```java
+public static volatile double VJEROVATNOCA_SUDARA = 0.02;
+```
+
+Testovi postavljaju `1.0` (garantovan sudar) ili `0.0` (bez šuma). Isto važi za trajanje uviđaja (3–10s) — konstanta koju test može spustiti na ~50ms, inače paket traje minutama.
+
+Bez ovoga R4 testovi su i nestabilni i spori.
+
+### D6 — Šta ide u binarni fajl incidenta?
+
+`Incident implements Serializable`, jedan fajl po slučaju u `user.home` (I6/I7). Sadržaj: učesnici sudara, službena plovila, vrijeme, fotografije.
+
+Odluka: čuvati **putanje** do fotografija ili same **bajtove**? Putanje su manje i jednostavnije, ali pucaju ako se fajl pomjeri; bajtovi su samodovoljni ali fajl raste. Povezano sa O2 (putanje relativne na radni direktorijum).
+
+### D7 — Šta poslije uviđaja?
+
+Profesor je oba rješenja odobrio, uz preferencu:
+
+- **Službena plovila:** napuste terminal _ili_ se privežu na prvi slobodan dok. Preferira se privezivanje, „kako bi se mogla službena vozila ponovo aktivirati" — što je direktno relevantno zbog O-nalaza o oskudici vatrogasaca.
+- **Učesnici sudara:** „Neka napuste terminal" — ovdje je odgovor jednoznačan.
+
+### Podsjetnik — vratiti sudare
+
+`BrodThread.SUDARI_OMOGUCENI` je trenutno `false` (privremeno isključeno radi determinizma testova poslije R0). Mora nazad na `true` kad R4 bude gotov. To je jedino namjerno odstupanje od specifikacije koje trenutno postoji u projektu (I1).
