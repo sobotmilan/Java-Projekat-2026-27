@@ -6,8 +6,18 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 
+/**
+ * Pomoćna klasa koja predstavlja centralizovan logging alat aplikacije preko standardnog {@link Logger}-a.
+ *
+ * <p>Svi izuzeci i upozorenja u sistemu prolaze kroz ovu klasu i završavaju u datoteci
+ * {@value #DEFAULT_PATH}, umjesto da se ispisuju direktno na konzolu pri izvršavanju.</p>
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ */
 public class LoggerUtil {
 
+    /** Putanja do datoteke u koju se upisuju svi logovi, relativno na radni direktorijum. */
     public static final String DEFAULT_PATH = "error.log";
 
     static Logger logger;
@@ -29,21 +39,43 @@ public class LoggerUtil {
     private LoggerUtil() {
     }
 
+    /**
+     * Loguje grešku na nivou {@link Level#SEVERE} zajedno sa pratećim izuzetkom (odnosno njegovim stack-trace-om).
+     *
+     * @param msg Poruka koja opisuje grešku.
+     * @param t Izuzetak koji je uzrokovao grešku.
+     */
     public static void logError(String msg, Throwable t) {
         logger.log(Level.SEVERE, msg, t);
     }
 
 
+    /**
+     * Loguje grešku na nivou {@link Level#SEVERE} bez pratećeg izuzetka.
+     *
+     * @param msg Poruka koja opisuje grešku.
+     */
     public static void logError(String msg) {
         logger.log(Level.SEVERE, msg);
     }
 
 
+    /**
+     * Loguje upozorenje na nivou {@link Level#WARNING} - za stanja koja nisu nužno greška, ali
+     * odstupaju od očekivanog/normalnog toka izvršavanja (npr. neispravna vrijednost u properties fajlu).
+     *
+     * @param msg Poruka upozorenja.
+     */
     public static void logWarning(String msg) {
         logger.log(Level.WARNING, msg);
     }
 
 
+    /**
+     * Loguje informativnu poruku na nivou {@link Level#INFO}.
+     *
+     * @param msg Informativna poruka.
+     */
     public static void logInfo(String msg) {
         logger.log(Level.INFO, msg);
     }

@@ -11,11 +11,55 @@ import java.time.LocalDateTime;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * Nit koja upravlja kretanjem jednog {@link Plovilo}-a kroz luku (T10): ulazak kroz kanal
+ * terminala, vezivanje na dok, parkirano čekanje dok je privezan, i konačno napuštanje terminala.
+ *
+ * <p><b>Kanal (T3/R0):</b> plovilo silazi niz ulaznu kolonu ({@link Terminal#KOLONA_ULAZ}) do
+ * reda {@link Terminal#KANAL_ULAZ} (istočni, dolazni trak), plovi njime ka istoku, a ulazak u dok
+ * je pomjeraj za jedan red gore/dolje sa kanala — nikad kretanje kroz redove dokova (0 i 3). Red
+ * {@link Terminal#KANAL_IZLAZ} (zapadni trak) služi i za preticanje (T4) i za izlazak iz terminala.</p>
+ *
+ * <p><b>Prioritet i preticanje (M5/R5/T4):</b> plovilo pod rotacijom (prioritet manji od
+ * {@link #PRIORITET_BEZ_ROTACIJE}) pokušava preticanje čim je blokirano, umjesto da čeka
+ * {@link #PRAG_PRETICANJA} neuspjeha kao obično plovilo; obično plovilo dodatno provjerava
+ * {@link #ustupaProlaz(Terminal, int, int, Plovilo)} i stoji u mjestu ako je plovilo pod
+ * rotacijom neposredno iza njega u istoj traci.</p>
+ *
+ * <p><b>Zadatak i parkiranje (D3):</b> nit se ne gasi kad se plovilo priveže — ulazi u
+ * {@link Zadatak#PRIVEZAN} i parkira se preko {@link #cekajNapustanje()} na posebnom
+ * {@link #parkLock} objektu (nikad na {@code synchronized(terminal)}, D4), sve dok je neko ne
+ * pozove preko {@link #zatraziNapustanje()} da napusti terminal.</p>
+ *
+ * <p><b>Sudari (I1/D5):</b> {@link #provjeriSudar()} je i dalje placeholder za R4 — vraća ishod
+ * "bacanja kockice" ({@link #VJEROVATNOCA_SUDARA}), ali ne pokreće nikakvu obradu incidenta.
+ * {@link #SUDARI_OMOGUCENI} je trenutno {@code false} (namjerno odstupanje od specifikacije radi
+ * determinizma testova nakon R0 — mora se vratiti na {@code true} kad R4 bude gotov).</p>
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ * @see Terminal
+ * @see Zadatak
+ * @see Luka
+ */
 public class BrodThread implements Runnable {
+    /** Maksimalan broj pokušaja pomjeranja za jedan korak prije nego što se pokušaj kretanja smatra neuspjelim. */
     private static final int MAX_POKUSAJA = 100;
+
+    /** Pauza između neuspjelih pokušaja pomjeranja, u milisekundama. */
     private static final long CEKANJE_MS = 100L;
+
+    /** Broj uzastopnih neuspjeha nakon kojeg obično plovilo (bez prioriteta) pokušava preticanje (T4). */
     private static final int PRAG_PRETICANJA = 3;
+
+    /** Prioritet svakog plovila bez upaljene rotacije (podrazumijevana vrijednost iz {@link Plovilo}). */
     private static final int PRIORITET_BEZ_ROTACIJE = 10;
+
+    /**
+     * Globalni prekidač za sudare (I1). Trenutno {@code false} — namjerno odstupanje od
+     * specifikacije, uvedeno radi determinizma testova poslije R0. Mora se vratiti na
+     * {@code true} kad logika uviđaja (R4) bude implementirana.
+     */
     public static volatile boolean SUDARI_OMOGUCENI = false;
 
     /** Vjerovatnoća sudara po provjeri (I1: 2%). Nije final — testovi je postavljaju na 1.0/0.0 radi determinizma (D5). */
@@ -29,14 +73,27 @@ public class BrodThread implements Runnable {
     public static volatile long MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 3000L;
     public static volatile long MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 5000L;
 
+    /** Plovilo kojim ova nit upravlja. */
     private final Plovilo plovilo;
+
+    /** Luka kojoj plovilo pripada — daje pristup terminalima i evidenciji ulaska. */
     private final Luka luka;
     /** Zaključavanje isključivo za parkirano čekanje (PRIVEZAN) — NIKAD synchronized(terminal), da render ne blokira. */
     private final Object parkLock = new Object();
+
+    /** Terminal u kojem se plovilo trenutno nalazi, ili {@code null} ako nije ni u jednom. */
     private Terminal trenutniTerminal;
+
+    /** Trenutna pozicija (red, kolona) plovila u matrici {@link #trenutniTerminal}-a, ili -1 ako nije pozicionirano. */
     private volatile int x, y;
+
+    /** Da li je plovilo trenutno privezano na dok. */
     private volatile boolean isPrivezan;
+
+    /** Zastavica koju postavlja {@link #zatraziNapustanje()} da probudi parkiranu nit. */
     private volatile boolean moraNapustiti;
+
+    /** Trenutni zadatak niti (D3) — vidi {@link Zadatak}. */
     private volatile Zadatak zadatak;
     /** Izvor slučajnosti za provjeru sudara — injektabilan preko {@link #setGeneratorSudara(Random)} radi ponovljivih testova (D5). */
     private volatile Random generatorSudara;
@@ -46,9 +103,15 @@ public class BrodThread implements Runnable {
         this.isPrivezan = false;
         this.moraNapustiti = false;
         this.zadatak = Zadatak.KA_DOKU;
-//        this.generatorSudara = ThreadLocalRandom.current();
     }
 
+    /**
+     * Konstruktor za plovilo koje tek treba ući u luku kroz ulazni kanal — nit kreće iz
+     * {@link Zadatak#KA_DOKU}, nepozicionirana ({@code x == y == -1}).
+     *
+     * @param plovilo Plovilo kojim nit upravlja.
+     * @param luka Luka u koju plovilo ulazi.
+     */
     public BrodThread(Plovilo plovilo, Luka luka) {
         this.plovilo = plovilo;
         this.luka = luka;
@@ -73,6 +136,13 @@ public class BrodThread implements Runnable {
         this.isPrivezan = true;
     }
 
+    /**
+     * Životni ciklus niti (T10): registruje se u {@link Luka#getAktivnaPlovila()}, ulazi u luku
+     * (ili je već privezana — predokovani konstruktor), potom parkira dok se ne pozove da napusti
+     * terminal i napušta ga preko {@link #napustiTerminal()}. Uvijek se odjavljuje iz
+     * {@link Luka#getAktivnaPlovila()} u {@code finally}, bez obzira na to kako se nit završila
+     * (uspješno privezivanje, neuspjeh pri ulasku, ili prekid).
+     */
     @Override
     public void run() {
         luka.getAktivnaPlovila().add(this);
@@ -100,6 +170,17 @@ public class BrodThread implements Runnable {
         }
     }
 
+    /**
+     * Obilazi terminale luke redom (T1) tražeći slobodan dok: rezerviše dok atomarno preko
+     * {@link Terminal#rezervisiSlobodanDok(Plovilo)} (R2), pokušava fizički ući u terminal i
+     * doploviti do rezervisanog doka, a ako bilo koji od tih koraka ne uspije, otkazuje rezervaciju
+     * i nastavlja pravo ka narednom terminalu (T7/T8). Ako nijedan terminal nema slobodan i
+     * dostižan dok, plovilo napušta luku bez pristajanja.
+     *
+     * @return {@code true} ako je plovilo uspješno privezano na neki dok, {@code false} ako je
+     *         obišlo sve terminale bez uspjeha.
+     * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
+     */
     private boolean udjiULuku() throws InterruptedException {
         int idx = 0;
 
@@ -161,6 +242,13 @@ public class BrodThread implements Runnable {
         }
     }
 
+    /**
+     * Pokušava jednokratno zauzeti ulaznu ćeliju terminala ({@code [0][KOLONA_ULAZ]}). Ako je
+     * slobodna, plovilo se postavlja na nju i postaje pozicionirano u tom terminalu.
+     *
+     * @param terminal Terminal u koji plovilo pokušava ući.
+     * @return {@code true} ako je ulazna ćelija bila slobodna i plovilo je uspješno ušlo.
+     */
     public boolean pokusajUciUTerminal(Terminal terminal) {
         synchronized (terminal) {
             if (terminal.getMatrica()[0][Terminal.KOLONA_ULAZ].getTrenutnoPlovilo() == null) {
@@ -174,6 +262,14 @@ public class BrodThread implements Runnable {
         return false;
     }
 
+    /**
+     * Ponavlja {@link #pokusajUciUTerminal(Terminal)} do {@link #MAX_POKUSAJA} puta, čekajući
+     * {@link #CEKANJE_MS} između pokušaja, dok se ulazna ćelija terminala ne oslobodi.
+     *
+     * @param t Terminal u koji plovilo pokušava ući.
+     * @return {@code true} ako je ulazak uspio u okviru dozvoljenog broja pokušaja.
+     * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
+     */
     private boolean udjiUTerminal(Terminal t) throws InterruptedException {
         for (int i = 0; i < MAX_POKUSAJA; i++) {
             if (pokusajUciUTerminal(t)) {
@@ -184,10 +280,26 @@ public class BrodThread implements Runnable {
         return false;
     }
 
+    /**
+     * Evidentira trenutno vrijeme kao vrijeme ulaska plovila u luku (F1), preko
+     * {@link Luka#addToEvidencija(String, java.time.LocalDateTime)}.
+     */
     private void evidentirajUlazak() {
         luka.addToEvidencija(plovilo.getImoBroj(), LocalDateTime.now());
     }
 
+    /**
+     * Vodi plovilo od ulazne ćelije terminala do rezervisanog doka: silazi do kanala
+     * ({@link #sidjiDoKanala(long)}), plovi njime istočno do kolone doka
+     * ({@link #ploviIstocno(int, long)}), pa se pomjera na sam dok — direktno ako je dok u redu 3,
+     * ili preko privremenog prolaska kroz {@link Terminal#KANAL_IZLAZ} ako je dok u redu 0 (R0:
+     * ulazak u dok je uvijek pomjeraj za jedan red sa kanala, nikad kretanje kroz red dokova).
+     *
+     * @param cilj Rezervisani dok ka kojem plovilo plovi.
+     * @return {@code true} ako je plovilo uspješno stiglo do doka, {@code false} ako je odustalo
+     *         u nekom od koraka.
+     * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
+     */
     private boolean doploviDoDoka(Dok cilj) throws InterruptedException {
         int ciljX = cilj.getLokacija().getX();
         int ciljY = cilj.getLokacija().getY();
@@ -212,6 +324,16 @@ public class BrodThread implements Runnable {
         return pomjeriSaCekanjem(0, ciljY, korak);
     }
 
+    /**
+     * Vodi plovilo niz ulaznu kolonu ({@link Terminal#KOLONA_ULAZ}), red po red, dok ne stigne do
+     * reda {@link Terminal#KANAL_ULAZ} (istočnog traka kanala). Provjerava sudar
+     * ({@link #provjeriSudar()}) nakon svakog uspješnog koraka (D5 — placeholder, R4 ga tek
+     * treba obraditi).
+     *
+     * @param korak Trajanje jednog koraka kretanja, u milisekundama.
+     * @return {@code true} ako je plovilo uspješno stiglo do kanala.
+     * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
+     */
     private boolean sidjiDoKanala(long korak) throws InterruptedException {
         while (this.x < Terminal.KANAL_ULAZ) {
             if (!pomjeriSaCekanjem(this.x + 1, Terminal.KOLONA_ULAZ, korak)) {
@@ -223,6 +345,28 @@ public class BrodThread implements Runnable {
         return true;
     }
 
+    /**
+     * Plovi istočnim trakom kanala ({@link Terminal#KANAL_ULAZ}) do zadate kolone, primjenjujući
+     * pravila prioriteta i preticanja (M5/T4/R5) na svakom koraku:
+     * <ul>
+     *     <li>Prije pomjeranja naprijed, provjerava {@link #ustupaProlaz(Terminal, int, int, Plovilo)}
+     *     — ako plovilo pod rotacijom stoji neposredno iza, obično plovilo ovaj korak stoji u mjestu.</li>
+     *     <li>Ako pomjeraj naprijed nije moguć (blokirano), pokušava preticanje preko
+     *     {@link Terminal#KANAL_IZLAZ} čim je ispunjen prag: odmah za plovilo pod rotacijom
+     *     (prioritet ispod {@link #PRIORITET_BEZ_ROTACIJE}), ili nakon {@link #PRAG_PRETICANJA}
+     *     uzastopnih neuspjeha za obično plovilo.</li>
+     *     <li>Plovilo koje trenutno pretiče (nalazi se u {@link Terminal#KANAL_IZLAZ}) pomjera se
+     *     naprijed pa se odmah vraća u svoj trak čim to postane moguće.</li>
+     * </ul>
+     * Prioritet se čita iznova na početku svake iteracije (ne kešira se prije petlje), tako da
+     * plovilo kojem bi R4 upalilo rotaciju usred tranzita odmah dobija prioritet.
+     *
+     * @param ciljY Kolona do koje plovilo treba doploviti.
+     * @param korak Trajanje jednog koraka kretanja, u milisekundama.
+     * @return {@code true} ako je plovilo stiglo do ciljne kolone, {@code false} ako je premašen
+     *         maksimalan broj pokušaja.
+     * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
+     */
     private boolean ploviIstocno(int ciljY, long korak) throws InterruptedException {
         int neuspjesi = 0;
         int ukupnoPokusaja = 0;
@@ -274,6 +418,14 @@ public class BrodThread implements Runnable {
         return true;
     }
 
+    /**
+     * Provjerava da li je suprotni trak kanala ({@link Terminal#KANAL_IZLAZ}) slobodan i na
+     * trenutnoj i na sljedećoj koloni — preduslov za preticanje (T4: preko jednog polja lijevo,
+     * ako nema suprotnog smjera).
+     *
+     * @param sledeciY Kolona u koju bi plovilo prešlo nakon preticanja.
+     * @return {@code true} ako je preticanje bezbjedno (oba polja u suprotnom traku slobodna).
+     */
     private boolean smijePreticati(int sledeciY) {
         Terminal t = this.trenutniTerminal;
         if (t == null) {
@@ -286,6 +438,24 @@ public class BrodThread implements Runnable {
         }
     }
 
+    /**
+     * Provjerava da li plovilo na zadatoj poziciji treba ustupiti prolaz (stati u mjestu) plovilu
+     * neposredno iza sebe u istoj traci (R5): ustupa ako je ono iza prisutno i ima viši prioritet
+     * (nižu brojčanu vrijednost) od trenutnog plovila. Poređenje je uvijek {@code iza.getPrioritet()
+     * < trenutni.getPrioritet()} — bez posebnog slučaja za "plovilo pod rotacijom" — pa redoslijed
+     * vatrogasci &gt; obalska straža &gt; carina &gt; komercijalno ispada prirodno iz poređenja
+     * brojčanih vrijednosti prioriteta.
+     *
+     * <p>Paket-privatna vidljivost namjerno, da bi testovi u paketu {@code simulation} mogli
+     * pozvati metodu direktno, bez pokretanja cijele niti.</p>
+     *
+     * @param terminal Terminal u kojem se provjera vrši. Ako je {@code null}, vraća {@code false}.
+     * @param x Red trenutnog plovila u matrici terminala.
+     * @param y Kolona trenutnog plovila u matrici terminala. Ako je {@code y <= 0}, nema polja
+     *          iza, pa se vraća {@code false}.
+     * @param trenutni Plovilo za koje se provjerava da li treba ustupiti prolaz.
+     * @return {@code true} ako plovilo neposredno iza ima viši prioritet od {@code trenutni}.
+     */
     static boolean ustupaProlaz(Terminal terminal, int x, int y, Plovilo trenutni) {
         if (terminal == null || y <= 0) {
             return false;
@@ -296,6 +466,15 @@ public class BrodThread implements Runnable {
         }
     }
 
+    /**
+     * Vodi plovilo od trenutne pozicije ka izlazu iz terminala: prebacuje se u zapadni trak
+     * kanala ({@link Terminal#KANAL_IZLAZ}) ako već nije u njemu, plovi njime do izlazne kolone
+     * ({@link Terminal#KOLONA_IZLAZ}), pa se penje uz nju do reda 0 i oslobađa svoju posljednju
+     * ćeliju ({@link #oslobodiTrenutnoPolje()}). Ako terminal nije postavljen (plovilo nikad nije
+     * ušlo), metoda odmah vraća bez efekta.
+     *
+     * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
+     */
     private void napustiTerminal() throws InterruptedException {
         Terminal t = this.trenutniTerminal;
         if (t == null) {
@@ -336,6 +515,13 @@ public class BrodThread implements Runnable {
         log("Napustio terminal.");
     }
 
+    /**
+     * Oslobađa trenutnu ćeliju matrice terminala koju plovilo zauzima (postavlja je na
+     * {@code null}) i resetuje poziciju niti na "nepozicionirano" ({@code x == y == -1}).
+     * Provjerava referentnim identitetom ({@code ==}, ne {@code equals()}) da polje zaista sadrži
+     * baš ovo plovilo prije oslobađanja — dva različita plovila sa istim IMO brojem (S6) se
+     * inače ne bi smjela pomiješati u matrici terminala.
+     */
     private void oslobodiTrenutnoPolje() {
         Terminal t = this.trenutniTerminal;
         if (t == null || this.x < 0 || this.y < 0) {
@@ -352,6 +538,18 @@ public class BrodThread implements Runnable {
         this.y = -1;
     }
 
+    /**
+     * Pokušava premjestiti plovilo na ciljnu ćeliju matrice terminala, u jednoj
+     * {@code synchronized} operaciji (T5: nikad dva plovila na istom polju). Uspijeva samo ako je
+     * ciljna ćelija trenutno slobodna; u tom slučaju zauzima ciljnu ćeliju i oslobađa staru
+     * (provjerom referentnog identiteta {@code ==}, namjerno ne {@code equals()} — vidi napomenu
+     * uz {@link #oslobodiTrenutnoPolje()}) i ažurira {@link #x}/{@link #y}.
+     *
+     * @param targetX Ciljni red u matrici terminala.
+     * @param targetY Ciljna kolona u matrici terminala.
+     * @return {@code true} ako je pomjeranje uspjelo, {@code false} ako je ciljna ćelija zauzeta
+     *         ili plovilo trenutno nije pozicionirano ni u jednom terminalu.
+     */
     private boolean pomjeriNaPolje(int targetX, int targetY) {
         Terminal t = this.trenutniTerminal;
         if (t == null || this.x < 0 || this.y < 0) {
@@ -376,6 +574,18 @@ public class BrodThread implements Runnable {
         return false;
     }
 
+    /**
+     * Ponavlja {@link #pomjeriNaPolje(int, int)} do {@link #MAX_POKUSAJA} puta, čekajući
+     * {@link #CEKANJE_MS} između pokušaja, dok se ciljna ćelija ne oslobodi.
+     *
+     * @param targetX Ciljni red u matrici terminala.
+     * @param targetY Ciljna kolona u matrici terminala.
+     * @param korak Trajanje jednog koraka kretanja, u milisekundama (parametar se ovdje ne
+     *              koristi za pauzu — pauza je uvijek {@link #CEKANJE_MS} — nego zadržava
+     *              dosljedan potpis sa ostalim metodama kretanja).
+     * @return {@code true} ako je pomjeranje uspjelo u okviru dozvoljenog broja pokušaja.
+     * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
+     */
     private boolean pomjeriSaCekanjem(int targetX, int targetY, long korak) throws InterruptedException {
         for (int i = 0; i < MAX_POKUSAJA; i++) {
             if (pomjeriNaPolje(targetX, targetY)) {
@@ -386,6 +596,13 @@ public class BrodThread implements Runnable {
         return false;
     }
 
+    /**
+     * Izvodi trajanje jednog koraka kretanja iz brzine plovila (M7: jedinstvena slučajna brzina),
+     * ograničeno na interval [20ms, 400ms] (T11: simulacija ni prebrza ni prespora) — brže
+     * plovilo ima kraći korak.
+     *
+     * @return Trajanje jednog koraka kretanja, u milisekundama.
+     */
     private long trajanjeKoraka() {
         long korak = (long) (1000.0 / plovilo.getBrzina());
         return Math.max(20L, Math.min(korak, 400L));
@@ -419,18 +636,41 @@ public class BrodThread implements Runnable {
         this.generatorSudara = generatorSudara;
     }
 
+    /**
+     * Omogućava dobijanje plovila kojim ova nit upravlja.
+     *
+     * @return Plovilo koje nit vodi kroz luku.
+     */
     public Plovilo getPlovilo() {
         return plovilo;
     }
 
+    /**
+     * Provjerava da li je plovilo trenutno privezano na dok.
+     *
+     * @return {@code true} ako je plovilo privezano.
+     */
     public boolean isPrivezan() {
         return isPrivezan;
     }
 
+    /**
+     * Provjerava da li je nit trenutno signalizirana da napusti terminal (parkirana čeka na
+     * {@link #zatraziNapustanje()}, ili je poziv u toku).
+     *
+     * @return Trenutna vrijednost zastavice {@link #moraNapustiti}.
+     */
     public boolean isMoraNapustiti() {
         return moraNapustiti;
     }
 
+    /**
+     * Postavlja zastavicu napuštanja. Prosljeđivanje {@code true} deleguje na
+     * {@link #zatraziNapustanje()} (budi parkiranu nit); prosljeđivanje {@code false} vraća
+     * zastavicu nazad, čime se poništava prethodni zahtjev ako nit još nije stigla da ga obradi.
+     *
+     * @param moraNapustiti Nova vrijednost zastavice napuštanja.
+     */
     public void setMoraNapustiti(boolean moraNapustiti) {
         if(moraNapustiti) {
             zatraziNapustanje();
@@ -441,26 +681,58 @@ public class BrodThread implements Runnable {
         }
     }
 
+    /**
+     * Omogućava dobijanje trenutnog zadatka niti (D3).
+     *
+     * @return Trenutni {@link Zadatak}.
+     */
     public Zadatak getZadatak() {
         return zadatak;
     }
 
+    /**
+     * Omogućava dobijanje trenutnog reda (X koordinate) plovila u matrici terminala.
+     *
+     * @return Trenutni red, ili -1 ako plovilo nije pozicionirano ni u jednom terminalu.
+     */
     public int getX() {
         return x;
     }
 
+    /**
+     * Omogućava dobijanje trenutne kolone (Y koordinate) plovila u matrici terminala.
+     *
+     * @return Trenutna kolona, ili -1 ako plovilo nije pozicionirano ni u jednom terminalu.
+     */
     public int getY() {
         return y;
     }
 
+    /**
+     * Omogućava dobijanje terminala u kojem se plovilo trenutno nalazi.
+     *
+     * @return Trenutni terminal, ili {@code null} ako plovilo nije ni u jednom.
+     */
     public Terminal getTrenutniTerminal() {
         return trenutniTerminal;
     }
 
+    /**
+     * Ispisuje poruku o kretanju plovila na standardni izlaz, sa nazivom plovila kao prefiksom.
+     *
+     * @param poruka Poruka koja se ispisuje.
+     */
     private void log(String poruka) {
         System.out.println("[" + plovilo.getNaziv() + "] " + poruka);
     }
 
+    /**
+     * Omogućava dobijanje izvora slučajnosti za provjeru sudara — ubrizganog preko
+     * {@link #setGeneratorSudara(Random)}, ili podrazumijevanog {@link ThreadLocalRandom} ako
+     * ništa nije ubrizgano.
+     *
+     * @return Izvor slučajnosti koji {@link #provjeriSudar()} koristi.
+     */
     private Random generator() {
         Random r = this.generatorSudara;
         return r != null ? r : ThreadLocalRandom.current();

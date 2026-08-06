@@ -6,8 +6,9 @@ import java.io.Serializable;
 
 /**
  * Apstraktna klasa koja modeluje sve osnovne karakteristike i ponašanja svakog pomorskog plovila u sistemu.
- * Sadrži atribute koji su definisani kao zajednički za sva plovila poput IMO broja, naziva, broja motora, registarskih tablica, brzine itd.
- * Implementira {@link Serializable} interfejs kako bi se omogućilo dugoročno čuvanje stanja plovila kroz više sesija simulacije.
+ *
+ * <p> Sadrži atribute koji su definisani kao zajednički za sva plovila poput IMO broja, naziva, broja motora, registarske oznake, brzine itd.
+ * Implementira {@link Serializable} interfejs kako bi se omogućilo dugoročno čuvanje stanja plovila kroz više sesija pokretanja i izvršavanja simulacije.</p>
  *
  * @author Milan Šobot
  * @version 1.0
@@ -38,13 +39,15 @@ abstract public class Plovilo implements Serializable {
     private final int prioritet;
 
     /**
-     * Konstruktor kojim se ručno inicijalizuju svi osnovni atributi plovila osim brzine, koja se inicijalizuje kao slučajna brojna vrijednost sa pokretnim zarezom.
+     * Konstruktor kojim se ručno inicijalizuju svi osnovni atributi plovila osim brzine, koja se inicijalizuje kao slučajna brojna vrijednost sa pokretnim zarezom u intervalu [1,50).
      *
-     * @param naziv Naziv broda.
+     * @param naziv Naziv plovila.
      * @param imoBroj Identifikacioni broj plovila u međunarodnom saobraćaju.
      * @param brojMotora Serijski broj motora.
      * @param registarskiBroj Registarska oznaka plovila.
      * @param fotografija Referenca na objekat tipa File koji čuva apstraktnu putanju do binarne datoteke koja predstavlja fotografiju plovila.
+     * @param prioritet Prioritet plovila u saobraćaju (niža vrijednost == viši prioritet), službena plovila redefinišu getPrioritet() i ovu vrijednost ignorišu, jer njihov prioritet zavisi od toga da li je rotacija uključena ili ne.
+     *
      */
     public Plovilo(String naziv, String imoBroj, String brojMotora, String registarskiBroj, File fotografija, int prioritet) {
         this.naziv = naziv;
@@ -57,7 +60,7 @@ abstract public class Plovilo implements Serializable {
     }
 
     /**
-     * Omogućava dobijanje reference na objekat tipa String koji čuva naziv plovila.
+     * Getterska metoda za naziv plovila.
      *
      * @return Naziv plovila.
      */
@@ -75,7 +78,7 @@ abstract public class Plovilo implements Serializable {
     }
 
     /**
-     * Omogućava dobijanje reference na objekat tipa String koji predstavlja identifikator plovila u međunarodnom saobraćaju.
+     * Getterska metoda za identifikator plovila u međunarodnom saobraćaju.
      *
      * @return IMO broj plovila.
      */
@@ -88,9 +91,9 @@ abstract public class Plovilo implements Serializable {
      * <p>
      * <b>Napomena:</b> {@link #equals(Object)} i {@link #hashCode()} se računaju iz IMO broja.
      * Ako je plovilo već ubačeno u {@link java.util.HashMap}/{@link java.util.HashSet} (npr. evidenciju
-     * ulaska), promjena IMO broja ovim setterom ga "gubi" u toj kolekciji — ostaje u starom bucket-u
-     * i više se ne pronalazi po novom ključu. Plovilo prije izmjene ukloniti iz takvih kolekcija i
-     * ponovo ga dodati poslije.
+     * ulaska), promjena IMO broja ovim setterom ga "gubi" u toj kolekciji, odnosno on ostaje u starom <i>bucket</i>-u
+     * i više se ne pronalazi po novom ključu. Poželjno je plovilo prije izmjene IMO broja ukloniti iz takvih kolekcija i
+     * ponovo ga dodati nakon promjene istog.
      *
      * @param imoBroj Identifikator plovila u međunarodnom saobraćaju.
      */
@@ -99,7 +102,7 @@ abstract public class Plovilo implements Serializable {
     }
 
     /**
-     * Omogućava dobijanje reference na objekat tipa String koji sadrži serijski broj motora plovila.
+     * Getterska metoda za serijski broj motora plovila.
      *
      * @return Serijski broj motora plovila.
      */
@@ -117,7 +120,7 @@ abstract public class Plovilo implements Serializable {
     }
 
     /**
-     * Omogućava dobijanje reference na objekat tipa String koji sadrži registarsku oznaka plovila.
+     * Getterska metoda za registarsku oznaka plovila.
      *
      * @return Registarsku oznaku plovila.
      */
@@ -180,7 +183,7 @@ abstract public class Plovilo implements Serializable {
     }
 
     /**
-     * Redefinisana metoda toString() iz klase {@link java.lang.Object} koja omogućava dobijanje reference na objekat tipa String koji sadrži IMO broj i naziv vozila.
+     * Redefinisana metoda toString() koja omogućava dobijanje reference na objekat tipa String koji sadrži IMO broj i naziv vozila.
      *
      * @return Referenca na objekat tipa String koji sadrži IMO broj i naziv plovila.
      */
@@ -190,25 +193,29 @@ abstract public class Plovilo implements Serializable {
     }
 
     /**
-     * Dva plovila su jednaka ako imaju isti IMO broj — on je jedinstveni međunarodni identifikator
-     * plovila (M1) i jedini prirodan ključ identiteta. Vidi napomenu na {@link #setImoBroj(String)}
-     * o posljedicama promjene IMO broja nad plovilom koje je već u hash-baziranoj kolekciji.
+     * Dva plovila su jednaka ako imaju isti IMO broj, jer on je jedinstveni međunarodni identifikator
+     * plovila (M1) i jedini prirodan ključ identiteta plovila (u suštini, primarni ključ).
      *
-     * @param o Objekat sa kojim se poredi.
-     * @return true ako su oba plovila i imaju isti, ne-null IMO broj.
+     * @param o Objekat sa kojim se tekući objekat poredi.
+     * @return true ako su oba objekta koja se porede tipovi plovila i imaju isti, ne-{@code null} IMO broj.
      */
     @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof Plovilo)) {
+        if (!(o instanceof Plovilo drugi)) {
             return false;
         }
-        Plovilo drugi = (Plovilo) o;
         return imoBroj != null && imoBroj.equals(drugi.imoBroj);
     }
 
+    /**
+     *
+     * Pošto je IMO broj jedina zagarantovana jedinstvena vrijednost između svih plovila u sistemu, redefinicija metode hashCode() zavisi isključivo od IMO broja plovila, kao i redefinisana equals() metoda.
+     *
+     * @return Hash plovila
+     */
     @Override
     public int hashCode() {
         return imoBroj == null ? 0 : imoBroj.hashCode();

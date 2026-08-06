@@ -5,15 +5,61 @@ import java.util.ArrayList;
 import java.util.List;
 import org.unibl.etf.pj2.luka.model.classes.Polje;
 
+/**
+ * Jedan terminal luke: matrica polja dimenzija 4×17 (T2) sa 30 vezova (dokova) i dvotračnim
+ * plovnim kanalom kroz sredinu.
+ *
+ * <p><b>Raspored matrice</b> (red, kolona), po uzoru na šematski prikaz iz specifikacije:</p>
+ * <ul>
+ *     <li>Kolone 0 i 1 su ulazna/izlazna kolona (oznake {@code v}/{@code ^}) kroz koju plovilo
+ *     silazi sa/izlazi na gornju granicu terminala prema kanalu.</li>
+ *     <li>Red 0 i red 3 su redovi dokova (30 vezova, po 15 sa svake strane) — {@link Dok}.</li>
+ *     <li>Red {@link #KANAL_ULAZ} (2) je istočni (dolazni) trak kanala, red {@link #KANAL_IZLAZ}
+ *     (1) je zapadni (odlazni/trak za preticanje) trak kanala — plovidba desnom stranom kanala
+ *     (T3). Ulazak u dok je pomjeraj za jedan red gore/dolje sa kanala, nikad kretanje kroz
+ *     redove dokova (R0 — ranija verzija je greškom vodila plovila kroz red 3).</li>
+ * </ul>
+ *
+ * <p><b>Rezervacija doka (R2, K5):</b> {@link #rezervisiSlobodanDok(Plovilo)} pronalazi i
+ * zauzima slobodan dok u jednoj atomarnoj {@code synchronized} operaciji, umjesto da to budu dva
+ * odvojena koraka — time se sprečava trka u kojoj dva broda "pronađu" isti slobodan dok prije
+ * nego što ijedan stigne da ga zauzme.</p>
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ * @see Dok
+ * @see Polje
+ */
 public class Terminal implements Serializable {
     private static final long serialVersionUID;
+
+    /** Matrica polja terminala, dimenzija 4×17 (T2). */
     private final Polje[][] matrica;
+
+    /** Svi vezovi (dokovi) terminala, 30 ukupno — po 15 u redu 0 i redu 3. */
     private final List<Dok> dokovi;
+
+    /** Redni broj terminala unutar luke. */
     private final int idTerminala;
+
+    /** Red matrice koji predstavlja istočni (dolazni) trak plovnog kanala (T3). */
     public static final int KANAL_ULAZ = 2;
+
+    /** Red matrice koji predstavlja zapadni (odlazni, i trak za preticanje) trak plovnog kanala (T3, T4). */
     public static final int KANAL_IZLAZ = 1;
+
+    /** Kolona kroz koju plovilo ulazi u terminal sa gornje/lijeve strane. */
     public static final int KOLONA_ULAZ = 0;
+
+    /** Kolona kroz koju plovilo napušta terminal ka izlazu/narednom terminalu. */
     public static final int KOLONA_IZLAZ = 1;
+
+    /**
+     * Redni brojevi vezova koji su trenutno rezervisani (dodijeljeni plovilu koje je još u
+     * kanalu na putu ka doku, prije nego što ga fizički zauzme). Odvojeno od {@link Dok#isSlobodan()}
+     * jer se fizičko zauzimanje ćelije matrice dešava tek kad plovilo stvarno stigne do veza —
+     * rezervacija sprečava da drugo plovilo u međuvremenu krene ka istom, još praznom, vezu (R2/K5).
+     */
     private transient java.util.Set<Integer> rezervisaniVezovi;
 
     static{
@@ -25,24 +71,51 @@ public class Terminal implements Serializable {
         this.dokovi = new ArrayList<>();
     }
 
+    /**
+     * Kreira terminal sa zadatim identifikatorom i inicijalizuje njegovu matricu (kanal, dokovi,
+     * ulazna/izlazna kolona).
+     *
+     * @param idTerminala Redni broj terminala unutar luke.
+     */
     public Terminal(int idTerminala) {
         this.idTerminala = idTerminala;
         initializeMatrix();
     }
 
+    /**
+     * Omogućava dobijanje matrice polja terminala.
+     *
+     * @return Matrica polja dimenzija 4×17.
+     */
     public Polje[][] getMatrica() {
         return matrica;
     }
 
+    /**
+     * Omogućava dobijanje liste svih vezova (dokova) terminala.
+     *
+     * @return Lista vezova terminala.
+     */
     public List<Dok> getDokovi() {
         return dokovi;
     }
 
+    /**
+     * Omogućava dobijanje rednog broja terminala unutar luke.
+     *
+     * @return Identifikator terminala.
+     */
     public int getIdTerminala() {
         return idTerminala;
     }
 
 
+    /**
+     * Broji vezove koji trenutno nemaju privezano plovilo (T6). Ne uzima u obzir rezervacije u
+     * toku — za tu svrhu koristiti {@link #getBrojRaspolozivihVezova()}.
+     *
+     * @return Broj fizički slobodnih vezova terminala.
+     */
     public int getBrojSlobodnihVezova() {
         int counter = 0;
         for(Dok d: dokovi) {
@@ -53,6 +126,14 @@ public class Terminal implements Serializable {
         return counter;
     }
 
+    /**
+     * Broji vezove koji su i fizički slobodni i trenutno nisu rezervisani od strane nekog drugog
+     * plovila u tranzitu ka njima. Ovo je vrijednost koju treba koristiti prilikom odlučivanja
+     * da li terminal ima mjesta za novo plovilo (T7/T8), jer {@link #getBrojSlobodnihVezova()}
+     * ne vidi rezervacije u toku.
+     *
+     * @return Broj stvarno raspoloživih (slobodnih i nerezervisanih) vezova terminala.
+     */
     public synchronized int getBrojRaspolozivihVezova() {
         int counter = 0;
         for (Dok d : dokovi) {
@@ -71,6 +152,16 @@ public class Terminal implements Serializable {
         return rezervisaniVezovi;
     }
 
+    /**
+     * Pronalazi slobodan, nerezervisan vez i odmah ga rezerviše za dato plovilo — u jednoj
+     * atomarnoj {@code synchronized} operaciji (R2), čime se sprečava trka opisana u K5: bez
+     * atomarnosti, dva plovila koja istovremeno traže slobodan dok mogu oba "pronaći" isti dok
+     * prije nego što ijedno stigne da ga zauzme.
+     *
+     * @param p Plovilo za koje se traži i rezerviše vez.
+     * @return Rezervisani {@link Dok}, ili {@code null} ako nema slobodnog nerezervisanog veza
+     *         (ili je {@code p} {@code null}).
+     */
     public synchronized Dok rezervisiSlobodanDok(Plovilo p) {
         if (p == null) {
             return null;
@@ -84,12 +175,22 @@ public class Terminal implements Serializable {
         return null;
     }
 
+    /**
+     * Otkazuje prethodno napravljenu rezervaciju veza (npr. ako plovilo ne uspije stići do njega
+     * u razumnom broju pokušaja), oslobađajući ga za druga plovila.
+     *
+     * @param d Vez čija se rezervacija otkazuje. Ignoriše se ako je {@code null}.
+     */
     public synchronized void otkaziRezervaciju(Dok d) {
         if (d != null) {
             rezervisani().remove(d.getOznakaVezova());
         }
     }
 
+    /**
+     * Popunjava matricu terminala: ulazna/izlazna kolona (0/1), dokovi u redovima 0 i 3 (30
+     * ukupno), i strelice plovnog kanala u redovima {@link #KANAL_IZLAZ}/{@link #KANAL_ULAZ}.
+     */
     private void initializeMatrix() {
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 17; j++) {

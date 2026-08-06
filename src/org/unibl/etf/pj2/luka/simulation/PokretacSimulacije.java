@@ -19,14 +19,13 @@ import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Priprema i pokreće početno stanje simulacije korisničke aplikacije (C1/C3/C4), oslanjajući
- * se na broj terminala pročitan iz {@code luka.properties} (T1).
+ * Priprema i pokreće početno stanje simulacije, oslanjajući se na broj terminala pročitan iz {@code luka.properties}.
  *
  * <p>Redoslijed pripreme, kako ga propisuje specifikacija: prvo se zatečena flota iz
- * {@code luka.ser} (ako postoji) postavlja na slučajne dokove nove strukture terminala (C3),
- * a zatim se svaki terminal dopunjava slučajno generisanim plovilima do minimuma koji korisnik
- * zadaje (C1/C4). Rezultat je {@link Luka} sa plovilima već fizički postavljenim u matricu —
- * niti za njih pokreće {@link #pokreniPrivezanaPlovila(Luka)}.
+ * {@code luka.ser} (ako postoji) postavlja na slučajne dokove nove strukture terminala,
+ * a zatim se svaki terminal dopunjava slučajno generisanim plovilima do minimuma koji korisnik ručno zadaje.
+ * Rezultat je {@link Luka} sa plovilima već fizički postavljenim u matricu,
+ * a njihove niti za njih pokreće {@link #pokreniPrivezanaPlovila(Luka)}.
  *
  * @author Milan Šobot
  * @version 1.0
@@ -34,16 +33,15 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class PokretacSimulacije {
 
     /**
-     * Interval jednog koraka kretanja simulacije, u milisekundama. Imenovana konstanta umjesto
-     * inline literala jer demonstracija ide na znatno slabijoj mašini i vrijednost će vjerovatno
-     * trebati podesiti.
+     * Interval jednog koraka kretanja simulacije, u milisekundama.
+     * Imenovana konstanta kako bi se vrijednost mogla podesiti u zavisnosti od okruženja u kom se izvršava simulacija.
      */
     public static final long INTERVAL_TIKA_MS = 100L;
 
     /**
-     * Interval osvježavanja GUI prikaza terminala ({@code PrikazTerminala}), u milisekundama.
-     * Namjerno rjeđi od {@link #INTERVAL_TIKA_MS} — render ne mora pratiti svaki mikro-pomjeraj
-     * da bi simulacija djelovala glatko, a rjeđe osvježavanje manje opterećuje slabiju mašinu.
+     * Interval osvježavanja GUI-ja, izražen u milisekundama.
+     * Namjerno veći od {@link #INTERVAL_TIKA_MS}, jer GUI ne mora nužno pratiti svaki pomjeraj
+     * da bi simulacija djelovala glatko, a i rjeđe osvježavanje manje opterećuje slabiju mašinu.
      */
     public static final long INTERVAL_RENDEROVANJA_MS = 500L;
 
@@ -51,11 +49,11 @@ public final class PokretacSimulacije {
     }
 
     /**
-     * Puna priprema za stvarno pokretanje aplikacije: broj terminala se čita iz
-     * {@code luka.properties} (T1), a prethodno stanje (ako postoji) iz {@code luka.ser}.
+     * Puna priprema za pokretanje aplikacije: broj terminala se čita iz
+     * {@code luka.properties}, a prethodno stanje iz {@code luka.ser} (ako postoji).
      *
-     * @param minimumPoTerminalu Minimalan broj plovila po terminalu koji zadaje korisnik (C1).
-     * @return Nova {@link Luka}, spremna za {@link #pokreniPrivezanaPlovila(Luka)}.
+     * @param minimumPoTerminalu Minimalan broj plovila po terminalu koji zadaje korisnik.
+     * @return Nova instanca objekta klase {@link Luka}.
      */
     public static Luka pripremiPocetnoStanje(int minimumPoTerminalu) {
         int brojTerminala = PropertiesUtil.getBrojTerminala();
@@ -64,13 +62,13 @@ public final class PokretacSimulacije {
     }
 
     /**
-     * Čista varijanta pripreme, bez čitanja fajlova — testabilna bez dodirivanja diska.
+     * Čista varijanta pripreme, bez čitanja fajlova.
      *
-     * @param postojeca Prethodno stanje luke (npr. rezultat {@code SerializationUtil.ucitajStanjeLuke()}),
-     *                  ili {@code null} ako je ovo prvo pokretanje.
-     * @param brojTerminala Broj terminala koje treba izgraditi za novu sesiju (T1).
-     * @param minimumPoTerminalu Minimalan broj plovila po terminalu koji zadaje korisnik (C1). Ne smije biti negativan.
-     * @param rnd Izvor slučajnosti — omogućava ponovljive testove.
+     * @param postojeca Prethodno stanje luke (npr. rezultat {@code SerializationUtil.ucitajStanjeLuke()}), ili {@code null} ako je ovo prvo pokretanje.
+     * @param brojTerminala Broj terminala koje treba stvoriti za novu sesiju izvršavanja. Mora biti bar 1.
+     * @param minimumPoTerminalu Minimalan broj plovila po terminalu koji zadaje korisnik. Ne smije biti negativan.
+     * @param rnd Izvor slučajnosti, omogućava ponovljivost testova.
+     *
      * @return Nova {@link Luka} sa zatečenom i dopunskom flotom već postavljenom na dokove.
      */
     public static Luka pripremiPocetnoStanje(Luka postojeca, int brojTerminala, int minimumPoTerminalu, Random rnd) {
@@ -132,6 +130,13 @@ public final class PokretacSimulacije {
         return pokrenute;
     }
 
+    /**
+     * Skuplja sva plovila trenutno privezana na dokove luke (C3), obilazeći matrice svih
+     * terminala.
+     *
+     * @param luka Luka čija se privezana plovila skupljaju.
+     * @return Lista zatečenih plovila.
+     */
     private static List<Plovilo> izvuciDokovanaPlovila(Luka luka) {
         List<Plovilo> plovila = new ArrayList<>();
         for (Terminal t : luka.getTerminali()) {
@@ -145,21 +150,43 @@ public final class PokretacSimulacije {
         return plovila;
     }
 
-    //WARNING: SETUP-ONLY METODA, NE POZIVATI DOK TRAJE SIMULACIJE I POSTOJE AKTIVNE KORISNICKE NITI ! ! !
+    /**
+     * Raspoređuje zatečenu flotu (C3) na slučajne slobodne dokove nove strukture terminala,
+     * direktno postavljajući plovilo u ćeliju matrice (ne preko {@link Terminal#rezervisiSlobodanDok}).
+     * Ako nova struktura nema dovoljno kapaciteta, višak plovila se tiho izostavlja (uz upozorenje
+     * u logu) i briše iz evidencije ulaska — nema specifikacije šta drugo raditi u tom rubnom slučaju.
+     *
+     * <p>WARNING: SETUP-ONLY METODA, NE POZIVATI DOK TRAJE SIMULACIJE I POSTOJE AKTIVNE KORISNICKE NITI!</p>
+     *
+     * @param luka Luka čija se nova struktura terminala popunjava.
+     * @param flota Zatečena plovila koja treba rasporediti.
+     * @param rnd Izvor slučajnosti.
+     */
     private static void rasporediNaSlucajneDokove(Luka luka, List<Plovilo> flota, Random rnd) {
         for (Plovilo p : flota) {
             Dok dok = slucajanSlobodanDok(luka, rnd);
             if (dok == null) {
                 LoggerUtil.logWarning("Zatečeno plovilo " + p.getImoBroj()
                         + " nije moglo biti smješteno — nema slobodnih vezova u novoj strukturi luke.");
-                flota.remove(p);
+                luka.getEvidencijaUlaska().remove(p.getImoBroj());
                 continue;
             }
             dok.getLokacija().setTrenutnoPlovilo(p);
         }
     }
 
-    //WARNING: SETUP-ONLY METODA, NE POZIVATI DOK TRAJE SIMULACIJE I POSTOJE AKTIVNE KORISNICKE NITI ! ! !
+    /**
+     * Dopunjava svaki terminal slučajno generisanim plovilima ({@link GeneratorPlovila#generisiSlucajno(Random)})
+     * dok broj dokovanih plovila ne dostigne {@code minimumPoTerminalu} (C1/C4). Zatečena flota
+     * se računa u minimum, ne dodaje preko njega. Ako terminal nema dovoljno vezova da dostigne
+     * minimum, prekida se uz upozorenje u logu.
+     *
+     * <p>WARNING: SETUP-ONLY METODA, NE POZIVATI DOK TRAJE SIMULACIJE I POSTOJE AKTIVNE KORISNICKE NITI!</p>
+     *
+     * @param luka Luka čiji se terminali dopunjuju.
+     * @param minimumPoTerminalu Minimalan broj plovila po terminalu.
+     * @param rnd Izvor slučajnosti.
+     */
     private static void dopuniDoMinimuma(Luka luka, int minimumPoTerminalu, Random rnd) {
         for (Terminal t : luka.getTerminali()) {
             int trenutno = brojDokovanihPlovila(t);
@@ -177,6 +204,12 @@ public final class PokretacSimulacije {
         }
     }
 
+    /**
+     * Broji plovila trenutno dokovana na zadatom terminalu.
+     *
+     * @param t Terminal koji se broji.
+     * @return Broj zauzetih vezova terminala.
+     */
     private static int brojDokovanihPlovila(Terminal t) {
         int brojac = 0;
         for (Dok d : t.getDokovi()) {
@@ -187,6 +220,14 @@ public final class PokretacSimulacije {
         return brojac;
     }
 
+    /**
+     * Bira slučajan slobodan dok bilo gdje u luci — prvo miješa redoslijed terminala, pa unutar
+     * prvog terminala koji ima slobodan vez bira slučajan dok među njima.
+     *
+     * @param luka Luka u kojoj se traži slobodan dok.
+     * @param rnd Izvor slučajnosti.
+     * @return Slučajan slobodan dok, ili {@code null} ako nijedan terminal nema slobodan vez.
+     */
     private static Dok slucajanSlobodanDok(Luka luka, Random rnd) {
         List<Terminal> terminali = new ArrayList<>(luka.getTerminali());
         Collections.shuffle(terminali, rnd);
@@ -199,6 +240,13 @@ public final class PokretacSimulacije {
         return null;
     }
 
+    /**
+     * Bira slučajan slobodan dok unutar jednog terminala.
+     *
+     * @param t Terminal u kojem se traži slobodan dok.
+     * @param rnd Izvor slučajnosti.
+     * @return Slučajan slobodan dok, ili {@code null} ako terminal nema slobodnih vezova.
+     */
     private static Dok slucajanSlobodanDok(Terminal t, Random rnd) {
         List<Dok> slobodni = new ArrayList<>();
         for (Dok d : t.getDokovi()) {

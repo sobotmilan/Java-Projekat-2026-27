@@ -13,13 +13,34 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Locale;
 
+/**
+ * Klasa koja vrši obračun i evidentiranje taksi pri izlasku plovila iz luke.
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ */
 public class PokretacIzvjestaja {
+    /** Putanja do CSV datoteke u koju se evidentiraju obračunate takse, relativno na radni direktorijum. */
     private static final String DEFAULT_PATH;
 
     static{
         DEFAULT_PATH = "takse.csv";
     }
 
+    /**
+     * Obračunava taksu za dato plovilo prema proteklom vremenu boravka prema sljedećem principu:
+     * -do 12h po principu "plafona" od 100 KM po započetom satu (najviše 1000 KM),
+     * -do 24h analogno (najviše 2000 KM)
+     * -preko 24h 2000 KM plus 100 KM po svakom narednom započetom satu
+     * Vrijeme se zaokružuje naviše ({@link Math#ceil}) na cijele sate, tj. započeti sat se naplaćuje kao pun (35 min == 1h cjenovno, 1h 1 min == 2h cjenovno).
+     * Državna plovila (obalska straža, carina, vatrogasci) ne plaćaju taksu.
+     *
+     * @param plovilo Plovilo za koje se obračunava taksa.
+     * @param vrijemeUlaska Vrijeme ulaska plovila u luku.
+     * @param vrijemeIzlaska Vrijeme izlaska plovila iz luke.
+     *
+     * @return Iznos takse u KM ({@code 0.0} za državna plovila).
+     */
     public static double izracunajTaksuZaPlovilo(Plovilo plovilo, LocalDateTime vrijemeUlaska, LocalDateTime vrijemeIzlaska) {
         if(plovilo instanceof ObalskaStraza || plovilo instanceof Carina || plovilo instanceof Vatrogasci) {
             return 0.0;
@@ -47,6 +68,18 @@ public class PokretacIzvjestaja {
         }
     }
 
+    /**
+     * Upisuje jedan red u CSV izvještaj taksi, dodajući ga na kraj {@code DEFAULT_PATH}
+     * i pišući zaglavlje samo ako fajl još ne postoji ili je prazan. Polja poput IMO broj, naziv i tip
+     * plovila se navode preko {@link #escapeCsv(String)}, a iznos se formatira
+     * sa {@link Locale#US} da decimalna tačka ne bi postala zarez na lokalizovanim mašinama.
+     * Ova metoda je {@code synchronized} jer više niti brodova može istovremeno napuštati luku.
+     *
+     * @param plovilo Plovilo za koje se evidentira taksa.
+     * @param vrijemeUlaska Vrijeme ulaska plovila u luku.
+     * @param vrijemeIzlaska Vrijeme izlaska plovila iz luke.
+     * @param iznos Obračunati iznos takse.
+     */
     public static synchronized void evidentirajUCSV(Plovilo plovilo, LocalDateTime vrijemeUlaska, LocalDateTime vrijemeIzlaska, double iznos) {
         File file = new File(DEFAULT_PATH);
         boolean exists = (file.exists()) && (file.length() > 0);
@@ -64,16 +97,16 @@ public class PokretacIzvjestaja {
                     vrijemeIzlaska.toString(),
                     iznos);
         } catch(IOException ioe) {
-            LoggerUtil.logError("Greska prilikom evidentiranja takse u CSV-u!", ioe);
+            LoggerUtil.logError("Greska prilikom evidentiranja takse u CSV, ", ioe);
         }
     }
 
     /**
-     * Priprema jednu vrijednost za upis u CSV prema RFC 4180: polje se navodi pod navodnicima
+     * Priprema jednu vrijednost za upis u CSV: polje se navodi pod navodnicima
      * ako sadrži zarez, navodnik ili novi red, a unutrašnji navodnici se udvajaju.
      *
-     * @param vrijednost Sirova vrijednost polja.
-     * @return Vrijednost bezbjedna za upis kao jedna CSV kolona.
+     * @param vrijednost Vrijednost polja.
+     * @return Vrijednost bezbjedna za upis u CSV kao jedna kolona.
      */
     private static String escapeCsv(String vrijednost) {
         if (vrijednost == null) {
