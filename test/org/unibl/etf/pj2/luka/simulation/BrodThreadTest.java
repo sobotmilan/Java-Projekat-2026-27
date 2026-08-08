@@ -738,6 +738,40 @@ class BrodThreadTest {
                 "Nakon odblokade obično plovilo ponovo smije da se kreće.");
     }
 
+    @Test
+    @DisplayName("R4a: blokada saobraćaja ne troši budžet pokušaja u pomjeriSaCekanjem() — "
+            + "plovilo ne odustaje samo zato što je uviđaj potrajao maksimalno dugo")
+    void pomjeriSaCekanjemNeOdustajeZbogBlokadeIakoTrajeDuzeOdBudzetaPokusaja() throws Exception {
+        // MAX_POKUSAJA (100) * CEKANJE_MS (100ms) = 10000ms, tačno MAX_TRAJANJE_UVIDJAJA_MS
+        // (podrazumijevano). Prije ove ispravke, plovilo koje bi čekalo baš na posljednjem koraku
+        // ulaska u dok tokom najdužeg mogućeg uviđaja bi otkazalo rezervaciju veza samo zbog
+        // podudarnosti dva vremenska budžeta, iako ciljna ćelija nikad nije bila stvarno zauzeta.
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        Dok dok = TestFactory.prviSlobodanDok(t);
+        Plovilo p = TestFactory.kontejnerski("BLOK-5");
+        dok.getLokacija().setTrenutnoPlovilo(p);
+
+        BrodThread bt = new BrodThread(p, luka, t, dok);
+        t.blokirajSaobracaj();
+
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<Boolean> future = exec.submit(() -> bt.pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, 5, 50L));
+        try {
+            Thread.sleep(10_500);
+            assertFalse(future.isDone(),
+                    "Plovilo je odustalo (potrošilo budžet pokušaja) dok je terminal i dalje "
+                            + "blokiran — blokada ne smije trošiti budžet pokušaja (I3).");
+
+            t.odblokirajSaobracaj();
+            assertTrue(future.get(5, TimeUnit.SECONDS),
+                    "Nakon odblokade plovilo mora uspješno završiti pomjeranje ka ciljnoj ćeliji.");
+        } finally {
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
     // ------------------------------------------------------------------
     // D5 — determinizam sudara: injektovan Random + mutabilna vjerovatnoća/trajanje uviđaja
     // ------------------------------------------------------------------

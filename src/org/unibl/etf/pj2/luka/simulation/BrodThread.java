@@ -594,6 +594,18 @@ public class BrodThread implements Runnable {
      * Ponavlja {@link #pomjeriNaPolje(int, int)} do {@link #MAX_POKUSAJA} puta, čekajući
      * {@link #CEKANJE_MS} između pokušaja, dok se ciljna ćelija ne oslobodi.
      *
+     * <p><b>Blokada saobraćaja ne troši budžet pokušaja (R4a):</b> {@link #MAX_POKUSAJA} ×
+     * {@link #CEKANJE_MS} = 10000ms, što je tačno {@link #MAX_TRAJANJE_UVIDJAJA_MS} (podrazumijevana
+     * vrijednost). Da neuspjeh izazvan {@link Terminal#smijeProci(Plovilo)} broji isto kao neuspjeh
+     * izazvan zauzetom ćelijom, plovilo koje čeka baš na posljednjem koraku ulaska u dok bi moglo
+     * iscrpiti čitav budžet pokušaja samo zato što je uviđaj potrajao maksimalno dugo — otkazati
+     * rezervaciju veza koji je legitimno dobilo i produžiti dalje ka narednom terminalu, iako ničim
+     * nije "zaslužilo" taj neuspjeh (nije postojala trajno zauzeta ćelija, samo privremena blokada).
+     * Zato se pokušaj koji propadne zbog blokade ne broji — nit i dalje čeka i ponovo pokušava svaki
+     * {@link #CEKANJE_MS}, ali {@code i} se ne inkrementira dok terminal ostaje blokiran za ovo
+     * plovilo. Ovo odgovara namjeri specifikacije: plovilo je zaustavljeno, ne neuspješno u traženju
+     * rute (I3).</p>
+     *
      * @param targetX Ciljni red u matrici terminala.
      * @param targetY Ciljna kolona u matrici terminala.
      * @param korak Trajanje jednog koraka kretanja, u milisekundama (parametar se ovdje ne
@@ -602,14 +614,33 @@ public class BrodThread implements Runnable {
      * @return {@code true} ako je pomjeranje uspjelo u okviru dozvoljenog broja pokušaja.
      * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
      */
-    private boolean pomjeriSaCekanjem(int targetX, int targetY, long korak) throws InterruptedException {
-        for (int i = 0; i < MAX_POKUSAJA; i++) {
+    boolean pomjeriSaCekanjem(int targetX, int targetY, long korak) throws InterruptedException {
+        int i = 0;
+        while (i < MAX_POKUSAJA) {
             if (pomjeriNaPolje(targetX, targetY)) {
                 return true;
+            }
+            if (!cekaZbogBlokade()) {
+                i++;
             }
             Thread.sleep(CEKANJE_MS);
         }
         return false;
+    }
+
+    /**
+     * Provjerava da li bi posljednji neuspjeh {@link #pomjeriNaPolje(int, int)} mogao biti
+     * posljedica blokade saobraćaja na terminalu (I3), a ne trajno zauzete ciljne ćelije — koristi
+     * {@link #pomjeriSaCekanjem} da takve neuspjehe izuzme iz budžeta pokušaja (vidi napomenu uz tu
+     * metodu). Terminal koji nije postavljen (plovilo nikad nije ušlo) se tretira kao "nije blokada"
+     * — taj slučaj već rezultuje trajnim neuspjehom preko {@link #pomjeriNaPolje(int, int)}, pa ne
+     * smije zaobići budžet pokušaja (inače bi nit čekala unedogled bez ikakvog terminala).
+     *
+     * @return {@code true} ako je terminal postavljen i trenutno blokira ovo plovilo.
+     */
+    private boolean cekaZbogBlokade() {
+        Terminal t = this.trenutniTerminal;
+        return t != null && !t.smijeProci(this.plovilo);
     }
 
     /**

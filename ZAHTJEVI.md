@@ -2,7 +2,7 @@
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
 Stanje: 8. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`).
-Test paket: 165 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4b), 0 ignorisano (F2 riješen).
+Test paket: 166 ukupno, 1 pad (`sudarUkljucujeDvaPlovila`, čeka R4b), 0 ignorisano (F2 riješen).
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -362,10 +362,30 @@ ulaska) se preskače bez pada. Test-only pomoćna metoda konstruiše `BrodThread
 predokovanog konstruktora sa fiktivnim `Dok`-om (proizvoljne koordinate, van stvarne liste vezova
 terminala) i ručno ga registruje u `Luka.getAktivnaPlovila()` — bez pokretanja stvarne niti.
 
-### Test paket: 141 → 165 (24 nova, 0 novih padova)
+**Bug uhvaćen prije commit-a (code review):** `pomjeriSaCekanjem()` (koristi je `doploviDoDoka`,
+`sidjiDoKanala`, `napustiTerminal`) broji neuspjehe do `MAX_POKUSAJA` (100) × `CEKANJE_MS` (100ms)
+= tačno 10000ms — identično podrazumijevanoj `MAX_TRAJANJE_UVIDJAJA_MS`. Prvobitna implementacija
+blokade brojala je pokušaj blokiran od strane `Terminal.smijeProci()` isto kao pokušaj blokiran
+zauzetom ćelijom: plovilo koje bi čekalo baš na posljednjem koraku ulaska u dok tokom najdužeg
+mogućeg uviđaja bi otkazalo legitimno dobijenu rezervaciju veza (`otkaziRezervaciju`) i produžilo ka
+narednom terminalu — samo zbog podudarnosti dva vremenska budžeta, ne zato što je ciljna ćelija
+ikad bila stvarno trajno zauzeta. Netačan ishod zavisi od tajminga (da li je plovilo baš na
+posljednjem koraku kad blokada počne), pa je najgora vrsta baga za reprodukciju — otkriven kroz
+analizu koda, ne kroz pad testa. Ispravljeno: `pomjeriSaCekanjem()` ne inkrementira brojač pokušaja
+dok je neuspjeh izazvan blokadom (nova `cekaZbogBlokade()`), samo dok je izazvan zauzetom ćelijom —
+plovilo nastavlja da čeka i pokušava svaki `CEKANJE_MS`, koliko god blokada trajala, umjesto da
+otkaže rezervaciju. Terminal koji nije postavljen se i dalje tretira kao normalan neuspjeh (brojač
+se inkrementira), da nit ne bi čekala unedogled bez ijednog terminala. `pomjeriSaCekanjem()`
+promijenjena u paket-privatnu vidljivost radi direktnog testa. Regresioni test
+(`pomjeriSaCekanjemNeOdustajeZbogBlokadeIakoTrajeDuzeOdBudzetaPokusaja`) blokira terminal, čeka
+10.5s (duže od starog budžeta) i provjerava da plovilo još nije odustalo, pa odblokira i provjerava
+uspješan završetak — namjerno spor test (~11s) jer je to tačno prozor u kojem se bag ranije
+manifestovao.
 
-Puni paket ponovljen nakon svake od tri izmjene, isti jedan očekivani pad
-(`sudarUkljucujeDvaPlovila`, i dalje čeka R4b) na 165/165 ostalih.
+### Test paket: 141 → 166 (25 novih, 0 novih padova)
+
+Puni paket ponovljen nakon svake izmjene, isti jedan očekivani pad (`sudarUkljucujeDvaPlovila`, i
+dalje čeka R4b) na 166/166 ostalih.
 
 ### Šta ostaje za R4b (namjerno van obima R4a)
 
