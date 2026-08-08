@@ -229,4 +229,53 @@ class TerminalTest {
         assertEquals(30, t.getBrojRaspolozivihVezova());
     }
 
+    // ------------------------------------------------------------------
+    // BUCKET C — blokada saobraćaja (I3/I4, priprema za R4)
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Novi terminal nije blokiran, i sva plovila smiju proći")
+    void noviTerminalNijeBlokiran() {
+        assertFalse(t.isSaobracajBlokiran());
+        assertTrue(t.smijeProci(TestFactory.kontejnerski("1")));
+        assertTrue(t.smijeProci(TestFactory.tankerVatrogasci("2")));
+    }
+
+    @Test
+    @DisplayName("blokirajSaobracaj() postavlja zastavicu i zaustavlja obično plovilo")
+    void blokirajSaobracajZaustavljaObicnoPlovilo() {
+        t.blokirajSaobracaj();
+
+        assertTrue(t.isSaobracajBlokiran());
+        assertFalse(t.smijeProci(TestFactory.kontejnerski("1")),
+                "Obično plovilo ne smije proći dok je terminal blokiran.");
+    }
+
+    @Test
+    @DisplayName("Blokada propušta samo službeno plovilo pod aktivnom rotacijom")
+    void blokadaPropustaSamoPloviloPodRotacijom() {
+        t.blokirajSaobracaj();
+
+        TankerVatrogasci podRotacijom = TestFactory.tankerVatrogasci("HITNO-1");
+        podRotacijom.setRotacija(true);
+        TankerVatrogasci bezRotacije = TestFactory.tankerVatrogasci("HITNO-2");
+
+        assertTrue(t.smijeProci(podRotacijom),
+                "Službeno plovilo pod aktivnom rotacijom mora proći i kroz blokiran terminal.");
+        assertFalse(t.smijeProci(bezRotacije),
+                "Službeno plovilo bez uključene rotacije se ne razlikuje od običnog — ne smije proći.");
+    }
+
+    @Test
+    @DisplayName("odblokirajSaobracaj() vraća terminal u normalno stanje")
+    void odblokirajSaobracajVracaNormalnoStanje() {
+        t.blokirajSaobracaj();
+        assertTrue(t.isSaobracajBlokiran());
+
+        t.odblokirajSaobracaj();
+
+        assertFalse(t.isSaobracajBlokiran());
+        assertTrue(t.smijeProci(TestFactory.kontejnerski("1")));
+    }
+
 }

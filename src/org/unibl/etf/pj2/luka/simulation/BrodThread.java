@@ -545,14 +545,30 @@ public class BrodThread implements Runnable {
      * (provjerom referentnog identiteta {@code ==}, namjerno ne {@code equals()} — vidi napomenu
      * uz {@link #oslobodiTrenutnoPolje()}) i ažurira {@link #x}/{@link #y}.
      *
+     * <p><b>Blokada saobraćaja (I3/I4):</b> ovo je jedina fizička primitiva kretanja kroz koju
+     * prolaze sve metode kretanja ({@link #sidjiDoKanala}, {@link #ploviIstocno},
+     * {@link #napustiTerminal}, {@link #doploviDoDoka}), pa je ovo mjesto na kojem se provjerava
+     * {@link Terminal#smijeProci(Plovilo)} — ako je terminal pod blokadom, pomjeranje ne uspijeva
+     * osim za plovilo pod aktivnom rotacijom. Provjera je čitanje jedne {@code volatile} zastavice,
+     * van {@code synchronized(t)} bloka i bez čekanja — ne krši D4 (nikad {@code wait()}/
+     * {@code sleep()} dok je {@code synchronized(terminal)} držan).</p>
+     *
+     * <p>Paket-privatna vidljivost namjerno (isti obrazac kao {@link #ustupaProlaz} i
+     * {@link #provjeriSudar}) — testovi u paketu {@code simulation} provjeravaju efekat blokade
+     * direktno, bez pokretanja cijele niti.</p>
+     *
      * @param targetX Ciljni red u matrici terminala.
      * @param targetY Ciljna kolona u matrici terminala.
-     * @return {@code true} ako je pomjeranje uspjelo, {@code false} ako je ciljna ćelija zauzeta
-     *         ili plovilo trenutno nije pozicionirano ni u jednom terminalu.
+     * @return {@code true} ako je pomjeranje uspjelo, {@code false} ako je ciljna ćelija zauzeta,
+     *         terminal blokira ovo plovilo, ili plovilo trenutno nije pozicionirano ni u jednom
+     *         terminalu.
      */
-    private boolean pomjeriNaPolje(int targetX, int targetY) {
+    boolean pomjeriNaPolje(int targetX, int targetY) {
         Terminal t = this.trenutniTerminal;
         if (t == null || this.x < 0 || this.y < 0) {
+            return false;
+        }
+        if (!t.smijeProci(this.plovilo)) {
             return false;
         }
 

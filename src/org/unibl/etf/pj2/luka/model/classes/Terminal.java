@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import org.unibl.etf.pj2.luka.model.classes.Polje;
+import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 
 /**
  * Jedan terminal luke: matrica polja dimenzija 4×17 (T2) sa 30 vezova (dokova) i dvotračnim
@@ -61,6 +62,17 @@ public class Terminal implements Serializable {
      * rezervacija sprečava da drugo plovilo u međuvremenu krene ka istom, još praznom, vezu (R2/K5).
      */
     private transient java.util.Set<Integer> rezervisaniVezovi;
+
+    /**
+     * Da li je saobraćaj na ovom terminalu trenutno blokiran zbog uviđaja incidenta (I3/I4).
+     * {@code transient} jer je ovo prolazno stanje trajanja simulacije, ne dio trajnog stanja
+     * luke koje se čuva u {@code luka.ser} — blokada koja postoji u trenutku gašenja JVM-a nema
+     * smisla nakon ponovnog pokretanja (uviđaj koji ju je izazvao više ne postoji). {@code volatile}
+     * jer ga čita svaka nit broda pri svakom pokušaju pomjeranja, a postavlja/skida ga nit koja vodi
+     * uviđaj — bez {@code synchronized}, jer je ovo samo zastavica za čitanje/pisanje jedne
+     * {@code boolean} vrijednosti, ne složena operacija koja zahtijeva atomarnost sa nečim drugim.
+     */
+    private transient volatile boolean saobracajBlokiran;
 
     static{
         serialVersionUID = 1L;
@@ -185,6 +197,58 @@ public class Terminal implements Serializable {
         if (d != null) {
             rezervisani().remove(d.getOznakaVezova());
         }
+    }
+
+    /**
+     * Blokira saobraćaj na ovom terminalu (I3) — poziva se kad počne uviđaj incidenta. Nakon ovog
+     * poziva {@link #smijeProci(Plovilo)} propušta samo plovila pod aktivnom rotacijom (službena
+     * plovila koja idu ka mjestu incidenta), sva ostala plovila u ovom terminalu stoje u mjestu.
+     * Ostali terminali luke nisu pogođeni (I4) — blokada je po instanci {@code Terminal}-a.
+     *
+     * <p>Samo postavlja zastavicu, ne čeka niti uspavljuje pozivaoca — sama logika trajanja
+     * uviđaja i njegov redoslijed su predmet R4b (dispečovanje/koordinacija), ne ove metode.</p>
+     */
+    public void blokirajSaobracaj() {
+        this.saobracajBlokiran = true;
+    }
+
+    /**
+     * Skida blokadu saobraćaja postavljenu preko {@link #blokirajSaobracaj()} — poziva se kad se
+     * uviđaj završi, nakon čega {@link #smijeProci(Plovilo)} ponovo propušta svako plovilo.
+     */
+    public void odblokirajSaobracaj() {
+        this.saobracajBlokiran = false;
+    }
+
+    /**
+     * Provjerava da li je saobraćaj na ovom terminalu trenutno blokiran.
+     *
+     * @return {@code true} ako je terminal trenutno pod blokadom (uviđaj u toku).
+     */
+    public boolean isSaobracajBlokiran() {
+        return saobracajBlokiran;
+    }
+
+    /**
+     * Provjerava da li dato plovilo smije da se pomjeri unutar ovog terminala u trenutnom stanju
+     * saobraćaja (I3). Ako terminal nije blokiran, prolaze sva plovila. Ako jeste, prolaze samo
+     * plovila pod aktivnom rotacijom — službena plovila (obalska straža/carina/vatrogasci) koja su
+     * upravo pozvana na mjesto incidenta ({@link SluzbenoPlovilo#isRotacija()}).
+     *
+     * <p>Poziva se iz pokreta broda ({@code BrodThread.pomjeriNaPolje()}) prije svakog fizičkog
+     * pomjeranja — samo čita {@link #saobracajBlokiran}, ne ulazi u {@code synchronized(this)}
+     * blok i ne čeka ni na čemu, pa se poziv smije nalaziti bilo gdje u putanji kretanja bez rizika
+     * po {@link org.unibl.etf.pj2.luka.view.PrikazTerminala#render(Terminal)} (D4).</p>
+     *
+     * @param p Plovilo za koje se provjerava da li smije da se pomjeri.
+     * @return {@code true} ako plovilo smije da se pomjeri, {@code false} ako je terminal blokiran
+     *         i plovilo nije pod aktivnom rotacijom.
+     */
+    public boolean smijeProci(Plovilo p) {
+        if (!saobracajBlokiran) {
+            return true;
+        }
+        return p instanceof SluzbenoPlovilo sluzbeno && sluzbeno.isRotacija();
     }
 
     /**

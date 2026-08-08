@@ -665,6 +665,80 @@ class BrodThreadTest {
     }
 
     // ------------------------------------------------------------------
+    // R4a — blokada saobraćaja na terminalu (I3/I4): provjera u pomjeriNaPolje()
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("R4a: pomjeriNaPolje() ne uspijeva za obično plovilo dok je terminal blokiran")
+    void pomjeriNaPoljeNeUspijevaKadJeTerminalBlokiranZaObicnoPlovilo() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        Dok dok = TestFactory.prviSlobodanDok(t);
+        Plovilo p = TestFactory.kontejnerski("BLOK-1");
+        dok.getLokacija().setTrenutnoPlovilo(p);
+
+        BrodThread bt = new BrodThread(p, luka, t, dok);
+        t.blokirajSaobracaj();
+
+        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+                "Obično plovilo ne smije moći da se pomjeri dok je terminal blokiran.");
+        assertSame(p, dok.getLokacija().getTrenutnoPlovilo(), "Plovilo mora ostati na starom polju.");
+        assertNull(t.getMatrica()[Terminal.KANAL_IZLAZ][5].getTrenutnoPlovilo());
+    }
+
+    @Test
+    @DisplayName("R4a: pomjeriNaPolje() uspijeva za plovilo pod rotacijom čak i kad je terminal blokiran")
+    void pomjeriNaPoljeUspijevaZaPloviloPodRotacijomKadJeTerminalBlokiran() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        Dok dok = TestFactory.prviSlobodanDok(t);
+        TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("BLOK-2");
+        vatrogasci.setRotacija(true);
+        dok.getLokacija().setTrenutnoPlovilo(vatrogasci);
+
+        BrodThread bt = new BrodThread(vatrogasci, luka, t, dok);
+        t.blokirajSaobracaj();
+
+        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+                "Plovilo pod rotacijom mora moći da se pomjeri i kroz blokiran terminal.");
+        assertSame(vatrogasci, t.getMatrica()[Terminal.KANAL_IZLAZ][5].getTrenutnoPlovilo());
+    }
+
+    @Test
+    @DisplayName("R4a: službeno plovilo bez uključene rotacije se ponaša kao obično — blokada ga zaustavlja")
+    void pomjeriNaPoljeZaustavljaSluzbenoPloviloBezRotacije() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        Dok dok = TestFactory.prviSlobodanDok(t);
+        TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("BLOK-3");
+        dok.getLokacija().setTrenutnoPlovilo(vatrogasci);
+
+        BrodThread bt = new BrodThread(vatrogasci, luka, t, dok);
+        t.blokirajSaobracaj();
+
+        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+                "Rotacija mora biti aktivno uključena — sama pripadnost službi nije dovoljna.");
+    }
+
+    @Test
+    @DisplayName("R4a: odblokirajSaobracaj() vraća normalno kretanje za obično plovilo")
+    void pomjeriNaPoljeRadiNormalnoNakonOdblokade() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        Dok dok = TestFactory.prviSlobodanDok(t);
+        Plovilo p = TestFactory.kontejnerski("BLOK-4");
+        dok.getLokacija().setTrenutnoPlovilo(p);
+
+        BrodThread bt = new BrodThread(p, luka, t, dok);
+        t.blokirajSaobracaj();
+        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5));
+
+        t.odblokirajSaobracaj();
+        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+                "Nakon odblokade obično plovilo ponovo smije da se kreće.");
+    }
+
+    // ------------------------------------------------------------------
     // D5 — determinizam sudara: injektovan Random + mutabilna vjerovatnoća/trajanje uviđaja
     // ------------------------------------------------------------------
 
