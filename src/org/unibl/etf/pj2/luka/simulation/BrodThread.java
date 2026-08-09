@@ -8,6 +8,7 @@ import org.unibl.etf.pj2.luka.model.classes.Terminal;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -413,7 +414,10 @@ public class BrodThread implements Runnable {
             if (pomjeren) {
                 neuspjesi = 0;
                 if (preticanje) {
-                    provjeriSudar();
+                    Plovilo[] ucesniciSudara = provjeriSudar();
+                    if (ucesniciSudara != null) {
+                        pokreniUvidjaj(ucesniciSudara);
+                    }
                 }
                 Thread.sleep(korak);
             } else {
@@ -735,6 +739,14 @@ public class BrodThread implements Runnable {
         synchronized (t) {
             return t.getMatrica()[suprotniRed][this.y].getTrenutnoPlovilo();
         }
+    }
+
+    private void pokreniUvidjaj(Plovilo[] ucesnici) {
+        KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
+                luka, this.trenutniTerminal, List.of(ucesnici[0], ucesnici[1]), this.x, this.y);
+        Thread nit = new Thread(koordinator, "koordinator-uvidjaja-" + plovilo.getImoBroj());
+        nit.setDaemon(true);
+        nit.start();
     }
 
     /**
