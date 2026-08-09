@@ -7,6 +7,8 @@ import org.unibl.etf.pj2.luka.model.interfaces.Carina;
 import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
 import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 
+import java.util.function.Predicate;
+
 /**
  * Pretraga najbliže patrole (vatrogasci/obalska straža/carina) na nivou cijele luke (D2), koju
  * R4b (dispečovanje) koristi da odabere koje se službeno plovilo šalje na incident.
@@ -58,6 +60,18 @@ public final class PretragaPatrole {
      *         vatrogasaca trenutno nije aktivno i pozicionirano u luci.
      */
     public static BrodThread najblizaPatrola(Luka luka, Terminal terminal, int x, int y) {
+        return najblizaPatrola(luka, terminal, x, y, PretragaPatrole::jePatrola);
+    }
+
+    public static <T> BrodThread najblizaPatrola(Luka luka, Terminal terminal, int x, int y, Class<T> tip) {
+        if (tip == null) {
+            return null;
+        }
+        return najblizaPatrola(luka, terminal, x, y, tip::isInstance);
+    }
+
+    private static BrodThread najblizaPatrola(Luka luka, Terminal terminal, int x, int y,
+                                               Predicate<Plovilo> odgovaraTrazenojSluzbi) {
         if (luka == null || terminal == null) {
             return null;
         }
@@ -66,7 +80,7 @@ public final class PretragaPatrole {
         long najmanjeRastojanje = Long.MAX_VALUE;
 
         for (BrodThread kandidat : luka.getAktivnaPlovila()) {
-            if (!jePatrola(kandidat.getPlovilo())) {
+            if (!odgovaraTrazenojSluzbi.test(kandidat.getPlovilo()) || !jeDostupna(kandidat)) {
                 continue;
             }
             Terminal kandidatTerminal = kandidat.getTrenutniTerminal();
@@ -77,7 +91,8 @@ public final class PretragaPatrole {
             }
 
             long rastojanje = rastojanje(terminal, x, y, kandidatTerminal, kandidatX, kandidatY);
-            if (rastojanje < najmanjeRastojanje) {
+            if (najbliza == null || rastojanje < najmanjeRastojanje || (rastojanje == najmanjeRastojanje
+                    && kandidat.getPlovilo().getImoBroj().compareTo(najbliza.getPlovilo().getImoBroj()) < 0)) {
                 najmanjeRastojanje = rastojanje;
                 najbliza = kandidat;
             }
@@ -94,6 +109,11 @@ public final class PretragaPatrole {
      */
     private static boolean jePatrola(Plovilo p) {
         return p instanceof Vatrogasci || p instanceof ObalskaStraza || p instanceof Carina;
+    }
+
+    private static boolean jeDostupna(BrodThread kandidat) {
+        Zadatak zadatak = kandidat.getZadatak();
+        return zadatak != Zadatak.KA_INCIDENTU && zadatak != Zadatak.NA_INCIDENTU && zadatak != Zadatak.NAPUSTA;
     }
 
     /**

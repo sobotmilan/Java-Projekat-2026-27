@@ -7,6 +7,9 @@ import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Polje;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
+import org.unibl.etf.pj2.luka.model.interfaces.Carina;
+import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
+import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 import org.unibl.etf.pj2.luka.testutil.TestFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -125,5 +128,81 @@ class PretragaPatroleTest {
 
         assertNull(PretragaPatrole.najblizaPatrola(luka, t, 0, 5),
                 "Plovilo koje još nije pozicionirano ni u jednom terminalu ne smije biti kandidat.");
+    }
+
+    // ------------------------------------------------------------------
+    // R4b-2 — pretraga po konkretnoj službi i po dostupnosti (I2)
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("R4b-2: traženje vatrogasaca ne vraća carinu, čak i kad je carina bliža")
+    void trazenjeVatrogasacaNeVracaCarinu() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+
+        BrodThread carina = pozicioniraj(TestFactory.tankerCarina("C-BLIZU"), luka, t, 0, 4);
+        BrodThread vatrogasci = pozicioniraj(TestFactory.tankerVatrogasci("V-DALEKO"), luka, t, 3, 12);
+
+        assertSame(vatrogasci, PretragaPatrole.najblizaPatrola(luka, t, 0, 5, Vatrogasci.class),
+                "Pretraga po tipu Vatrogasci.class ne smije vratiti carinu ni kad je bliža.");
+        assertSame(carina, PretragaPatrole.najblizaPatrola(luka, t, 0, 5, Carina.class),
+                "Pretraga po tipu Carina.class mora vratiti carinu.");
+    }
+
+    @Test
+    @DisplayName("R4b-2: null kad tražene službe nema u luci")
+    void nullKadTrazeneSluzbeNemaULuci() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        pozicioniraj(TestFactory.tankerCarina("SAMO-CARINA"), luka, t, 0, 4);
+
+        assertNull(PretragaPatrole.najblizaPatrola(luka, t, 0, 5, Vatrogasci.class));
+        assertNull(PretragaPatrole.najblizaPatrola(luka, t, 0, 5, ObalskaStraza.class));
+    }
+
+    @Test
+    @DisplayName("R4b-2: zauzeta patrola (već na incidentu) se preskače u korist dalje slobodne")
+    void zauzetaPatrolaSePreskaceUKoristDaljeSlobodne() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+
+        BrodThread blizaAliZauzeta = pozicioniraj(TestFactory.tankerVatrogasci("V-BLIZU"), luka, t, 0, 4);
+        blizaAliZauzeta.setZadatak(Zadatak.NA_INCIDENTU);
+        BrodThread daljaSlobodna = pozicioniraj(TestFactory.tankerVatrogasci("V-DALEKO"), luka, t, 3, 12);
+
+        assertSame(daljaSlobodna, PretragaPatrole.najblizaPatrola(luka, t, 0, 5, Vatrogasci.class),
+                "Patrola koja je već pozvana na drugi incident ne smije biti izabrana ponovo.");
+    }
+
+    @Test
+    @DisplayName("R4b-2: patrola u prelasku (KA_INCIDENTU) ili napuštanju (NAPUSTA) se takođe preskače")
+    void patrolaKaIncidentuINapustaSeTakodjePreskacu() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+
+        BrodThread kaIncidentu = pozicioniraj(TestFactory.tankerVatrogasci("V-1"), luka, t, 0, 4);
+        kaIncidentu.setZadatak(Zadatak.KA_INCIDENTU);
+        BrodThread napusta = pozicioniraj(TestFactory.tankerVatrogasci("V-2"), luka, t, 0, 5);
+        napusta.setZadatak(Zadatak.NAPUSTA);
+
+        assertNull(PretragaPatrole.najblizaPatrola(luka, t, 0, 6, Vatrogasci.class),
+                "Nijedna od dvije patrole nije dostupna, pretraga mora vratiti null.");
+    }
+
+    @Test
+    @DisplayName("R4b-2: dvije jednako udaljene patrole uvijek daju isti rezultat (manji IMO broj) kroz više pokretanja")
+    void dvijeJednakoUdaljenePatroleUvijekDajuIstiRezultat() {
+        for (int ponavljanje = 0; ponavljanje < 20; ponavljanje++) {
+            Luka luka = TestFactory.luka(1);
+            Terminal t = luka.getTerminali().get(0);
+
+            // Cilj (0, 10): obje patrole na rastojanju 2 (jedna lijevo, jedna desno).
+            BrodThread manjiImo = pozicioniraj(TestFactory.tankerVatrogasci("1000001"), luka, t, 0, 8);
+            BrodThread veciImo = pozicioniraj(TestFactory.tankerVatrogasci("1000002"), luka, t, 0, 12);
+
+            assertSame(manjiImo, PretragaPatrole.najblizaPatrola(luka, t, 0, 10, Vatrogasci.class),
+                    "Pri izjednačenom rastojanju mora se uvijek birati plovilo sa manjim IMO brojem (ponavljanje "
+                            + ponavljanje + ").");
+        }
     }
 }

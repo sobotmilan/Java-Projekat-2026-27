@@ -31,9 +31,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * {@link #parkLock} objektu (nikad na {@code synchronized(terminal)}, D4), sve dok je neko ne
  * pozove preko {@link #zatraziNapustanje()} da napusti terminal.</p>
  *
- * <p><b>Sudari (I1/D5):</b> {@link #provjeriSudar()} je i dalje placeholder za R4 — vraća ishod
- * "bacanja kockice" ({@link #VJEROVATNOCA_SUDARA}), ali ne pokreće nikakvu obradu incidenta.
- * {@link #SUDARI_OMOGUCENI} je trenutno {@code false} (namjerno odstupanje od specifikacije radi
+ * <p>{@link #SUDARI_OMOGUCENI} je trenutno {@code false} (namjerno odstupanje od specifikacije radi
  * determinizma testova nakon R0 — mora se vratiti na {@code true} kad R4 bude gotov).</p>
  *
  * @author Milan Šobot
@@ -326,9 +324,7 @@ public class BrodThread implements Runnable {
 
     /**
      * Vodi plovilo niz ulaznu kolonu ({@link Terminal#KOLONA_ULAZ}), red po red, dok ne stigne do
-     * reda {@link Terminal#KANAL_ULAZ} (istočnog traka kanala). Provjerava sudar
-     * ({@link #provjeriSudar()}) nakon svakog uspješnog koraka (D5 — placeholder, R4 ga tek
-     * treba obraditi).
+     * reda {@link Terminal#KANAL_ULAZ} (istočnog traka kanala).
      *
      * @param korak Trajanje jednog koraka kretanja, u milisekundama.
      * @return {@code true} ako je plovilo uspješno stiglo do kanala.
@@ -339,7 +335,6 @@ public class BrodThread implements Runnable {
             if (!pomjeriSaCekanjem(this.x + 1, Terminal.KOLONA_ULAZ, korak)) {
                 return false;
             }
-            provjeriSudar();
             Thread.sleep(korak);
         }
         return true;
@@ -389,6 +384,7 @@ public class BrodThread implements Runnable {
 
             boolean imamPrioritet = plovilo.getPrioritet() < PRIORITET_BEZ_ROTACIJE;
             boolean pomjeren = false;
+            boolean preticanje = false;
 
             if (this.x == Terminal.KANAL_ULAZ) {
                 boolean moraUstupitiProlaz = ustupaProlaz(this.trenutniTerminal, this.x, this.y, this.plovilo);
@@ -400,12 +396,14 @@ public class BrodThread implements Runnable {
                 boolean pragZaPreticanjeIspunjen = imamPrioritet || neuspjesi >= PRAG_PRETICANJA;
                 if (!pomjeren && pragZaPreticanjeIspunjen && smijePreticati(this.y + 1)) {
                     pomjeren = pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y);
+                    preticanje = pomjeren;
                     if (pomjeren) {
                         log("Započinje preticanje" + (imamPrioritet ? " (prioritet pod rotacijom)." : "."));
                     }
                 }
             } else {
                 pomjeren = pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y + 1);
+                preticanje = pomjeren;
                 if (pomjeren) {
                     Thread.sleep(korak);
                     pomjeriNaPolje(Terminal.KANAL_ULAZ, this.y);
@@ -414,7 +412,9 @@ public class BrodThread implements Runnable {
 
             if (pomjeren) {
                 neuspjesi = 0;
-                provjeriSudar();
+                if (preticanje) {
+                    provjeriSudar();
+                }
                 Thread.sleep(korak);
             } else {
                 neuspjesi++;
@@ -714,21 +714,27 @@ public class BrodThread implements Runnable {
         return Math.max(20L, Math.min(korak, 400L));
     }
 
-    /**
-     * Provjerava da li je u ovom koraku kretanja došlo do sudara. I dalje samo placeholder za
-     * R4: vraća ishod "bacanja kockice", ali ne pokreće nikakvu obradu (nema {@code Incident}
-     * objekta, dispečovanja službenih plovila ni blokade terminala) — to je predmet R4.
-     * Paket-privatna vidljivost namjerno, po uzoru na {@link #ustupaProlaz}, da bi testovi mogli
-     * direktno provjeriti determinizam bez pokretanja cijele niti.
-     *
-     * @return true ako je slučajno izvučena vrijednost pogodila prag {@link #VJEROVATNOCA_SUDARA},
-     *         inače false. Uvijek false dok je {@link #SUDARI_OMOGUCENI} isključeno (I1).
-     */
-    boolean provjeriSudar() {
+    Plovilo[] provjeriSudar() {
         if (!SUDARI_OMOGUCENI) {
-            return false;
+            return null;
         }
-        return generator().nextDouble() < VJEROVATNOCA_SUDARA;
+        Plovilo drugi = drugoPloviloUPreticanju();
+        boolean pogodak = generator().nextDouble() < VJEROVATNOCA_SUDARA;
+        if (drugi == null || !pogodak) {
+            return null;
+        }
+        return new Plovilo[]{this.plovilo, drugi};
+    }
+
+    private Plovilo drugoPloviloUPreticanju() {
+        Terminal t = this.trenutniTerminal;
+        if (t == null) {
+            return null;
+        }
+        int suprotniRed = this.x == Terminal.KANAL_ULAZ ? Terminal.KANAL_IZLAZ : Terminal.KANAL_ULAZ;
+        synchronized (t) {
+            return t.getMatrica()[suprotniRed][this.y].getTrenutnoPlovilo();
+        }
     }
 
     /**
@@ -794,6 +800,10 @@ public class BrodThread implements Runnable {
      */
     public Zadatak getZadatak() {
         return zadatak;
+    }
+
+    void setZadatak(Zadatak zadatak) {
+        this.zadatak = zadatak;
     }
 
     /**

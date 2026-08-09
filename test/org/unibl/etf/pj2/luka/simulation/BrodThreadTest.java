@@ -776,20 +776,39 @@ class BrodThreadTest {
     // D5 — determinizam sudara: injektovan Random + mutabilna vjerovatnoća/trajanje uviđaja
     // ------------------------------------------------------------------
 
+    /** Postavlja bt na KANAL_IZLAZ i drugog na KANAL_ULAZ, istu kolonu — konfiguracija mimoilaženja. */
+    private static Plovilo pripremiMimoilazenje(BrodThread bt, Terminal t, int kolona, String imoDrugog) {
+        assertTrue(bt.pokusajUciUTerminal(t));
+        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, kolona));
+        Plovilo drugi = TestFactory.kontejnerski(imoDrugog);
+        t.getMatrica()[Terminal.KANAL_ULAZ][kolona].setTrenutnoPlovilo(drugi);
+        return drugi;
+    }
+
     @Test
-    @DisplayName("D5: provjeriSudar() uvijek prijavljuje sudar kad je vjerovatnoća 1.0")
-    void provjeriSudarUvijekPrijavljujeKadJeVjerovatnocaJedan() {
+    @DisplayName("R4b-1: provjeriSudar() detektuje oba učesnika kad je vjerovatnoća 1.0 i plovila se mimoilaze")
+    void provjeriSudarDetektujeObaUcesnikaKadJeVjerovatnocaJedan() {
         boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
         double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
         try {
             BrodThread.SUDARI_OMOGUCENI = true;
             BrodThread.VJEROVATNOCA_SUDARA = 1.0;
 
-            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-1"), TestFactory.luka(1));
+            Luka luka = TestFactory.luka(1);
+            Terminal t = luka.getTerminali().get(0);
+            Plovilo prvi = TestFactory.kontejnerski("D5-1");
+            BrodThread bt = new BrodThread(prvi, luka);
             bt.setGeneratorSudara(new Random(1));
+            Plovilo drugi = pripremiMimoilazenje(bt, t, 5, "D5-1B");
 
             for (int i = 0; i < 100; i++) {
-                assertTrue(bt.provjeriSudar(), "Vjerovatnoća 1.0 mora garantovati sudar na svakoj provjeri.");
+                Plovilo[] rezultat = bt.provjeriSudar();
+                assertNotNull(rezultat, "Vjerovatnoća 1.0 mora garantovati sudar na svakoj provjeri.");
+                assertEquals(2, rezultat.length);
+                assertTrue(
+                        (rezultat[0] == prvi && rezultat[1] == drugi)
+                                || (rezultat[0] == drugi && rezultat[1] == prvi),
+                        "Sudar mora vratiti tačno dva različita, stvarna učesnika mimoilaženja.");
             }
         } finally {
             BrodThread.SUDARI_OMOGUCENI = staroSudari;
@@ -798,7 +817,7 @@ class BrodThreadTest {
     }
 
     @Test
-    @DisplayName("D5: provjeriSudar() nikad ne prijavljuje sudar kad je vjerovatnoća 0.0")
+    @DisplayName("R4b-1: provjeriSudar() nikad ne prijavljuje sudar kad je vjerovatnoća 0.0, i uz plovila u mimoilaženju")
     void provjeriSudarNikadNePrijavljujeKadJeVjerovatnocaNula() {
         boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
         double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
@@ -806,11 +825,14 @@ class BrodThreadTest {
             BrodThread.SUDARI_OMOGUCENI = true;
             BrodThread.VJEROVATNOCA_SUDARA = 0.0;
 
-            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-2"), TestFactory.luka(1));
+            Luka luka = TestFactory.luka(1);
+            Terminal t = luka.getTerminali().get(0);
+            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-2"), luka);
             bt.setGeneratorSudara(new Random(2));
+            pripremiMimoilazenje(bt, t, 5, "D5-2B");
 
             for (int i = 0; i < 100; i++) {
-                assertFalse(bt.provjeriSudar(), "Vjerovatnoća 0.0 ne smije nikad prijaviti sudar.");
+                assertNull(bt.provjeriSudar(), "Vjerovatnoća 0.0 ne smije nikad prijaviti sudar.");
             }
         } finally {
             BrodThread.SUDARI_OMOGUCENI = staroSudari;
@@ -819,7 +841,7 @@ class BrodThreadTest {
     }
 
     @Test
-    @DisplayName("D5: provjeriSudar() je uvijek false kad su sudari globalno onemogućeni (I1), bez obzira na vjerovatnoću")
+    @DisplayName("R4b-1: provjeriSudar() je uvijek null kad su sudari globalno onemogućeni (I1), bez obzira na vjerovatnoću")
     void provjeriSudarJeIskljucenKadSuSudariOnemoguceni() {
         boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
         double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
@@ -827,13 +849,39 @@ class BrodThreadTest {
             BrodThread.SUDARI_OMOGUCENI = false;
             BrodThread.VJEROVATNOCA_SUDARA = 1.0;
 
-            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-3"), TestFactory.luka(1));
+            Luka luka = TestFactory.luka(1);
+            Terminal t = luka.getTerminali().get(0);
+            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-3"), luka);
             bt.setGeneratorSudara(new Random(3));
+            pripremiMimoilazenje(bt, t, 5, "D5-3B");
 
             for (int i = 0; i < 20; i++) {
-                assertFalse(bt.provjeriSudar(),
+                assertNull(bt.provjeriSudar(),
                         "I1: dok je SUDARI_OMOGUCENI isključeno, sudara ne smije biti ni uz vjerovatnoću 1.0.");
             }
+        } finally {
+            BrodThread.SUDARI_OMOGUCENI = staroSudari;
+            BrodThread.VJEROVATNOCA_SUDARA = staraVjerovatnoca;
+        }
+    }
+
+    @Test
+    @DisplayName("R4b-1: provjeriSudar() ne detektuje sudar kad nema drugog plovila u mimoilaženju, bez obzira na vjerovatnoću")
+    void provjeriSudarBezDrugogUcesnikaVracaNull() {
+        boolean staroSudari = BrodThread.SUDARI_OMOGUCENI;
+        double staraVjerovatnoca = BrodThread.VJEROVATNOCA_SUDARA;
+        try {
+            BrodThread.SUDARI_OMOGUCENI = true;
+            BrodThread.VJEROVATNOCA_SUDARA = 1.0;
+
+            Luka luka = TestFactory.luka(1);
+            Terminal t = luka.getTerminali().get(0);
+            BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-5"), luka);
+            bt.setGeneratorSudara(new Random(5));
+            assertTrue(bt.pokusajUciUTerminal(t));
+            assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5));
+
+            assertNull(bt.provjeriSudar(), "Bez drugog plovila u susjednoj traci nema sudara.");
         } finally {
             BrodThread.SUDARI_OMOGUCENI = staroSudari;
             BrodThread.VJEROVATNOCA_SUDARA = staraVjerovatnoca;
@@ -849,13 +897,18 @@ class BrodThreadTest {
             BrodThread.SUDARI_OMOGUCENI = true;
             BrodThread.VJEROVATNOCA_SUDARA = 0.5;
 
-            BrodThread prvi = new BrodThread(TestFactory.kontejnerski("D5-4A"), TestFactory.luka(1));
+            Luka lukaPrvi = TestFactory.luka(1);
+            BrodThread prvi = new BrodThread(TestFactory.kontejnerski("D5-4A"), lukaPrvi);
             prvi.setGeneratorSudara(new Random(42));
-            BrodThread drugi = new BrodThread(TestFactory.kontejnerski("D5-4B"), TestFactory.luka(1));
+            pripremiMimoilazenje(prvi, lukaPrvi.getTerminali().get(0), 5, "D5-4A-B");
+
+            Luka lukaDrugi = TestFactory.luka(1);
+            BrodThread drugi = new BrodThread(TestFactory.kontejnerski("D5-4B"), lukaDrugi);
             drugi.setGeneratorSudara(new Random(42));
+            pripremiMimoilazenje(drugi, lukaDrugi.getTerminali().get(0), 5, "D5-4B-B");
 
             for (int i = 0; i < 200; i++) {
-                assertEquals(prvi.provjeriSudar(), drugi.provjeriSudar(),
+                assertEquals(prvi.provjeriSudar() != null, drugi.provjeriSudar() != null,
                         "Isti seed mora dati isti niz ishoda na poziciji " + i + ".");
             }
         } finally {
