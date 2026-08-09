@@ -370,8 +370,19 @@ public class BrodThread implements Runnable {
     private boolean ploviIstocno(int ciljY, long korak) throws InterruptedException {
         int neuspjesi = 0;
         int ukupnoPokusaja = 0;
+        int blokada = 0;
 
         while (this.y < ciljY) {
+            if (cekaZbogBlokade()) {
+                if (++blokada > maxBlokadaPokusaja()) {
+                    odustajemZbogBlokade();
+                    return false;
+                }
+                Thread.sleep(CEKANJE_MS);
+                continue;
+            }
+            blokada = 0;
+
             if (++ukupnoPokusaja > MAX_POKUSAJA * 4) {
                 return false;
             }
@@ -493,20 +504,40 @@ public class BrodThread implements Runnable {
             }
 
             int pokusaja = 0;
-            while (this.y > Terminal.KOLONA_IZLAZ && pokusaja++ < MAX_POKUSAJA * 4) {
+            int blokada = 0;
+            while (this.y > Terminal.KOLONA_IZLAZ && pokusaja < MAX_POKUSAJA * 4) {
                 if (pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y - 1)) {
                     Thread.sleep(korak);
                 } else {
+                    if (cekaZbogBlokade()) {
+                        if (++blokada > maxBlokadaPokusaja()) {
+                            odustajemZbogBlokade();
+                            break;
+                        }
+                    } else {
+                        blokada = 0;
+                        pokusaja++;
+                    }
                     Thread.sleep(CEKANJE_MS);
                 }
             }
         }
 
         int pokusaja = 0;
-        while (this.x > 0 && pokusaja++ < MAX_POKUSAJA * 2) {
+        int blokada = 0;
+        while (this.x > 0 && pokusaja < MAX_POKUSAJA * 2) {
             if (pomjeriNaPolje(this.x - 1, Terminal.KOLONA_IZLAZ)) {
                 Thread.sleep(korak);
             } else {
+                if (cekaZbogBlokade()) {
+                    if (++blokada > maxBlokadaPokusaja()) {
+                        odustajemZbogBlokade();
+                        break;
+                    }
+                } else {
+                    blokada = 0;
+                    pokusaja++;
+                }
                 Thread.sleep(CEKANJE_MS);
             }
         }
@@ -616,16 +647,44 @@ public class BrodThread implements Runnable {
      */
     boolean pomjeriSaCekanjem(int targetX, int targetY, long korak) throws InterruptedException {
         int i = 0;
+        int blokada = 0;
+
         while (i < MAX_POKUSAJA) {
             if (pomjeriNaPolje(targetX, targetY)) {
                 return true;
             }
-            if (!cekaZbogBlokade()) {
+            if (cekaZbogBlokade()) {
+                if (++blokada > maxBlokadaPokusaja()) {
+                    odustajemZbogBlokade();
+                    return false;
+                }
+            } else {
+                blokada = 0;
                 i++;
             }
             Thread.sleep(CEKANJE_MS);
         }
         return false;
+    }
+
+    /**
+     * Najveći broj uzastopnih pokušaja pomjeranja koji smiju propasti zbog blokade saobraćaja
+     * prije nego što plovilo odustane. Izvedeno iz {@link #MAX_TRAJANJE_UVIDJAJA_MS} (dvostruko,
+     * kao sigurnosna margina), računa se pri svakom pozivu jer testovi mijenjaju trajanje uviđaja
+     *
+     * @return broj maksimalnih dozvoljenih pokušaja blokiranja terminala.
+     */
+    private static int maxBlokadaPokusaja() {
+        return (int) Math.max(1, (MAX_TRAJANJE_UVIDJAJA_MS * 2) / CEKANJE_MS);
+    }
+
+    /**
+     * Evidentira odustajanje zbog predugačke blokade.
+     *
+     * */
+    private void odustajemZbogBlokade() {
+        LoggerUtil.logWarning("Blokada terminala traje predugo — plovilo "
+                + plovilo.getImoBroj() + " odustaje.");
     }
 
     /**
