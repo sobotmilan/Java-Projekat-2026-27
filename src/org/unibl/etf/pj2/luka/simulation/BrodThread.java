@@ -32,9 +32,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * {@link #parkLock} objektu (nikad na {@code synchronized(terminal)}, D4), sve dok je neko ne
  * pozove preko {@link #zatraziNapustanje()} da napusti terminal.</p>
  *
- * <p>{@link #SUDARI_OMOGUCENI} je trenutno {@code false} (namjerno odstupanje od specifikacije radi
- * determinizma testova nakon R0 — mora se vratiti na {@code true} kad R4 bude gotov).</p>
- *
  * @author Milan Šobot
  * @version 1.0
  * @see Terminal
@@ -54,12 +51,7 @@ public class BrodThread implements Runnable {
     /** Prioritet svakog plovila bez upaljene rotacije (podrazumijevana vrijednost iz {@link Plovilo}). */
     private static final int PRIORITET_BEZ_ROTACIJE = 10;
 
-    /**
-     * Globalni prekidač za sudare (I1). Trenutno {@code false} — namjerno odstupanje od
-     * specifikacije, uvedeno radi determinizma testova poslije R0. Mora se vratiti na
-     * {@code true} kad logika uviđaja (R4) bude implementirana.
-     */
-    public static volatile boolean SUDARI_OMOGUCENI = false;
+    public static volatile boolean SUDARI_OMOGUCENI = true;
 
     /** Vjerovatnoća sudara po provjeri (I1: 2%). Nije final — testovi je postavljaju na 1.0/0.0 radi determinizma (D5). */
     public static volatile double VJEROVATNOCA_SUDARA = 0.02;
@@ -71,6 +63,8 @@ public class BrodThread implements Runnable {
     /** Trajanje uviđaja kad je u pitanju plovilo sa potjernice (I5) — uže od opšteg incidenta. */
     public static volatile long MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 3000L;
     public static volatile long MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 5000L;
+
+    public static volatile long MAX_CEKANJE_KRAJA_UVIDJAJA_MS = 20000L;
 
     /** Plovilo kojim ova nit upravlja. */
     private final Plovilo plovilo;
@@ -89,11 +83,21 @@ public class BrodThread implements Runnable {
     /** Da li je plovilo trenutno privezano na dok. */
     private volatile boolean isPrivezan;
 
+    private volatile Dok trenutniDok;
+
     /** Zastavica koju postavlja {@link #zatraziNapustanje()} da probudi parkiranu nit. */
     private volatile boolean moraNapustiti;
 
     /** Trenutni zadatak niti (D3) — vidi {@link Zadatak}. */
     private volatile Zadatak zadatak;
+
+    private volatile Terminal ciljniTerminalIncidenta;
+    private volatile int ciljXIncidenta;
+    private volatile int ciljYIncidenta;
+
+    private volatile Dok dokPoUvidjaju;
+    private volatile boolean sudarMoraNapustiti;
+
     /** Izvor slučajnosti za provjeru sudara — injektabilan preko {@link #setGeneratorSudara(Random)} radi ponovljivih testova (D5). */
     private volatile Random generatorSudara;
 
@@ -133,6 +137,7 @@ public class BrodThread implements Runnable {
         this.x = dok.getLokacija().getX();
         this.y = dok.getLokacija().getY();
         this.isPrivezan = true;
+        this.trenutniDok = dok;
     }
 
     /**
@@ -152,8 +157,19 @@ public class BrodThread implements Runnable {
             boolean usidren = this.isPrivezan || udjiULuku();
 
             if (usidren) {
-                this.zadatak = Zadatak.PRIVEZAN;
-                cekajNapustanje();
+                boolean krajBoravka = false;
+                while (!krajBoravka) {
+                    this.zadatak = Zadatak.PRIVEZAN;
+                    cekajNapustanje();
+
+                    if (this.zadatak == Zadatak.KA_INCIDENTU) {
+                        otidjiNaIncident();
+                    }
+                    if (this.zadatak == Zadatak.KA_DOKU && vratiSeNaDok()) {
+                        continue;
+                    }
+                    krajBoravka = true;
+                }
                 this.zadatak = Zadatak.NAPUSTA;
                 napustiTerminal();
             } else {
@@ -203,7 +219,16 @@ public class BrodThread implements Runnable {
             log("Ušao u terminal " + (idx + 1) + ".");
 
             if (doploviDoDoka(rezervisan)) {
+                if (this.sudarMoraNapustiti) {
+                    t.otkaziRezervaciju(rezervisan);
+                    log("Učesnik sudara — napušta terminal " + (idx + 1) + " umjesto privezivanja.");
+                    this.zadatak = Zadatak.NAPUSTA;
+                    napustiTerminal();
+                    return false;
+                }
+                t.otkaziRezervaciju(rezervisan);
                 this.isPrivezan = true;
+                this.trenutniDok = rezervisan;
                 log("Usidren na vezu " + rezervisan.getOznakaVezova()
                         + " (" + this.x + "," + this.y + ") u terminalu " + (idx + 1) + ".");
                 return true;
@@ -224,7 +249,7 @@ public class BrodThread implements Runnable {
      */
     private void cekajNapustanje() throws InterruptedException {
         synchronized (parkLock) {
-            while (!moraNapustiti) {
+            while (!moraNapustiti && zadatak != Zadatak.KA_INCIDENTU) {
                 parkLock.wait();
             }
         }
@@ -237,6 +262,34 @@ public class BrodThread implements Runnable {
     public void zatraziNapustanje() {
         synchronized (parkLock) {
             this.moraNapustiti = true;
+            parkLock.notifyAll();
+        }
+    }
+
+    public void pozoviNaIncident(Terminal ciljniTerminal, int ciljX, int ciljY) {
+        synchronized (parkLock) {
+            if (this.zadatak != Zadatak.PRIVEZAN) {
+                return;
+            }
+            this.ciljniTerminalIncidenta = ciljniTerminal;
+            this.ciljXIncidenta = ciljX;
+            this.ciljYIncidenta = ciljY;
+            this.zadatak = Zadatak.KA_INCIDENTU;
+            parkLock.notifyAll();
+        }
+    }
+
+    void oznaciKaoUcesnikaSudara() {
+        this.sudarMoraNapustiti = true;
+    }
+
+    void zavrsiUvidjaj(Dok noviDok) {
+        synchronized (parkLock) {
+            if (this.zadatak != Zadatak.NA_INCIDENTU) {
+                return;
+            }
+            this.dokPoUvidjaju = noviDok;
+            this.zadatak = noviDok != null ? Zadatak.KA_DOKU : Zadatak.NAPUSTA;
             parkLock.notifyAll();
         }
     }
@@ -548,6 +601,104 @@ public class BrodThread implements Runnable {
 
         oslobodiTrenutnoPolje();
         log("Napustio terminal.");
+    }
+
+    private void otidjiNaIncident() throws InterruptedException {
+        Terminal staviTerminal = this.trenutniTerminal;
+        Dok dokKojiNapustam = this.trenutniDok;
+        this.trenutniDok = null;
+        if (staviTerminal != null && dokKojiNapustam != null) {
+            staviTerminal.otkaziRezervaciju(dokKojiNapustam);
+        }
+
+        Terminal ciljniTerminal = this.ciljniTerminalIncidenta;
+        int ciljX = this.ciljXIncidenta;
+        int ciljY = this.ciljYIncidenta;
+        long korak = trajanjeKoraka();
+
+        if (this.trenutniTerminal != ciljniTerminal) {
+            predjiLogickiUTerminal(ciljniTerminal, korak);
+        }
+
+        if (this.trenutniTerminal == ciljniTerminal) {
+            napredujKaPolju(ciljX, ciljY, korak);
+        }
+
+        this.zadatak = Zadatak.NA_INCIDENTU;
+        cekajKrajUvidjaja();
+        if (this.zadatak != Zadatak.KA_DOKU) {
+            this.zadatak = Zadatak.NAPUSTA;
+        }
+    }
+
+    private void predjiLogickiUTerminal(Terminal ciljniTerminal, long korak) throws InterruptedException {
+        oslobodiTrenutnoPolje();
+        if (!pokusajUciUTerminal(ciljniTerminal) && !udjiUTerminal(ciljniTerminal)) {
+            return;
+        }
+        sidjiDoKanala(korak);
+    }
+
+    private boolean napredujKaPolju(int ciljX, int ciljY, long korak) throws InterruptedException {
+        if (this.x == 0) {
+            if (!pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, this.y, korak)) {
+                return false;
+            }
+            Thread.sleep(korak);
+        } else if (this.x == 3) {
+            if (!pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak)) {
+                return false;
+            }
+            Thread.sleep(korak);
+        }
+
+        while (this.y != ciljY) {
+            int sljedeciY = this.y < ciljY ? this.y + 1 : this.y - 1;
+            if (!pomjeriSaCekanjem(this.x, sljedeciY, korak)) {
+                return false;
+            }
+            Thread.sleep(korak);
+        }
+
+        if (this.x != ciljX) {
+            return pomjeriSaCekanjem(ciljX, this.y, korak);
+        }
+        return true;
+    }
+
+    private boolean vratiSeNaDok() throws InterruptedException {
+        Dok noviDok = this.dokPoUvidjaju;
+        this.dokPoUvidjaju = null;
+        Terminal t = this.trenutniTerminal;
+        if (noviDok == null || t == null) {
+            return false;
+        }
+
+        long korak = trajanjeKoraka();
+        int ciljX = noviDok.getLokacija().getX();
+        int ciljY = noviDok.getLokacija().getY();
+
+        if (!napredujKaPolju(ciljX, ciljY, korak)) {
+            t.otkaziRezervaciju(noviDok);
+            return false;
+        }
+
+        this.isPrivezan = true;
+        this.trenutniDok = noviDok;
+        return true;
+    }
+
+    private void cekajKrajUvidjaja() throws InterruptedException {
+        long krajnjeVrijeme = System.currentTimeMillis() + MAX_CEKANJE_KRAJA_UVIDJAJA_MS;
+        synchronized (parkLock) {
+            while (this.zadatak == Zadatak.NA_INCIDENTU) {
+                long preostalo = krajnjeVrijeme - System.currentTimeMillis();
+                if (preostalo <= 0) {
+                    return;
+                }
+                parkLock.wait(preostalo);
+            }
+        }
     }
 
     /**

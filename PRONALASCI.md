@@ -109,6 +109,36 @@ Između njih drugi brod može uzeti isti dok.
 **R2:** `public synchronized Dok rezervisiSlobodanDok(Plovilo p)` na `Terminal`-u —
 pronađi i zauzmi u jednoj atomarnoj operaciji.
 
+### K6 — Rezervacija veza se nikad nije oslobađala na uspješnom privezivanju — ✅ RIJEŠENO (9. avgust)
+
+Nezavisna od K5 (koja se odnosi na trku u traženju), i predhodi R4 potpuno — nema veze sa
+incidentima ili patrolama. `Terminal.rezervisiSlobodanDok(Plovilo)` upisuje redni broj veza u
+`rezervisaniVezovi`, a `otkaziRezervaciju(Dok)` ga uklanja — ali `BrodThread.udjiULuku()` je
+pozivala `otkaziRezervaciju` samo na **neuspješnoj** granici (`doploviDoDoka()` vrati `false`).
+Na **uspješnoj** granici (plovilo stvarno stigne do veza i postane privezano), rezervacija je
+ostajala upisana zauvijek — nikad oslobođena, ni pri samom privezivanju, ni kasnije pri
+napuštanju terminala (`napustiTerminal()` fizički oslobađa ćeliju matrice preko
+`oslobodiTrenutnoPolje()`, ali ne dodiruje `rezervisaniVezovi`).
+
+Posljedica: `Terminal.getBrojSlobodnihVezova()` (čisto fizička provjera) je uvijek bila tačna,
+ali `getBrojRaspolozivihVezova()` (fizički slobodan **i** nerezervisan — to je vrijednost koju
+`udjiULuku()`/T7-T8 stvarno koriste za odluku "ima li mjesta") drifta naniže sa svakim uspješnim
+privezivanjem tokom trajanja JVM procesa, bez obzira koliko plovila kasnije napusti luku. Na
+dovoljno dugoj simulaciji (ili dovoljno dugom demo sešnu bez ponovnog pokretanja) bi terminal
+počeo izgledati trajno pun i odbijati nova plovila iako je fizički prazan — čist "vessels stop
+entering after a while" simptom, klasičan za otkriti tek na demonstraciji, ne u kratkim testovima.
+
+Otkriveno usput tokom R4b (Korak 4/5), gradeći `otidjiNaIncident()`/`vratiSeNaDok()` za patrole
+koje se vraćaju na incident i ponovo traže dok preko `rezervisiSlobodanDok()` u istoj sesiji —
+tamo bi se ista stara rezervacija odmah pokazala (patrola bi izgubila sopstveni upravo napušteni
+vez kao kandidata), što je i navelo na trag. Popravka je opšta, ne samo za incident-tok: jedan
+novi `t.otkaziRezervaciju(rezervisan)` pozvan u `BrodThread.udjiULuku()` odmah nakon uspješnog
+`doploviDoDoka()`, prije postavljanja `isPrivezan = true`.
+
+Regresioni test `BrodThreadTest.vezPostajeRaspolozivIPoRezervacijiNakonNormalnogNapustanja`:
+normalno privezivanje i `zatraziNapustanje()` (bez incidenta), provjerava da
+`getBrojRaspolozivihVezova()` poslije napuštanja odmah opet iznosi 30, ne 29.
+
 ### S1 — Duplirano knjigovodstvo vezova — ✅ RIJEŠENO (4. avgust)
 
 `Luka.brojSlobodnihVezova` je bila `Map<Terminal, AtomicInteger>` popunjena nulama
@@ -185,6 +215,27 @@ mijenja cilj usred rute) i D2 (gdje se traži najbliža patrola) sada imaju infr
 uviđaj treba samo da iskoristi (`Zadatak.KA_INCIDENTU`/`NA_INCIDENTU` postoje kao vrijednosti
 enuma ali ih još ništa ne postavlja; `getX()`/`getY()`/`getTrenutniTerminal()` na `BrodThread`-u
 i `Luka.getAktivnaPlovila()` su spremni za pretragu najbliže patrole).
+
+**Status (8. avgust):** R4a — infrastruktura za sistem incidenata (`Incident`, blokada
+saobraćaja na terminalu preko `Terminal.smijeProci()`, `PretragaPatrole.najblizaPatrola()`
+port-wide). Namjerno bez detekcije sudara, dispečovanja ili prelaza `Zadatak`-a — to je R4b.
+Detalji u `ZAHTJEVI.md`, "Riješeno 8. avgusta: R4a". Test paket: **166 ukupno, 1 pad** (isti).
+
+**Status (9. avgust):** K2/R4 zatvoreno — R4b (logika incidenta) urađen u pet koraka:
+1) `provjeriSudar()` vraća oba učesnika iz grane preticanja, ne samo `boolean`; 2)
+`PretragaPatrole` po konkretnoj službi i po dostupnosti; 3) `KoordinatorUvidjaja` (D1 — koordinator
+posjeduje incident, ne plovila ni terminal) orkestrira blokadu/dispečovanje/uviđaj/upis; 4)
+`BrodThread.pozoviNaIncident()` budi privezanu patrolu preko park-ključa (isti obrazac kao
+`zatraziNapustanje()`); 5) raspetljavanje — službena plovila se vraćaju na prvi slobodan dok ili
+napuštaju, učesnici sudara presretnuti na tačci uspješnog privezivanja u `udjiULuku()` i uvijek
+napuštaju. Usput otkriven i ispravljen **K6** (rezervacija veza se nikad nije oslobađala na
+uspješnom privezivanju — predhodi R4 potpuno, vidi K6 iznad). `BrodThread.SUDARI_OMOGUCENI`
+vraćeno na `true` — jedino namjerno odstupanje od specifikacije u projektu je zatvoreno (I1).
+Detalji i sve odluke (D1–D7, sada sve ✅) u `ZAHTJEVI.md`, "Riješeno 9. avgusta: R4b". Test
+paket: **187 ukupno, 0 padova** — puni paket pokrenut tri puta zaredom bez varijacije.
+K2/R4 (najveći preostali blok od početka retroaktivnog audita) je zatvoren. Preostaje: A*
+(admin GUI) → C5/C8 (klijent GUI) → C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu), i M6/I5
+(spisak potjera, potjernica) kao samostalan zahtjev van obima R4b.
 
 ## Otvoreno pitanje za tebe
 

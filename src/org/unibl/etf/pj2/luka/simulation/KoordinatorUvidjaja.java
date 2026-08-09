@@ -1,5 +1,6 @@
 package org.unibl.etf.pj2.luka.simulation;
 
+import org.unibl.etf.pj2.luka.model.classes.Dok;
 import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
@@ -45,8 +46,9 @@ public class KoordinatorUvidjaja implements Runnable {
     @Override
     public void run() {
         terminal.blokirajSaobracaj();
-        List<BrodThread> odazvane = pozoviPatrole();
+        List<BrodThread> odazvane = new ArrayList<>();
         try {
+            odazvane = pozoviPatrole();
             sacekajDolazakPatrola(odazvane);
 
             long trajanje = trajanjeUvidjaja();
@@ -62,12 +64,39 @@ public class KoordinatorUvidjaja implements Runnable {
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
         } finally {
+            oznaciUcesnikeSudaraZaNapustanje();
             terminal.odblokirajSaobracaj();
             for (BrodThread patrola : odazvane) {
                 if (patrola.getPlovilo() instanceof SluzbenoPlovilo sluzbeno) {
                     sluzbeno.setRotacija(false);
                 }
             }
+            raspetljajPatrole(odazvane);
+        }
+    }
+
+    private void oznaciUcesnikeSudaraZaNapustanje() {
+        for (Plovilo ucesnik : ucesniciSudara) {
+            BrodThread nit = pronadjiNit(ucesnik);
+            if (nit != null) {
+                nit.oznaciKaoUcesnikaSudara();
+            }
+        }
+    }
+
+    private BrodThread pronadjiNit(Plovilo p) {
+        for (BrodThread kandidat : luka.getAktivnaPlovila()) {
+            if (kandidat.getPlovilo() == p) {
+                return kandidat;
+            }
+        }
+        return null;
+    }
+
+    private void raspetljajPatrole(List<BrodThread> odazvane) {
+        for (BrodThread patrola : odazvane) {
+            Dok noviDok = terminal.rezervisiSlobodanDok(patrola.getPlovilo());
+            patrola.zavrsiUvidjaj(noviDok);
         }
     }
 
@@ -88,7 +117,8 @@ public class KoordinatorUvidjaja implements Runnable {
         if (patrola.getPlovilo() instanceof SluzbenoPlovilo sluzbeno) {
             sluzbeno.setRotacija(true);
         }
-        patrola.setZadatak(Zadatak.KA_INCIDENTU);
+        int ciljnoY = incidentY > 0 ? incidentY - 1 : incidentY + 1;
+        patrola.pozoviNaIncident(terminal, incidentX, ciljnoY);
         odazvane.add(patrola);
     }
 
