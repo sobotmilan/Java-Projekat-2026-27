@@ -69,11 +69,17 @@ class KoordinatorUvidjajaTest {
         }
     }
 
+    /** Hoda susjednim poljima od ulaza do (x,y) — G3: pomjeriNaPolje() odbija skokove. */
     private static BrodThread postaviUKanalu(Plovilo p, Luka luka, Terminal terminal, int x, int y) {
         BrodThread bt = new BrodThread(p, luka);
         assertTrue(bt.pokusajUciUTerminal(terminal));
-        if (x != 0 || y != Terminal.KOLONA_ULAZ) {
-            assertTrue(bt.pomjeriNaPolje(x, y));
+        while (bt.getX() != x) {
+            int sljedeciX = bt.getX() < x ? bt.getX() + 1 : bt.getX() - 1;
+            assertTrue(bt.pomjeriNaPolje(sljedeciX, bt.getY()));
+        }
+        while (bt.getY() != y) {
+            int sljedeciY = bt.getY() < y ? bt.getY() + 1 : bt.getY() - 1;
+            assertTrue(bt.pomjeriNaPolje(bt.getX(), sljedeciY));
         }
         luka.getAktivnaPlovila().add(bt);
         return bt;
@@ -105,6 +111,11 @@ class KoordinatorUvidjajaTest {
         BrodThread obicno = postaviUKanalu(TestFactory.kontejnerski("OBICNO"), luka, t, Terminal.KANAL_ULAZ, 5);
         BrodThread patrola = postaviUKanalu(TestFactory.tankerVatrogasci("PATROLA"), luka, t, Terminal.KANAL_ULAZ, 4);
         BrodThread uSusjednom = postaviUKanalu(TestFactory.kontejnerski("SUSJED"), luka, susjedni, Terminal.KANAL_ULAZ, 5);
+        // Patrola je pozicionirana direktno (bez stvarne niti). Mora biti PRIVEZAN da bi je
+        // PretragaPatrole/pozoviNaIncident() prepoznali kao dostupnu i stvarno dispečovali
+        // (rotacija, Zadatak.KA_INCIDENTU) — postavljanje direktno na NA_INCIDENTU bi je učinilo
+        // nedostupnom za pretragu (isti filter koji sprečava dvostruko slanje iste patrole).
+        patrola.setZadatak(Zadatak.PRIVEZAN);
 
         Plovilo drugiUcesnikSudara = TestFactory.kontejnerski("DRUGI-UCESNIK");
         KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
@@ -112,6 +123,11 @@ class KoordinatorUvidjajaTest {
                 Terminal.KANAL_ULAZ, 5, privremeniDirektorijum.toFile());
         Thread nit = new Thread(koordinator);
         nit.start();
+
+        // Čim je koordinator stvarno dispečuje (KA_INCIDENTU), simulirati da je odmah stigla —
+        // bez stvarne niti, zadatak nikad organski ne bi sam prešao u NA_INCIDENTU.
+        cekajUslov(() -> patrola.getZadatak() == Zadatak.KA_INCIDENTU, 5_000);
+        patrola.setZadatak(Zadatak.NA_INCIDENTU);
 
         Thread.sleep(200);
 
@@ -138,12 +154,17 @@ class KoordinatorUvidjajaTest {
 
         Plovilo ucesnik1 = TestFactory.kontejnerski("SUDAR-A");
         Plovilo ucesnik2 = TestFactory.tanker("SUDAR-B");
-        postaviUKanalu(TestFactory.tankerVatrogasci("PATROLA-BIN"), luka, t, Terminal.KANAL_ULAZ, 4);
+        BrodThread patrolaBin = postaviUKanalu(TestFactory.tankerVatrogasci("PATROLA-BIN"), luka, t, Terminal.KANAL_ULAZ, 4);
+        patrolaBin.setZadatak(Zadatak.PRIVEZAN);
 
         KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
                 luka, t, List.of(ucesnik1, ucesnik2), Terminal.KANAL_ULAZ, 5, privremeniDirektorijum.toFile());
         Thread nit = new Thread(koordinator);
         nit.start();
+
+        cekajUslov(() -> patrolaBin.getZadatak() == Zadatak.KA_INCIDENTU, 5_000);
+        patrolaBin.setZadatak(Zadatak.NA_INCIDENTU);
+
         nit.join(10_000);
         assertFalse(nit.isAlive());
 
@@ -357,6 +378,82 @@ class KoordinatorUvidjajaTest {
 
             assertTrue(bt.isPrivezan(), "Patrola mora moći odgovoriti i na drugi, uzastopni incident.");
             assertFalse(future.isDone());
+        } finally {
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // R4B_GRESKE.md — testovi koji su nedostajali
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("G4/G5: patrola privezana u drugom terminalu logički prelazi na mjesto incidenta "
+            + "i vraća se u pravi (incidentov) terminal, ne u polazni")
+    void patrolaPrelaziIzDrugogTerminalaNaIncidentIVracaSeUPravomTerminalu() throws Exception {
+        Luka luka = TestFactory.luka(2);
+        Terminal terminalPatrole = luka.getTerminali().get(0);
+        Terminal terminalIncidenta = luka.getTerminali().get(1);
+
+        TankerVatrogasci patrolaPlovilo = TestFactory.tankerVatrogasci("PATROLA-PRELAZAK");
+        BrodThread bt = new BrodThread(patrolaPlovilo, luka);
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            cekajUslov(() -> bt.getZadatak() == Zadatak.PRIVEZAN, 10_000);
+            assertSame(terminalPatrole, bt.getTrenutniTerminal(),
+                    "Patrola mora prvo biti privezana u svom (drugom) terminalu.");
+
+            KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
+                    luka, terminalIncidenta, List.of(TestFactory.kontejnerski("SUDAR-X"), TestFactory.tanker("SUDAR-Y")),
+                    Terminal.KANAL_ULAZ, 5, privremeniDirektorijum.toFile());
+            Thread nitKoordinatora = new Thread(koordinator);
+            nitKoordinatora.start();
+            nitKoordinatora.join(15_000);
+            assertFalse(nitKoordinatora.isAlive());
+
+            cekajUslov(() -> bt.getZadatak() == Zadatak.PRIVEZAN, 10_000);
+            assertTrue(bt.isPrivezan(), "Patrola se mora ponovo privezati nakon uviđaja.");
+            assertSame(terminalIncidenta, bt.getTrenutniTerminal(),
+                    "Nakon uviđaja patrola mora biti privezana u terminalu GDJE JE INCIDENT bio "
+                            + "(G5) — ne u polaznom terminalu iz kojeg je logički prešla (G4).");
+            assertFalse(patrolaPlovilo.isRotacija(), "Rotacija mora biti ugašena nakon uviđaja.");
+        } finally {
+            exec.shutdownNow();
+            exec.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    @DisplayName("G1/G5: broj raspoloživih vezova je isti prije dispečovanja patrole i nakon što se "
+            + "ponovo privezala — rezervacija veza ne smije ostati trajno zauzeta")
+    void brojRaspolozivihVezovaOstajeIstiPrijeIPoslijeUvidjaja() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+
+        TankerVatrogasci patrolaPlovilo = TestFactory.tankerVatrogasci("PATROLA-VEZOVI");
+        BrodThread bt = new BrodThread(patrolaPlovilo, luka);
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        Future<?> future = exec.submit(bt);
+        try {
+            cekajUslov(() -> bt.getZadatak() == Zadatak.PRIVEZAN, 10_000);
+            int vezoviPrije = t.getBrojRaspolozivihVezova();
+
+            KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
+                    luka, t, List.of(TestFactory.kontejnerski("SUDAR-VEZ1"), TestFactory.tanker("SUDAR-VEZ2")),
+                    Terminal.KANAL_ULAZ, 5, privremeniDirektorijum.toFile());
+            Thread nitKoordinatora = new Thread(koordinator);
+            nitKoordinatora.start();
+            nitKoordinatora.join(15_000);
+            assertFalse(nitKoordinatora.isAlive());
+
+            cekajUslov(() -> bt.getZadatak() == Zadatak.PRIVEZAN, 10_000);
+            assertTrue(bt.isPrivezan());
+
+            assertEquals(vezoviPrije, t.getBrojRaspolozivihVezova(),
+                    "Broj raspoloživih vezova mora biti isti prije i poslije uviđaja — G1/G5 su "
+                            + "ostavljali rezervaciju veza trajno zauzetom.");
         } finally {
             exec.shutdownNow();
             exec.awaitTermination(5, TimeUnit.SECONDS);

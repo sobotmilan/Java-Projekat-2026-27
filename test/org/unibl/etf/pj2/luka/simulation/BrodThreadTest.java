@@ -801,6 +801,49 @@ class BrodThreadTest {
     // R4a — blokada saobraćaja na terminalu (I3/I4): provjera u pomjeriNaPolje()
     // ------------------------------------------------------------------
 
+    /** Hoda susjednim poljima od doka do (KANAL_IZLAZ, kolona) — G3: pomjeriNaPolje() odbija skokove. */
+    private static void pomjeriUKanalIzlaz(BrodThread bt, int kolona) {
+        while (bt.getX() != Terminal.KANAL_IZLAZ) {
+            int sljedeciX = bt.getX() < Terminal.KANAL_IZLAZ ? bt.getX() + 1 : bt.getX() - 1;
+            assertTrue(bt.pomjeriNaPolje(sljedeciX, bt.getY()));
+        }
+        while (bt.getY() != kolona) {
+            int sljedeciY = bt.getY() < kolona ? bt.getY() + 1 : bt.getY() - 1;
+            assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, sljedeciY));
+        }
+    }
+
+    @Test
+    @DisplayName("G2: pokusajUciUTerminal() ne uspijeva za obično plovilo dok je terminal blokiran, "
+            + "uspijeva nakon odblokade")
+    void pokusajUciUTerminalNeUspijevaKadJeTerminalBlokiran() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("BLOK-ENTRY"), luka);
+
+        t.blokirajSaobracaj();
+        assertFalse(bt.pokusajUciUTerminal(t), "Obično plovilo ne smije ući u blokiran terminal.");
+        assertNull(t.getMatrica()[0][Terminal.KOLONA_ULAZ].getTrenutnoPlovilo());
+
+        t.odblokirajSaobracaj();
+        assertTrue(bt.pokusajUciUTerminal(t), "Nakon odblokade ulazak mora ponovo uspjeti.");
+    }
+
+    @Test
+    @DisplayName("G2: plovilo pod rotacijom smije ući u terminal i kad je blokiran")
+    void pokusajUciUTerminalUspijevaZaPloviloPodRotacijomKadJeTerminalBlokiran() {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        TankerVatrogasci vatrogasci = TestFactory.tankerVatrogasci("BLOK-ENTRY-ROT");
+        vatrogasci.setRotacija(true);
+        BrodThread bt = new BrodThread(vatrogasci, luka);
+
+        t.blokirajSaobracaj();
+
+        assertTrue(bt.pokusajUciUTerminal(t),
+                "Plovilo pod rotacijom mora moći ući i kroz blokiran terminal.");
+    }
+
     @Test
     @DisplayName("R4a: pomjeriNaPolje() ne uspijeva za obično plovilo dok je terminal blokiran")
     void pomjeriNaPoljeNeUspijevaKadJeTerminalBlokiranZaObicnoPlovilo() {
@@ -811,12 +854,13 @@ class BrodThreadTest {
         dok.getLokacija().setTrenutnoPlovilo(p);
 
         BrodThread bt = new BrodThread(p, luka, t, dok);
+        pomjeriUKanalIzlaz(bt, 5);
         t.blokirajSaobracaj();
 
-        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 6),
                 "Obično plovilo ne smije moći da se pomjeri dok je terminal blokiran.");
-        assertSame(p, dok.getLokacija().getTrenutnoPlovilo(), "Plovilo mora ostati na starom polju.");
-        assertNull(t.getMatrica()[Terminal.KANAL_IZLAZ][5].getTrenutnoPlovilo());
+        assertSame(p, t.getMatrica()[Terminal.KANAL_IZLAZ][5].getTrenutnoPlovilo(), "Plovilo mora ostati na starom polju.");
+        assertNull(t.getMatrica()[Terminal.KANAL_IZLAZ][6].getTrenutnoPlovilo());
     }
 
     @Test
@@ -830,11 +874,12 @@ class BrodThreadTest {
         dok.getLokacija().setTrenutnoPlovilo(vatrogasci);
 
         BrodThread bt = new BrodThread(vatrogasci, luka, t, dok);
+        pomjeriUKanalIzlaz(bt, 5);
         t.blokirajSaobracaj();
 
-        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 6),
                 "Plovilo pod rotacijom mora moći da se pomjeri i kroz blokiran terminal.");
-        assertSame(vatrogasci, t.getMatrica()[Terminal.KANAL_IZLAZ][5].getTrenutnoPlovilo());
+        assertSame(vatrogasci, t.getMatrica()[Terminal.KANAL_IZLAZ][6].getTrenutnoPlovilo());
     }
 
     @Test
@@ -847,9 +892,10 @@ class BrodThreadTest {
         dok.getLokacija().setTrenutnoPlovilo(vatrogasci);
 
         BrodThread bt = new BrodThread(vatrogasci, luka, t, dok);
+        pomjeriUKanalIzlaz(bt, 5);
         t.blokirajSaobracaj();
 
-        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 6),
                 "Rotacija mora biti aktivno uključena — sama pripadnost službi nije dovoljna.");
     }
 
@@ -863,11 +909,12 @@ class BrodThreadTest {
         dok.getLokacija().setTrenutnoPlovilo(p);
 
         BrodThread bt = new BrodThread(p, luka, t, dok);
+        pomjeriUKanalIzlaz(bt, 5);
         t.blokirajSaobracaj();
-        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5));
+        assertFalse(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 6));
 
         t.odblokirajSaobracaj();
-        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5),
+        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 6),
                 "Nakon odblokade obično plovilo ponovo smije da se kreće.");
     }
 
@@ -886,10 +933,11 @@ class BrodThreadTest {
         dok.getLokacija().setTrenutnoPlovilo(p);
 
         BrodThread bt = new BrodThread(p, luka, t, dok);
+        pomjeriUKanalIzlaz(bt, 5);
         t.blokirajSaobracaj();
 
         ExecutorService exec = Executors.newSingleThreadExecutor();
-        Future<Boolean> future = exec.submit(() -> bt.pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, 5, 50L));
+        Future<Boolean> future = exec.submit(() -> bt.pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, 6, 50L));
         try {
             Thread.sleep(10_500);
             assertFalse(future.isDone(),
@@ -909,10 +957,16 @@ class BrodThreadTest {
     // D5 — determinizam sudara: injektovan Random + mutabilna vjerovatnoća/trajanje uviđaja
     // ------------------------------------------------------------------
 
-    /** Postavlja bt na KANAL_IZLAZ i drugog na KANAL_ULAZ, istu kolonu — konfiguracija mimoilaženja. */
+    /**
+     * Postavlja bt na KANAL_IZLAZ i drugog na KANAL_ULAZ, istu kolonu — konfiguracija mimoilaženja.
+     * Hoda susjednim poljima (G3: pomjeriNaPolje() sada odbija skokove), ne teleportuje se.
+     */
     private static Plovilo pripremiMimoilazenje(BrodThread bt, Terminal t, int kolona, String imoDrugog) {
         assertTrue(bt.pokusajUciUTerminal(t));
-        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, kolona));
+        assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 0));
+        for (int y = 1; y <= kolona; y++) {
+            assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, y));
+        }
         Plovilo drugi = TestFactory.kontejnerski(imoDrugog);
         t.getMatrica()[Terminal.KANAL_ULAZ][kolona].setTrenutnoPlovilo(drugi);
         return drugi;
@@ -1012,7 +1066,10 @@ class BrodThreadTest {
             BrodThread bt = new BrodThread(TestFactory.kontejnerski("D5-5"), luka);
             bt.setGeneratorSudara(new Random(5));
             assertTrue(bt.pokusajUciUTerminal(t));
-            assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 5));
+            assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, 0));
+            for (int y = 1; y <= 5; y++) {
+                assertTrue(bt.pomjeriNaPolje(Terminal.KANAL_IZLAZ, y));
+            }
 
             assertNull(bt.provjeriSudar(), "Bez drugog plovila u susjednoj traci nema sudara.");
         } finally {

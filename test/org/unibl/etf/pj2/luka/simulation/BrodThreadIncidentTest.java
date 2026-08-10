@@ -185,8 +185,13 @@ class BrodThreadIncidentTest {
     @DisplayName("Korak 5: patrola na incidentu odustaje i napušta terminal ako niko ne signalizira kraj uviđaja "
             + "(vremensko ograničenje, isti razlog kao KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS)")
     void patrolaOdustajeAkoNikoNeSignaliziraKrajUvidjaja() throws Exception {
-        long staroCekanje = BrodThread.MAX_CEKANJE_KRAJA_UVIDJAJA_MS;
-        BrodThread.MAX_CEKANJE_KRAJA_UVIDJAJA_MS = 300L;
+        // BrodThread.maxCekanjeKrajaUvidjaja() se računa iz KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS
+        // + BrodThread.MAX_TRAJANJE_UVIDJAJA_MS + 5000L (G1) — nema više sopstvenog hardkodovanog
+        // polja, pa se ovdje spuštaju ta dva ulazna sastojka na 0 da bi ukupni budžet bio minimalan (5s).
+        long staroCekanjeDolaska = KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS;
+        long staroTrajanjeMax = BrodThread.MAX_TRAJANJE_UVIDJAJA_MS;
+        KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS = 0L;
+        BrodThread.MAX_TRAJANJE_UVIDJAJA_MS = 0L;
         try {
             Luka luka = TestFactory.luka(1);
             Terminal t = luka.getTerminali().get(0);
@@ -199,8 +204,9 @@ class BrodThreadIncidentTest {
                 bt.pozoviNaIncident(t, Terminal.KANAL_ULAZ, 5);
                 cekajUslov(() -> bt.getZadatak() == Zadatak.NA_INCIDENTU, 10_000);
 
-                // Niko ne poziva zavrsiUvidjaj() — patrola mora sama odustati nakon budžeta.
-                cekajUslov(future::isDone, 10_000);
+                // Niko ne poziva zavrsiUvidjaj() — patrola mora sama odustati nakon budžeta
+                // (minimalno 5000ms, vidi maxCekanjeKrajaUvidjaja()).
+                cekajUslov(future::isDone, 15_000);
                 assertTrue(future.isDone(),
                         "Patrola se ne smije zaglaviti zauvijek bez signala kraja uviđaja.");
                 assertEquals(Zadatak.NAPUSTA, bt.getZadatak(),
@@ -212,7 +218,32 @@ class BrodThreadIncidentTest {
                 exec.awaitTermination(5, TimeUnit.SECONDS);
             }
         } finally {
-            BrodThread.MAX_CEKANJE_KRAJA_UVIDJAJA_MS = staroCekanje;
+            KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS = staroCekanjeDolaska;
+            BrodThread.MAX_TRAJANJE_UVIDJAJA_MS = staroTrajanjeMax;
+        }
+    }
+
+    @Test
+    @DisplayName("G1: maxCekanjeKrajaUvidjaja() je uvijek veći od zbira koordinatorovih budžeta "
+            + "(dolazak patrole + trajanje uviđaja), i računa se iznova pri svakoj promjeni")
+    void maxCekanjeKrajaUvidjajaJeUvijekVeciOdKoordinatorovihBudzeta() {
+        long staroCekanjeDolaska = KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS;
+        long staroTrajanjeMax = BrodThread.MAX_TRAJANJE_UVIDJAJA_MS;
+        try {
+            assertTrue(BrodThread.maxCekanjeKrajaUvidjaja()
+                            > KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS + BrodThread.MAX_TRAJANJE_UVIDJAJA_MS,
+                    "Patrola mora čekati duže nego što koordinatoru maksimalno treba da dođe do "
+                            + "raspetljavanja — inače istekne prije njega i rezervacija veza (G1) ostaje "
+                            + "trajno zauzeta.");
+
+            KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS = 1000L;
+            BrodThread.MAX_TRAJANJE_UVIDJAJA_MS = 2000L;
+            assertEquals(1000L + 2000L + 5000L, BrodThread.maxCekanjeKrajaUvidjaja(),
+                    "Vrijednost se mora računati iznova pri svakom pozivu (isti obrazac kao "
+                            + "maxBlokadaPokusaja()), ne keširati.");
+        } finally {
+            KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS = staroCekanjeDolaska;
+            BrodThread.MAX_TRAJANJE_UVIDJAJA_MS = staroTrajanjeMax;
         }
     }
 }

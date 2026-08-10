@@ -66,12 +66,12 @@ public class KoordinatorUvidjaja implements Runnable {
         } finally {
             oznaciUcesnikeSudaraZaNapustanje();
             terminal.odblokirajSaobracaj();
+            raspetljajPatrole(odazvane);
             for (BrodThread patrola : odazvane) {
                 if (patrola.getPlovilo() instanceof SluzbenoPlovilo sluzbeno) {
                     sluzbeno.setRotacija(false);
                 }
             }
-            raspetljajPatrole(odazvane);
         }
     }
 
@@ -95,8 +95,19 @@ public class KoordinatorUvidjaja implements Runnable {
 
     private void raspetljajPatrole(List<BrodThread> odazvane) {
         for (BrodThread patrola : odazvane) {
+            if (patrola.getTrenutniTerminal() != terminal) {
+                LoggerUtil.logWarning("Patrola " + patrola.getPlovilo().getImoBroj()
+                        + " nije stigla na incident — ne dobija vez u terminalu "
+                        + terminal.getIdTerminala() + ".");
+                patrola.zavrsiUvidjaj(null);
+                continue;
+            }
             Dok noviDok = terminal.rezervisiSlobodanDok(patrola.getPlovilo());
-            patrola.zavrsiUvidjaj(noviDok);
+            if (!patrola.zavrsiUvidjaj(noviDok) && noviDok != null) {
+                terminal.otkaziRezervaciju(noviDok);
+                LoggerUtil.logWarning("Patrola " + patrola.getPlovilo().getImoBroj()
+                        + " je odustala prije kraja uviđaja — rezervacija veza otkazana.");
+            }
         }
     }
 
@@ -140,6 +151,13 @@ public class KoordinatorUvidjaja implements Runnable {
 
     private boolean stiglaPored(BrodThread patrola) {
         if (patrola.getTrenutniTerminal() != terminal) {
+            return false;
+        }
+        // Ne samo fizička pozicija — patrola mora stvarno biti u Zadatak.NA_INCIDENTU, inače
+        // zavrsiUvidjaj() (koji upravo tu vrijednost provjerava kao svoj guard) može stići prije
+        // nego što nit patrole izvrši taj prelaz (pozicija se ažurira nekoliko instrukcija ranije
+        // nego zadatak), pa bi signal bio nečujno odbačen i patrola bi zauvijek čekala.
+        if (patrola.getZadatak() != Zadatak.NA_INCIDENTU) {
             return false;
         }
         int px = patrola.getX();

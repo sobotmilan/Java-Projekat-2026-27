@@ -64,8 +64,6 @@ public class BrodThread implements Runnable {
     public static volatile long MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 3000L;
     public static volatile long MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 5000L;
 
-    public static volatile long MAX_CEKANJE_KRAJA_UVIDJAJA_MS = 20000L;
-
     /** Plovilo kojim ova nit upravlja. */
     private final Plovilo plovilo;
 
@@ -172,6 +170,8 @@ public class BrodThread implements Runnable {
                 }
                 this.zadatak = Zadatak.NAPUSTA;
                 napustiTerminal();
+            } else if (this.sudarMoraNapustiti) {
+                log("Napustio luku — učestvovao je u sudaru.");
             } else {
                 log("Obišao sve terminale i napustio luku — nema slobodnih vezova.");
             }
@@ -283,14 +283,15 @@ public class BrodThread implements Runnable {
         this.sudarMoraNapustiti = true;
     }
 
-    void zavrsiUvidjaj(Dok noviDok) {
+    boolean zavrsiUvidjaj(Dok noviDok) {
         synchronized (parkLock) {
             if (this.zadatak != Zadatak.NA_INCIDENTU) {
-                return;
+                return false;
             }
             this.dokPoUvidjaju = noviDok;
             this.zadatak = noviDok != null ? Zadatak.KA_DOKU : Zadatak.NAPUSTA;
             parkLock.notifyAll();
+            return true;
         }
     }
 
@@ -302,6 +303,9 @@ public class BrodThread implements Runnable {
      * @return {@code true} ako je ulazna ćelija bila slobodna i plovilo je uspješno ušlo.
      */
     public boolean pokusajUciUTerminal(Terminal terminal) {
+        if (!terminal.smijeProci(this.plovilo)) {
+            return false;
+        }
         synchronized (terminal) {
             if (terminal.getMatrica()[0][Terminal.KOLONA_ULAZ].getTrenutnoPlovilo() == null) {
                 terminal.getMatrica()[0][Terminal.KOLONA_ULAZ].setTrenutnoPlovilo(this.plovilo);
@@ -632,24 +636,57 @@ public class BrodThread implements Runnable {
     }
 
     private void predjiLogickiUTerminal(Terminal ciljniTerminal, long korak) throws InterruptedException {
+        Terminal stariTerminal = this.trenutniTerminal;
+        int stariX = this.x;
+        int stariY = this.y;
+
         oslobodiTrenutnoPolje();
+
         if (!pokusajUciUTerminal(ciljniTerminal) && !udjiUTerminal(ciljniTerminal)) {
+            LoggerUtil.logWarning("Patrola " + plovilo.getImoBroj() + " ne moze uci u terminal "
+                    + ciljniTerminal.getIdTerminala() + ".");
+            if (!vratiNaPolje(stariTerminal, stariX, stariY)) {
+                LoggerUtil.logError("Patrola " + plovilo.getImoBroj()
+                        + " je izgubila poziciju u luci.",
+                        new IllegalStateException("Plovilo bez terminala"));
+            }
             return;
         }
         sidjiDoKanala(korak);
     }
 
+    private boolean vratiNaPolje(Terminal t, int px, int py) {
+        if (t == null || px < 0 || py < 0) {
+            return false;
+        }
+        synchronized (t) {
+            Polje p = t.getMatrica()[px][py];
+            if (p.getTrenutnoPlovilo() != null) {
+                return false;
+            }
+            p.setTrenutnoPlovilo(this.plovilo);
+        }
+        this.trenutniTerminal = t;
+        this.x = px;
+        this.y = py;
+        return true;
+    }
+
+    private boolean pomjeriSeURed(int ciljniRed, long korak) throws InterruptedException {
+        while (this.x != ciljniRed) {
+            int sljedeciX = this.x < ciljniRed ? this.x + 1 : this.x - 1;
+            if (!pomjeriSaCekanjem(sljedeciX, this.y, korak)) {
+                return false;
+            }
+            Thread.sleep(korak);
+        }
+        return true;
+    }
+
     private boolean napredujKaPolju(int ciljX, int ciljY, long korak) throws InterruptedException {
-        if (this.x == 0) {
-            if (!pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, this.y, korak)) {
-                return false;
-            }
-            Thread.sleep(korak);
-        } else if (this.x == 3) {
-            if (!pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak)) {
-                return false;
-            }
-            Thread.sleep(korak);
+        int traka = (ciljY > this.y) ? Terminal.KANAL_ULAZ : Terminal.KANAL_IZLAZ;
+        if (!pomjeriSeURed(traka, korak)) {
+            return false;
         }
 
         while (this.y != ciljY) {
@@ -660,10 +697,7 @@ public class BrodThread implements Runnable {
             Thread.sleep(korak);
         }
 
-        if (this.x != ciljX) {
-            return pomjeriSaCekanjem(ciljX, this.y, korak);
-        }
-        return true;
+        return pomjeriSeURed(ciljX, korak);
     }
 
     private boolean vratiSeNaDok() throws InterruptedException {
@@ -689,7 +723,7 @@ public class BrodThread implements Runnable {
     }
 
     private void cekajKrajUvidjaja() throws InterruptedException {
-        long krajnjeVrijeme = System.currentTimeMillis() + MAX_CEKANJE_KRAJA_UVIDJAJA_MS;
+        long krajnjeVrijeme = System.currentTimeMillis() + maxCekanjeKrajaUvidjaja();
         synchronized (parkLock) {
             while (this.zadatak == Zadatak.NA_INCIDENTU) {
                 long preostalo = krajnjeVrijeme - System.currentTimeMillis();
@@ -752,6 +786,12 @@ public class BrodThread implements Runnable {
     boolean pomjeriNaPolje(int targetX, int targetY) {
         Terminal t = this.trenutniTerminal;
         if (t == null || this.x < 0 || this.y < 0) {
+            return false;
+        }
+        if (Math.abs(targetX - this.x) + Math.abs(targetY - this.y) != 1) {
+            LoggerUtil.logError("Pokusaj skoka sa (" + this.x + "," + this.y + ") na ("
+                    + targetX + "," + targetY + ") — plovilo " + plovilo.getImoBroj(),
+                    new IllegalArgumentException("Polja nisu susjedna"));
             return false;
         }
         if (!t.smijeProci(this.plovilo)) {
@@ -831,6 +871,10 @@ public class BrodThread implements Runnable {
      */
     private static int maxBlokadaPokusaja() {
         return (int) Math.max(1, (MAX_TRAJANJE_UVIDJAJA_MS * 2) / CEKANJE_MS);
+    }
+
+    public static long maxCekanjeKrajaUvidjaja() {
+        return KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS + MAX_TRAJANJE_UVIDJAJA_MS + 5000L;
     }
 
     /**

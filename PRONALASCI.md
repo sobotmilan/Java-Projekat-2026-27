@@ -139,6 +139,71 @@ Regresioni test `BrodThreadTest.vezPostajeRaspolozivIPoRezervacijiNakonNormalnog
 normalno privezivanje i `zatraziNapustanje()` (bez incidenta), provjerava da
 `getBrojRaspolozivihVezova()` poslije napuštanja odmah opet iznosi 30, ne 29.
 
+### K7 — Svjesna odluka: redoslijed gašenja rotacije naspram povratka patrole (9. avgust, revizija)
+
+Nalaz iz konsolidovane revizije (`R4B_GRESKE.md`, G7). `KoordinatorUvidjaja.run()`-ov `finally`
+blok je gasio rotaciju odazvanih patrola **prije** `raspetljajPatrole()` (poziva koji budi patrolu
+preko `zavrsiUvidjaj()` da krene ka novom doku ili napusti). Redoslijed je promijenjen —
+`raspetljajPatrole()` sada ide prije gašenja rotacije.
+
+Bitno je reći šta ova izmjena **ne** rješava potpuno: `raspetljajPatrole()` samo *budi* patrolinu
+nit (sinhrono, brzo) — stvarni fizički povratak do novog doka (`BrodThread.vratiSeNaDok()`) se
+odvija asinhrono, u patrolinoj sopstvenoj niti, **nakon** što `finally` blok (uključujući i
+gašenje rotacije) već završi. To znači da patrola i dalje provede najveći dio povratnog puta bez
+rotacije, bez obzira na redoslijed unutar `finally`-ja.
+
+Zašto je ovo i dalje prihvatljivo, ne prava popravka: u trenutku kad povratak počne, blokada NA
+TOM terminalu je već skinuta (`odblokirajSaobracaj()` je pozvan ranije u istom bloku) — rotacija
+tokom povratka nije potrebna kao izuzeće od blokade, samo bi dala prioritet u odnosu na obično
+plovilo (R5), što specifikacija ne traži za povratni put. Rizik koji ostaje, i koji ova izmjena
+ne uklanja: ako se **novi** sudar na **istom** terminalu desi baš u tom prozoru (patrola još hoda
+ka doku, novi `KoordinatorUvidjaja` odmah zove `blokirajSaobracaj()`), patrola se zaustavi kao
+obično plovilo i ostaje zaglavljena do isteka `maxBlokadaPokusaja()` budžeta u
+`pomjeriSaCekanjem()` (ne zauvijek — taj budžet postoji upravo za ovakve slučajeve — ali odustaje
+od povratka na dok umjesto da priđe s prioritetom). Uzastopni sudari na istom terminalu u tako
+kratkom prozoru su rijetki; svjesno se ne rješava dodatnim mehanizmom (npr. čekanje da patrola
+stvarno stigne pre gašenja rotacije bi zahtijevalo da koordinator blokira na tuđoj niti, kršeći
+D4) dok se ne pokaže da je stvarni problem u praksi.
+
+### K8 — Trka između "stigla" (pozicija) i "spremna" (zadatak) je nečujno gutala signal kraja dolaska — ✅ RIJEŠENO (9. avgust)
+
+Otkriveno empirijski, ne čitanjem koda: nakon G7 popravke, `KoordinatorUvidjajaTest.
+sluzbenoPloviloSeVracaNaSlobodanDokNakonUvidjajaIRotacijaSeGasi` je u ponovljenim izolovanim
+pokretanjima (15 uzastopnih) pao **5 od 15 puta** (33%) sa `expected: <PRIVEZAN> but was:
+<NA_INCIDENTU>` — patrola bi zauvijek ostala zaglavljena na incidentu. Ovo je konkretno ono na
+šta upozorava "Redoslijed" u `R4B_GRESKE.md": jedan zeleni prolaz ne isključuje ovakvu grešku, a
+33% stopa pada je previsoka da bi bila slučajnost — potvrđeno ponovnim pokretanjem istog testa
+20× nakon popravke, 0 padova.
+
+Uzrok — klasična trka između dva različita signala "da li je patrola stigla":
+`KoordinatorUvidjaja.sacekajDolazakPatrola()`/`stiglaPored()` je provjeravala samo **fizičku
+poziciju** (`getX()`/`getY()`), dok `BrodThread.zavrsiUvidjaj()` prihvata poziv samo ako je
+`zadatak == Zadatak.NA_INCIDENTU`. U `otidjiNaIncident()`, pozicija se ažurira (kroz
+`napredujKaPolju()`) **prije** nego što se `this.zadatak = Zadatak.NA_INCIDENTU;` izvrši — dvije
+odvojene linije, ne atomarna operacija. Ako koordinatorova provjera stigne baš u tom procjepu
+(pozicija već tačna, zadatak još nije), `sacekajDolazakPatrola()` zaključi da je patrola stigla i
+odmah nastavi (uviđaj je kratak u testovima, ~50ms), stigne do `raspetljajPatrole()` i pozove
+`zavrsiUvidjaj()` — čiji guard u tom trenutku još vidi stari zadatak (`KA_INCIDENTU`), odbija
+poziv kao no-op. Tek nakon toga patrolina nit konačno upiše `NA_INCIDENTU` i uđe u
+`cekajKrajUvidjaja()` — čekajući signal koji se **već desio i bio odbačen**. Koordinator je
+gotov, niko drugi neće ponovo pozvati `zavrsiUvidjaj()`; patrola čeka do sopstvenog
+`maxCekanjeKrajaUvidjaja()` budžeta (G1: `MAX_CEKANJE_DOLASKA_MS + MAX_TRAJANJE_UVIDJAJA_MS +
+5000`, sa podrazumijevanim/neizmijenjenim `MAX_CEKANJE_DOLASKA_MS` to je 20+ sekundi) — mnogo
+duže nego što ijedan test čeka.
+
+Popravka: `stiglaPored()` sada **prvo** provjerava `patrola.getZadatak() ==
+Zadatak.NA_INCIDENTU`, tek onda poziciju. Ovim se garantuje da koordinator nikad ne pređe u fazu
+raspetljavanja dok patrolina nit stvarno ne upiše `NA_INCIDENTU` — u trenutku kad `zavrsiUvidjaj()`
+konačno bude pozvan, guard ga sigurno prihvata (ništa drugo ne mijenja `zadatak` u međuvremenu).
+Bezbjedno je i ako patrolina nit u međuvremenu i sama uđe u `cekajKrajUvidjaja()` prije poziva —
+`while (zadatak == NA_INCIDENTU)` provjerava uslov pri ulasku u sinhronizovani blok, nema
+propuštenog signala bez obzira na redoslijed (klasičan "provjeri-pa-čekaj" umjesto "čekaj-pa-nadaj
+se notify-ju").
+
+Ovaj tip greške (provjera stanja preko dva različita, nezavisno ažurirana polja) je vrijedan
+opšti podsjetnik za ostatak `KoordinatorUvidjaja`/`BrodThread` interakcije — bilo gdje gdje jedna
+strana čita poziciju a druga zadatak kao uslov, isti obrazac trke je moguć.
+
 ### S1 — Duplirano knjigovodstvo vezova — ✅ RIJEŠENO (4. avgust)
 
 `Luka.brojSlobodnihVezova` je bila `Map<Terminal, AtomicInteger>` popunjena nulama
