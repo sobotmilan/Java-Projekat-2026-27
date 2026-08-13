@@ -2,7 +2,7 @@
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
 Stanje: 13. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica — vidi "Riješeno 13. avgusta" ispod).
-Test paket: 207 ukupno, 0 pada, 0 ignorisano.
+Test paket: 208 ukupno, 0 pada, 0 ignorisano.
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -79,7 +79,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | I2 | Najbliža obalska straža, carina i vatrogasci pod rotacijom | DONE — `PretragaPatrole.najblizaPatrola(..., Class)` (Korak 2), poziva ga `KoordinatorUvidjaja.pozoviPatrole()` za svaku od tri službe pojedinačno |
 | I3 | Blokada saobraćaja na terminalu, uviđaj 3–10s | DONE — `KoordinatorUvidjaja` (Korak 3) zove `blokirajSaobracaj()`/`odblokirajSaobracaj()` i uspavljuje se na slučajno trajanje iz `MIN/MAX_TRAJANJE_UVIDJAJA_MS` |
 | I4 | Ostali terminali rade normalno | DONE — blokada je po instanci `Terminal`-a, demonstrirano testom (`KoordinatorUvidjajaTest`) da susjedni terminal ostaje neblokiran |
-| I5 | Potjernica: pratnja ka izlazu, uviđaj 3–5s, saobraćaj radi | DONE — `BrodThread.provjeriPotjernicu()`/`pokreniPotjernicu()`/`zavrsiPotjernicu()` (vidi "Riješeno 13. avgusta" ispod); terminal se nikad ne blokira, za razliku od I3 |
+| I5 | Potjernica: pratnja ka izlazu, uviđaj 3–5s, saobraćaj radi | DONE — `BrodThread.provjeriPotjernicu()`/`pokreniPotjernicu()` (vidi "Riješeno 13. avgusta" i "Ispravke 13. avgusta (code review)" ispod); terminal se nikad ne blokira, za razliku od I3. **Svjesna odluka o "pratnji":** oba plovila (obalska straža i traženo) napuštaju terminal nezavisno, svako svojom putanjom kroz postojeći `napustiTerminal()` — traženo plovilo ne prati obalsku stražu ćeliju po ćeliju. Specifikacija doslovno traži da meta "prati brod obalske straže ka izlazu", ali doslovno praćenje pozicije druge, nezavisne niti korak-po-korak je netrivijalno (zahtijevalo bi novu rutu kretanja koja prati poziciju druge niti u realnom vremenu) i ne mijenja nijedan mjerljiv ishod — oba plovila i dalje napuštaju terminal, obalska straža je pod rotacijom cijelo vrijeme, evidencija sadrži oba. Odluka je da se to ne implementira sada; vrijeme je bolje uloženo u preostale GUI zahtjeve (A*/C5/C7/C8). |
 | I6 | Evidencija: učesnici, vrijeme, fotografije | DONE — `KoordinatorUvidjaja` konstruiše `Incident` sa stvarnim učesnicima sudara i odazvanim patrolama nakon svakog uviđaja |
 | I7 | Binarni fajl po slučaju, u `user.home` | DONE — `KoordinatorUvidjaja` poziva `incident.sacuvaj()` na kraju uviđaja; integracioni test provjerava stvaran fajl u `user.home` |
 | I8 | Učesnici napuštaju terminal poslije uviđaja | DONE — Korak 5: `BrodThread.udjiULuku()` presreće učesnike sudara na tačci uspješnog privezivanja i preusmjerava ih na `napustiTerminal()` umjesto privezivanja |
@@ -564,6 +564,48 @@ direktorijum, a nit se pravi mnogo prije nego što se zna hoće li do potjernice
 - Test paket: **192 → 207** (15 novih kroz sva četiri koraka: 7 `SpisakPotjeraUtilTest` + 4
   detekcija + 3 pratnja/blokada + 1 evidencija, 0 novih padova). Puni paket pokrenut tri puta
   zaredom nakon svih koraka — bez varijacije.
+
+## Ispravke 13. avgusta (code review, `I5_PREGLED.md`)
+
+Code review nakon prve verzije I5 (commit `c794897`) je otkrio jedan nalaz koji blokira merge
+(P1) i jedan manji nalaz o dupliranom stanju (P2); P3 (doslovno praćenje pozicije) je gore
+dokumentovan kao svjesna odluka, ne popravka.
+
+**P1 — trajanje uviđaja i cjelina potjernice zavisile su od poziva koji je slučajno tačan.**
+`pokreniPotjernicu()` je samo postavljao stanje i vraćao se; stvarni `Thread.sleep()`/upis
+evidencije/napuštanje terminala su bili u zasebnoj `zavrsiPotjernicu()`, pozvanoj isključivo iz
+`udjiULuku()`-ove grane "ne mogu doći do doka". To je (a) mjerilo trajanje uviđaja od pogrešne
+tačke (par metoda kasnije nego trenutak detekcije) i (b) učinilo cijeli mehanizam krhkim — kad
+bi ikad zatrebalo pozvati detekciju iz drugog konteksta (npr. plovilo koje je već privezano pa
+probuđeno), evidencija se nikad ne bi upisala niti rotacija ugasila. **Popravka:**
+`pokreniPotjernicu()` je sad samodovoljna — radi buđenje mete, spavanje 3–5s, upis evidencije i
+napuštanje terminala u jednom mjestu, bez oslanjanja na pozivaoca; `zavrsiPotjernicu()` obrisana.
+Jedna namjerna razlika od prijedloga iz `I5_PREGLED.md`: grana `if (this.naPratnji)` u
+`udjiULuku()` je zadržana (samo bez poziva `zavrsiPotjernicu()`) jer bi njeno potpuno brisanje
+pustilo petlju da nastavi na `idx++` i pokuša naredni terminal kao da je ovaj bio privremeno pun
+— plovilo koje je `pokreniPotjernicu()` već fizički izvela iz luke bi se pokušalo ponovo uvesti
+kroz sljedeći terminal. Test `pokreniPotjernicuRadiSamostalnoBezObziraOdakleJePozvana`
+(`BrodThreadPotjernicaTest`) poziva `pokreniPotjernicu()` direktno na već privezanoj,
+"probuđenoj" obalskoj straži (izvan `udjiULuku()` konteksta) i provjerava da evidencija i dalje
+nastaje i rotacija se gasi.
+
+**P2 — `Zadatak.PRACENJE` se postavljao ali nigdje nije čitan (isti obrazac kao K8).** Dva
+polja su opisivala "obalska straža je u potjeri": novi `Zadatak.PRACENJE` i postojeći `boolean
+naPratnji`. Za razliku od K8 (gdje su oba polja zaista opisivala isto trenutno stanje i njihovo
+neatomarno ažuriranje je bilo prava trka), ovdje polja imaju različit vijek trajanja:
+`pokreniPotjernicu()` na kraju postavlja `zadatak = NAPUSTA`, dok se `naPratnji` ne gasi nikad
+(namjerno — koristi ga `run()`-ov završni log koji se izvršava tek pošto se cijela potjernica,
+uključujući napuštanje terminala, već desila, dakle **poslije** te posljednje promjene
+`zadatak`-a). Zbog toga zamjena `naPratnji` sa `zadatak == PRACENJE` svuda (prva opcija
+predložena u `I5_PREGLED.md`) kvari baš tu log poruku — u trenutku provjere `zadatak` je već
+`NAPUSTA`, ne `PRACENJE`. Odabrana je druga ponuđena opcija: `Zadatak.PRACENJE` obrisan iz enuma,
+`naPratnji` ostaje jedini izvor istine za "da li je ovo plovilo bilo u potjeri" (obalska straža
+tokom same potjere nema poseban `zadatak`, samo `KA_DOKU` do trenutka kad `pokreniPotjernicu()`
+eksplicitno postavi `NAPUSTA`). Ne dodaje se JavaDoc na `POD_PRATNJOM` (jedina preostala nova
+vrijednost enuma) — stoji izričita instrukcija projekta da se novi kod ne dokumentuje JavaDoc-om.
+
+- Test paket: **207 → 208** (1 novi test za P1, 0 novih padova). Puni paket pokrenut tri puta
+  zaredom nakon ovih ispravki — bez varijacije.
 
 ## Otvoreni nalazi (nisu bagovi danas, postaju bagovi kasnije)
 

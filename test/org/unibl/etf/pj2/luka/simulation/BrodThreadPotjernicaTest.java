@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.unibl.etf.pj2.luka.model.classes.Dok;
 import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
@@ -284,6 +285,42 @@ class BrodThreadPotjernicaTest {
             exec.shutdownNow();
             exec.awaitTermination(5, TimeUnit.SECONDS);
         }
+    }
+
+    @Test
+    @DisplayName("P1 (I5_PREGLED.md): pokreniPotjernicu() je samodovoljna — radi ispravno pozvana "
+            + "direktno na već privezanoj obalskoj straži, ne samo tokom ulaska u luku")
+    void pokreniPotjernicuRadiSamostalnoBezObziraOdakleJePozvana() throws Exception {
+        Luka luka = TestFactory.luka(1);
+        Terminal t = luka.getTerminali().get(0);
+        Dok dok = t.getDokovi().get(0);
+
+        Plovilo trazenoPlovilo = TestFactory.kontejnerski("TRAZENI-P1");
+        TankerObalskaStraza obalskoPlovilo = obalskaStraza("P1", null);
+        dok.getLokacija().setTrenutnoPlovilo(obalskoPlovilo);
+        BrodThread obalskaNit = new BrodThread(obalskoPlovilo, luka, t, dok);
+        obalskaNit.setZadatak(Zadatak.PRIVEZAN);
+
+        assertFalse(obalskoPlovilo.isRotacija());
+
+        obalskaNit.pokreniPotjernicu(obalskoPlovilo, trazenoPlovilo);
+
+        assertFalse(obalskoPlovilo.isRotacija(),
+                "Rotacija se pali na početku potjernice i mora biti ugašena kad pokreniPotjernicu() "
+                        + "završi — bez obzira na to odakle je pozvana.");
+        assertEquals(Zadatak.NAPUSTA, obalskaNit.getZadatak());
+
+        File[] fajlovi = fajloviIncidenta();
+        assertNotNull(fajlovi);
+        assertEquals(1, fajlovi.length,
+                "Evidencija se mora upisati i kad potjernicu pokrene već privezana (probuđena) "
+                        + "obalska straža, ne samo ona koja tek ulazi u luku.");
+
+        Incident ucitan = Incident.ucitaj(fajlovi[0]);
+        assertNotNull(ucitan);
+        assertEquals(TipIncidenta.POTJERNICA, ucitan.getTip());
+        assertEquals(List.of(trazenoPlovilo), ucitan.getUcesniciSudara());
+        assertEquals(List.of(obalskoPlovilo), ucitan.getOdazvanaSluzbenaPlovila());
     }
 
     // ------------------------------------------------------------------

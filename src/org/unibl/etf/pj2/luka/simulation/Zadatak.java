@@ -23,6 +23,5 @@ public enum Zadatak {
     NA_INCIDENTU,
     /** Plovilo se kreće ka izlazu iz terminala i napušta luku.*/
     NAPUSTA,
-    PRACENJE,
     POD_PRATNJOM
 }

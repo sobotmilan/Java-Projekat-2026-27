@@ -250,8 +250,10 @@ public class BrodThread implements Runnable {
             } else {
                 t.otkaziRezervaciju(rezervisan);
                 if (this.naPratnji) {
+                    // pokreniPotjernicu() je već odradio cijeli izlazak (uključujući napustiTerminal()) —
+                    // ovdje se samo prekida petlja, inače bi idx++ pokušao naredni terminal kao da je ovaj
+                    // bio privremeno pun, umjesto da prihvati da je plovilo trajno napustilo luku.
                     log("Obalska straža na pratnji — napušta terminal " + (idx + 1) + ".");
-                    zavrsiPotjernicu();
                     return false;
                 }
                 log("Ne može doći do veza u terminalu " + (idx + 1) + ", nastavlja dalje.");
@@ -1022,15 +1024,25 @@ public class BrodThread implements Runnable {
         return null;
     }
 
-    private void pokreniPotjernicu(ObalskaStraza obalskaStraza, Plovilo trazeno) {
+    void pokreniPotjernicu(ObalskaStraza obalskaStraza, Plovilo trazeno) throws InterruptedException {
         obalskaStraza.setRotacija(true);
-        this.zadatak = Zadatak.PRACENJE;
         this.naPratnji = true;
         this.trazenoPlovilo = trazeno;
 
         BrodThread trazenaNit = pronadjiNit(trazeno);
         if (trazenaNit != null) {
             trazenaNit.pozoviNaPratnju();
+        }
+
+        long trajanje = trajanjePotjernice();
+        Thread.sleep(trajanje);
+        sacuvajEvidencijuPotjernice(trajanje);
+
+        this.zadatak = Zadatak.NAPUSTA;
+        napustiTerminal();
+
+        if (this.plovilo instanceof SluzbenoPlovilo sluzbeno) {
+            sluzbeno.setRotacija(false);
         }
     }
 
@@ -1052,21 +1064,8 @@ public class BrodThread implements Runnable {
         return min + ThreadLocalRandom.current().nextLong(max - min + 1);
     }
 
-    private void zavrsiPotjernicu() throws InterruptedException {
-        long trajanje = trajanjePotjernice();
-        Thread.sleep(trajanje);
-
-        sacuvajEvidencijuPotjernice(trajanje);
-
-        this.zadatak = Zadatak.NAPUSTA;
-        napustiTerminal();
-
-        if (this.plovilo instanceof SluzbenoPlovilo sluzbeno) {
-            sluzbeno.setRotacija(false);
-        }
-    }
-
     private void sacuvajEvidencijuPotjernice(long trajanje) {
+        // Mora se pozvati prije napustiTerminal() — poslije njega je trenutniTerminal null i idTerminala bi ispao -1.
         Terminal t = this.trenutniTerminal;
         int idTerminala = t != null ? t.getIdTerminala() : -1;
         Incident incident = new Incident(List.of(this.trazenoPlovilo), List.of(this.plovilo),

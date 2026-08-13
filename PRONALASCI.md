@@ -269,6 +269,63 @@ JavaDoc-a na novom kodu"). Nekoliko mjesta je zahtijevalo odluku koju specifikac
    (`ucesniciSudara` = ko je "kriv", `odazvanaSluzbenaPlovila` = ko se odazvao) umjesto da se
    izmišlja treće polje samo za ovaj slučaj.
 
+### K10 — Potjernica: cjelina zavisila od poziva sa strane, `PRACENJE` bio mrtav duplikat — ✅ RIJEŠENO (13. avgust, code review `I5_PREGLED.md`)
+
+Dva nalaza iz spoljnog pregleda (`I5_PREGLED.md`), oba u istoj oblasti koda kao K9, oba popravljena istog dana.
+
+**P1 (blokirao merge).** `pokreniPotjernicu()` je samo postavljala stanje (rotacija, `naPratnji`,
+buđenje mete) i odmah se vraćala; stvaran `Thread.sleep()` od 3–5s, upis `Incident`-a i fizičko
+napuštanje terminala su bili u zasebnoj `zavrsiPotjernicu()`, pozvanoj **isključivo** iz jedne
+grane `udjiULuku()`-a. Dvije posljedice: (a) trajanje uviđaja se mjerilo od pogrešnog trenutka —
+nekoliko poziva metoda i `otkaziRezervaciju()` kasnije nego stvarni trenutak detekcije; (b) da je
+ikad postojao poziv `provjeriPotjernicu()`/`pokreniPotjernicu()` izvan te jedne grane (npr. za
+plovilo koje je već privezano pa probuđeno), `zavrsiPotjernicu()` se nikad ne bi pozvala —
+rotacija bi ostala trajno upaljena, `Incident` se nikad ne bi upisao. Provjereno da ta konkretna
+putanja danas nije dostižna (`ploviIstocno()`, jedino mjesto koje poziva `provjeriPotjernicu()`,
+ima tačno jednog pozivaoca — `doploviDoDoka()` — koji se poziva tačno jednom, iz `udjiULuku()`;
+`otidjiNaIncident()`/`napredujKaPolju()`, put kojim ide već privezano pa probuđeno plovilo, ne
+prolazi kroz `ploviIstocno()`), ali samodovoljnost je i dalje vrijedna popravka — dvije metode
+koje moraju biti pozvane u tačno određenom redoslijedu, od strane tačno određenog pozivaoca, da bi
+se izbjegla tiha greška, jesu upravo obrazac krhkosti koji je uzrokovao K8.
+
+Popravka: `pokreniPotjernicu()` sad radi kompletan slučaj u jednom mjestu — budi metu, spava
+3–5s, upisuje evidenciju, napušta terminal, gasi rotaciju — bez oslanjanja na to ko je poziva ili
+odakle. `zavrsiPotjernicu()` obrisana. Metoda je promijenjena iz `private` u paket-privatnu da bi
+test mogao direktno provjeriti samodovoljnost, izvan konteksta `udjiULuku()`-a (isti obrazac
+vidljivosti kao `provjeriSudar()`/`provjeriPotjernicu()`). Jedno namjerno odstupanje od
+konkretnog predloga u `I5_PREGLED.md`: predlog je tražio da se grana `if (this.naPratnji)` u
+`udjiULuku()` obriše u cjelini; zadržana je (samo bez poziva `zavrsiPotjernicu()`, jer ta metoda
+više ne postoji), jer bi njeno potpuno brisanje ostavilo petlju da nastavi na `idx++` i pokuša
+naredni terminal — plovilo koje je `pokreniPotjernicu()` već fizički izvela iz luke bi pokušalo
+ponovo ući, ovaj put kroz sljedeći terminal, kao da je prvobitni neuspjeh bio običan "terminal
+privremeno pun". Provjereno testom (treći scenario ispod).
+
+**P2.** `Zadatak.PRACENJE` je postavljan u `pokreniPotjernicu()` ali nigdje čitan — dva polja
+(`zadatak == PRACENJE` i `boolean naPratnji`) opisivala su isto "obalska straža je u potjeri",
+isti obrazac kao K8. Za razliku od K8, ovdje polja nemaju isti vijek trajanja: `naPratnji` mora
+preživjeti do `run()`-ovog završnog logovanja, koje se izvršava **poslije** što `pokreniPotjernicu()`
+već postavi `zadatak = NAPUSTA` na svom kraju — pa direktna zamjena `naPratnji` sa
+`zadatak == PRACENJE` (prva, "dosljednija" opcija iz `I5_PREGLED.md`) kvari baš tu poruku (uvijek
+bi vidjela `NAPUSTA`, ne `PRACENJE`, u trenutku provjere). Odabrana druga ponuđena opcija:
+`Zadatak.PRACENJE` obrisan iz enuma, `naPratnji` ostaje jedini izvor istine za taj log. `POD_PRATNJOM`
+(vrijednost za traženo plovilo, ne za obalsku stražu) ostaje — ona se stvarno čita, u
+`cekajNapustanje()`-ovom uslovu i u `run()`-ovoj grani koja poziva `napustiZbogPratnje()`.
+
+Nov test, `BrodThreadPotjernicaTest.pokreniPotjernicuRadiSamostalnoBezObziraOdakleJePozvana`:
+poziva `pokreniPotjernicu()` direktno na već privezanoj (predokovani konstruktor + ručno
+postavljen `Zadatak.PRIVEZAN`) obalskoj straži, van bilo kakve stvarne navigacije, i provjerava da
+evidencija ipak nastaje i rotacija se ipak gasi — scenario koji je prije popravke tiho propadao
+(kad bi bio dostižan).
+
+**Sitnije iz istog pregleda, namjerno ostavljeno kako jeste:** `I5_PREGLED.md` predlaže spajanje
+`BrodThread.DIREKTORIJUM_INCIDENTA_POTJERNICE` sa hipotetičkim ekvivalentom za obični uviđaj u
+jedno polje, uz napomenu da nije hitno. Nema šta da se spoji — `KoordinatorUvidjaja` prima
+direktorijum kroz konstruktorski parametar (pravi se tek kad je incident već izvjestan), dok
+`BrodThread` nema tu privilegiju (pravi se za svako plovilo na početku simulacije, davno prije
+nego što je poznato hoće li ono ikad učestvovati u potjernici) — vidi K9, odluku 5. Dva različita
+mehanizma injektovanja za dvije stvarno različite okolnosti konstrukcije; primoravanje na
+zajedničko ime bi zamaglilo tu razliku, ne pojasnilo je.
+
 ### S1 — Duplirano knjigovodstvo vezova — ✅ RIJEŠENO (4. avgust)
 
 `Luka.brojSlobodnihVezova` je bila `Map<Terminal, AtomicInteger>` popunjena nulama
