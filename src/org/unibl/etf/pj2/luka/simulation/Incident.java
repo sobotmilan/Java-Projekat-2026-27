@@ -56,6 +56,9 @@ public class Incident implements Serializable {
     /** Redni broj terminala na kojem se incident desio. */
     private final int idTerminala;
 
+    /** Vrsta incidenta (I5) — sudar ili potjernica. */
+    private final TipIncidenta tip;
+
     /**
      * Kreira zapis incidenta. Apsolutne putanje fotografija se izvode automatski iz
      * {@link Plovilo#getFotografija()} svih proslijeđenih plovila u trenutku konstrukcije.
@@ -68,11 +71,17 @@ public class Incident implements Serializable {
      */
     public Incident(List<Plovilo> ucesniciSudara, List<Plovilo> odazvanaSluzbenaPlovila,
                      LocalDateTime vrijeme, long trajanjeUvidjajaMs, int idTerminala) {
+        this(ucesniciSudara, odazvanaSluzbenaPlovila, vrijeme, trajanjeUvidjajaMs, idTerminala, TipIncidenta.SUDAR);
+    }
+
+    public Incident(List<Plovilo> ucesniciSudara, List<Plovilo> odazvanaSluzbenaPlovila,
+                     LocalDateTime vrijeme, long trajanjeUvidjajaMs, int idTerminala, TipIncidenta tip) {
         this.ucesniciSudara = new ArrayList<>(ucesniciSudara);
         this.odazvanaSluzbenaPlovila = new ArrayList<>(odazvanaSluzbenaPlovila);
         this.vrijeme = vrijeme;
         this.trajanjeUvidjajaMs = trajanjeUvidjajaMs;
         this.idTerminala = idTerminala;
+        this.tip = tip;
         this.apsolutnePutanjeFotografija = prikupiApsolutnePutanje();
     }
 
@@ -143,6 +152,10 @@ public class Incident implements Serializable {
      */
     public int getIdTerminala() {
         return idTerminala;
+    }
+
+    public TipIncidenta getTip() {
+        return tip;
     }
 
     /**

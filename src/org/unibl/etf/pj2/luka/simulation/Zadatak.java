@@ -22,5 +22,7 @@ public enum Zadatak {
     /** Plovilo je stiglo na mjesto incidenta i izvršava uviđaj. */
     NA_INCIDENTU,
     /** Plovilo se kreće ka izlazu iz terminala i napušta luku.*/
-    NAPUSTA
+    NAPUSTA,
+    PRACENJE,
+    POD_PRATNJOM
 }

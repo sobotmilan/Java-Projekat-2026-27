@@ -5,11 +5,16 @@ import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Polje;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
+import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
+import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
+import org.unibl.etf.pj2.luka.util.SpisakPotjeraUtil;
 
+import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -64,6 +69,9 @@ public class BrodThread implements Runnable {
     public static volatile long MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 3000L;
     public static volatile long MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 5000L;
 
+    /** Direktorijum u koji se upisuje evidencija potjernice — {@code null} znači podrazumijevani (user.home), testovi ga postavljaju radi izolacije. */
+    public static volatile File DIREKTORIJUM_INCIDENTA_POTJERNICE = null;
+
     /** Plovilo kojim ova nit upravlja. */
     private final Plovilo plovilo;
 
@@ -95,6 +103,9 @@ public class BrodThread implements Runnable {
 
     private volatile Dok dokPoUvidjaju;
     private volatile boolean sudarMoraNapustiti;
+
+    private volatile boolean naPratnji;
+    private volatile Plovilo trazenoPlovilo;
 
     /** Izvor slučajnosti za provjeru sudara — injektabilan preko {@link #setGeneratorSudara(Random)} radi ponovljivih testova (D5). */
     private volatile Random generatorSudara;
@@ -162,6 +173,8 @@ public class BrodThread implements Runnable {
 
                     if (this.zadatak == Zadatak.KA_INCIDENTU) {
                         otidjiNaIncident();
+                    } else if (this.zadatak == Zadatak.POD_PRATNJOM) {
+                        napustiZbogPratnje();
                     }
                     if (this.zadatak == Zadatak.KA_DOKU && vratiSeNaDok()) {
                         continue;
@@ -172,6 +185,8 @@ public class BrodThread implements Runnable {
                 napustiTerminal();
             } else if (this.sudarMoraNapustiti) {
                 log("Napustio luku — učestvovao je u sudaru.");
+            } else if (this.naPratnji) {
+                log("Napustio luku — na pratnji potjernice.");
             } else {
                 log("Obišao sve terminale i napustio luku — nema slobodnih vezova.");
             }
@@ -234,6 +249,11 @@ public class BrodThread implements Runnable {
                 return true;
             } else {
                 t.otkaziRezervaciju(rezervisan);
+                if (this.naPratnji) {
+                    log("Obalska straža na pratnji — napušta terminal " + (idx + 1) + ".");
+                    zavrsiPotjernicu();
+                    return false;
+                }
                 log("Ne može doći do veza u terminalu " + (idx + 1) + ", nastavlja dalje.");
                 napustiTerminal();
                 idx++;
@@ -249,7 +269,7 @@ public class BrodThread implements Runnable {
      */
     private void cekajNapustanje() throws InterruptedException {
         synchronized (parkLock) {
-            while (!moraNapustiti && zadatak != Zadatak.KA_INCIDENTU) {
+            while (!moraNapustiti && zadatak != Zadatak.KA_INCIDENTU && zadatak != Zadatak.POD_PRATNJOM) {
                 parkLock.wait();
             }
         }
@@ -275,6 +295,16 @@ public class BrodThread implements Runnable {
             this.ciljXIncidenta = ciljX;
             this.ciljYIncidenta = ciljY;
             this.zadatak = Zadatak.KA_INCIDENTU;
+            parkLock.notifyAll();
+        }
+    }
+
+    public void pozoviNaPratnju() {
+        synchronized (parkLock) {
+            if (this.zadatak != Zadatak.PRIVEZAN) {
+                return;
+            }
+            this.zadatak = Zadatak.POD_PRATNJOM;
             parkLock.notifyAll();
         }
     }
@@ -476,6 +506,11 @@ public class BrodThread implements Runnable {
                         pokreniUvidjaj(ucesniciSudara);
                     }
                 }
+                Plovilo trazeno = provjeriPotjernicu();
+                if (trazeno != null) {
+                    pokreniPotjernicu((ObalskaStraza) this.plovilo, trazeno);
+                    return false;
+                }
                 Thread.sleep(korak);
             } else {
                 neuspjesi++;
@@ -605,6 +640,15 @@ public class BrodThread implements Runnable {
 
         oslobodiTrenutnoPolje();
         log("Napustio terminal.");
+    }
+
+    private void napustiZbogPratnje() {
+        Terminal t = this.trenutniTerminal;
+        Dok dok = this.trenutniDok;
+        this.trenutniDok = null;
+        if (t != null && dok != null) {
+            t.otkaziRezervaciju(dok);
+        }
     }
 
     private void otidjiNaIncident() throws InterruptedException {
@@ -942,6 +986,98 @@ public class BrodThread implements Runnable {
         Thread nit = new Thread(koordinator, "koordinator-uvidjaja-" + plovilo.getImoBroj());
         nit.setDaemon(true);
         nit.start();
+    }
+
+    Plovilo provjeriPotjernicu() {
+        if (!(this.plovilo instanceof ObalskaStraza obalskaStraza)) {
+            return null;
+        }
+        File spisak = obalskaStraza.getSpisakPotjera();
+        if (spisak == null) {
+            return null;
+        }
+        Set<String> potjernice = SpisakPotjeraUtil.ucitaj(spisak);
+        if (potjernice.isEmpty()) {
+            return null;
+        }
+        Terminal t = this.trenutniTerminal;
+        if (t == null) {
+            return null;
+        }
+        int[][] pomjeraji = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        synchronized (t) {
+            Polje[][] m = t.getMatrica();
+            for (int[] pom : pomjeraji) {
+                int nx = this.x + pom[0];
+                int ny = this.y + pom[1];
+                if (nx < 0 || nx >= m.length || ny < 0 || ny >= m[nx].length) {
+                    continue;
+                }
+                Plovilo kandidat = m[nx][ny].getTrenutnoPlovilo();
+                if (kandidat != null && kandidat != this.plovilo && potjernice.contains(kandidat.getImoBroj())) {
+                    return kandidat;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void pokreniPotjernicu(ObalskaStraza obalskaStraza, Plovilo trazeno) {
+        obalskaStraza.setRotacija(true);
+        this.zadatak = Zadatak.PRACENJE;
+        this.naPratnji = true;
+        this.trazenoPlovilo = trazeno;
+
+        BrodThread trazenaNit = pronadjiNit(trazeno);
+        if (trazenaNit != null) {
+            trazenaNit.pozoviNaPratnju();
+        }
+    }
+
+    private BrodThread pronadjiNit(Plovilo p) {
+        for (BrodThread kandidat : luka.getAktivnaPlovila()) {
+            if (kandidat.getPlovilo() == p) {
+                return kandidat;
+            }
+        }
+        return null;
+    }
+
+    private long trajanjePotjernice() {
+        long min = MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS;
+        long max = MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS;
+        if (max <= min) {
+            return min;
+        }
+        return min + ThreadLocalRandom.current().nextLong(max - min + 1);
+    }
+
+    private void zavrsiPotjernicu() throws InterruptedException {
+        long trajanje = trajanjePotjernice();
+        Thread.sleep(trajanje);
+
+        sacuvajEvidencijuPotjernice(trajanje);
+
+        this.zadatak = Zadatak.NAPUSTA;
+        napustiTerminal();
+
+        if (this.plovilo instanceof SluzbenoPlovilo sluzbeno) {
+            sluzbeno.setRotacija(false);
+        }
+    }
+
+    private void sacuvajEvidencijuPotjernice(long trajanje) {
+        Terminal t = this.trenutniTerminal;
+        int idTerminala = t != null ? t.getIdTerminala() : -1;
+        Incident incident = new Incident(List.of(this.trazenoPlovilo), List.of(this.plovilo),
+                LocalDateTime.now(), trajanje, idTerminala, TipIncidenta.POTJERNICA);
+
+        File dir = DIREKTORIJUM_INCIDENTA_POTJERNICE;
+        if (dir != null) {
+            incident.sacuvaj(dir);
+        } else {
+            incident.sacuvaj();
+        }
     }
 
     /**

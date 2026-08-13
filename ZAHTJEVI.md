@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 9. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni).
-Test paket: 187 ukupno, 0 pada, 0 ignorisano (F2 riješen).
+Stanje: 13. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica — vidi "Riješeno 13. avgusta" ispod).
+Test paket: 207 ukupno, 0 pada, 0 ignorisano.
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -20,7 +20,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | M3 | Kombinacije: kont→OS; kruzer→OS,carina; tanker→OS,carina,vatrogasci | DONE | 6 podklasa |
 | M4 | Rotacija na državnim plovilima | DONE | `SluzbenoPlovilo` (**R1**), `ObalskaStraza`/`Carina`/`Vatrogasci` ga nasljeđuju |
 | M5 | Prioritet vatrogasci > obalska straža > carina | DONE | `getPrioritet()` se čita u `BrodThread.ploviIstocno()` (**R5**) |
-| M6 | Obalska straža nosi fajl sa IMO brojevima za potjernicom | PART | polje postoji, sadržaj se ne čita |
+| M6 | Obalska straža nosi fajl sa IMO brojevima za potjernicom | DONE | `util.SpisakPotjeraUtil.ucitaj(File)` čita i kešira sadržaj (I5, Korak 1) |
 | M7 | Jedinstvena slučajna brzina | DONE | `Plovilo`, test |
 
 ## Terminal i kretanje
@@ -79,7 +79,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | I2 | Najbliža obalska straža, carina i vatrogasci pod rotacijom | DONE — `PretragaPatrole.najblizaPatrola(..., Class)` (Korak 2), poziva ga `KoordinatorUvidjaja.pozoviPatrole()` za svaku od tri službe pojedinačno |
 | I3 | Blokada saobraćaja na terminalu, uviđaj 3–10s | DONE — `KoordinatorUvidjaja` (Korak 3) zove `blokirajSaobracaj()`/`odblokirajSaobracaj()` i uspavljuje se na slučajno trajanje iz `MIN/MAX_TRAJANJE_UVIDJAJA_MS` |
 | I4 | Ostali terminali rade normalno | DONE — blokada je po instanci `Terminal`-a, demonstrirano testom (`KoordinatorUvidjajaTest`) da susjedni terminal ostaje neblokiran |
-| I5 | Potjernica: pratnja ka izlazu, uviđaj 3–5s, saobraćaj radi | TODO — van obima R4b, ostaje kao samostalan zahtjev (spisak potjera se i dalje ne čita, vidi M6) |
+| I5 | Potjernica: pratnja ka izlazu, uviđaj 3–5s, saobraćaj radi | DONE — `BrodThread.provjeriPotjernicu()`/`pokreniPotjernicu()`/`zavrsiPotjernicu()` (vidi "Riješeno 13. avgusta" ispod); terminal se nikad ne blokira, za razliku od I3 |
 | I6 | Evidencija: učesnici, vrijeme, fotografije | DONE — `KoordinatorUvidjaja` konstruiše `Incident` sa stvarnim učesnicima sudara i odazvanim patrolama nakon svakog uviđaja |
 | I7 | Binarni fajl po slučaju, u `user.home` | DONE — `KoordinatorUvidjaja` poziva `incident.sacuvaj()` na kraju uviđaja; integracioni test provjerava stvaran fajl u `user.home` |
 | I8 | Učesnici napuštaju terminal poslije uviđaja | DONE — Korak 5: `BrodThread.udjiULuku()` presreće učesnike sudara na tačci uspješnog privezivanja i preusmjerava ih na `napustiTerminal()` umjesto privezivanja |
@@ -104,7 +104,8 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
    Riješeno 9. avgusta (R4b, "Na kraju") — vidi sekciju ispod. Ovo je bilo jedino namjerno
    odstupanje od specifikacije koje je postojalo u projektu; više ga nema.
 2. ~~**F2 — zaokruživanje.** `Duration.toHours()` reže naniže, pa 90 min = 100 KM.~~ Riješeno, korištena Math.ceil() metoda i princip "plafona" za računanje tarife.
-3. **M6 — spisak potjernica se ne čita.** Fajl se čuva, sadržaj se nikad ne parsira.
+3. ~~**M6 — spisak potjernica se ne čita.** Fajl se čuva, sadržaj se nikad ne parsira.~~ Riješeno
+   13. avgusta (I5, Korak 1) — vidi ispod.
 4. ~~**T1 — properties se ne čita.**~~ Riješeno 5. avgusta — vidi ispod. `TestFactory.luka(n)` i dalje hardkoduje broj terminala, ali to je namjerno (test fabrika), ne proizvodni kod.
 
 ## Redoslijed preostalog rada
@@ -116,8 +117,8 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu)
 
 R4 (R4a+R4b) je bio najveći pojedinačni blok i imao najviše nezatvorenih zahtjeva — svi I1–I8 su
-sada zatvoreni (I5, potjernica, je izuzetak — namjerno van obima R4b, ostaje kao samostalan
-zahtjev za kasnije, vidi napomenu uz I5 u tabeli iznad). `Zadatak`/parkiranje i
+sada zatvoreni (I5, potjernica, je bio izuzetak — namjerno van obima R4b, zatvoren zasebno
+13. avgusta, vidi "Riješeno 13. avgusta" ispod). `Zadatak`/parkiranje i
 `Luka.aktivnaPlovila` su urađeni unaprijed 5. avgusta baš zbog R4, R4a (8. avgust) je dodao
 preostalu infrastrukturu (`Incident`, blokada terminala, `PretragaPatrole`), a R4b (9. avgust) je
 povezao te komade u stvarnu logiku uviđaja u pet koraka — vidi "Riješeno 9. avgusta" ispod za
@@ -507,6 +508,62 @@ odblokiranja, ili raspetljavanje prije oba) bi patrolu na povratku zamrznuo usre
 - Test paket: **166 → 187** (21 novih, 0 novih padova; `sudarUkljucujeDvaPlovila` prešao iz
   jedinog očekivanog pada u zeleno). Puni paket pokrenut tri puta zaredom nakon svih pet koraka
   i "Na kraju" izmjena — bez varijacije.
+
+## Riješeno 13. avgusta: I5 (potjernica) + M6 (čitanje spiska potjera)
+
+Četiri koraka, ovim redom, sa punim paketom pokrenutim prije i poslije svakog (isti obrazac kao
+R4b). Ključna razlika u odnosu na I3/R4b: **terminal se ovdje nikad ne blokira** — potjernica ne
+prekida saobraćaj ostalih plovila, pa cijeli tok radi bez `KoordinatorUvidjaja` (ta klasa nije
+dirana — pratnja ne treba njenu glavnu odgovornost, blokadu i orkestraciju dolaska tri službe).
+
+**Korak 1 — `SpisakPotjeraUtil` (zatvara M6).** Nova klasa u `util`, po uzoru na
+`PropertiesUtil`, ali keširana po putanji fajla (`Map<String, Set<String>>`), ne globalno kao
+`PropertiesUtil` — svaka obalska straža nosi svoj `spisakPotjera`, pa više različitih fajlova
+mora moći koegzistirati u istom test-JVM-u. Čita jedan IMO broj po liniji, preskače prazne linije
+i linije koje počinju sa `#` (komentar), a nedostajući ili nečitljiv fajl ne baca izuzetak —
+loguje upozorenje i vraća prazan skup, isti "tih neuspjeh" obrazac kao ostatak projekta (npr.
+`GeneratorPlovila` kad fotografija ne postoji). `resetujKes()` za testove, isti obrazac kao
+`PropertiesUtil`.
+
+**Korak 2 — detekcija.** `BrodThread.provjeriPotjernicu()` (paket-privatno, isti obrazac
+vidljivosti kao `provjeriSudar()`/`ustupaProlaz()`) radi samo ako plovilo implementira
+`ObalskaStraza` (obična plovila nikad ne ulaze u granu, čak i kad je IMO tražene meta slučajno na
+susjednom polju — provjereno testom). Čita četiri susjedna polja (gore/dolje/lijevo/desno) unutar
+`synchronized(terminal)`, kao i sva ostala čitanja matrice u ovoj klasi (T5). Poziva se iz
+`ploviIstocno()` nakon **svakog** uspješnog koraka (ne samo tokom preticanja, za razliku od
+`provjeriSudar()`) — potjernica mora biti otkrivena čim obalska straža fizički prođe pored
+traženog plovila, bilo u kanalu bilo pored doka, ne samo kad se dvije nesluzbene niti mimoilaze.
+
+**Korak 3 — pratnja ka izlazu.** Dvije nove `Zadatak` vrijednosti: `PRACENJE` (obalska straža) i
+`POD_PRATNJOM` (traženo plovilo). Kad `provjeriPotjernicu()` pronađe metu,
+`pokreniPotjernicu()` pali rotaciju na obalskoj straži, postavlja joj `naPratnji`/`zadatak`, i —
+ako je traženo plovilo trenutno privezano — budi ga preko novog `pozoviNaPratnju()` (isti
+park-ključ obrazac kao `pozoviNaIncident()`, idempotentan istim `PRIVEZAN`-guardom). Nijedna
+strana ne prolazi kroz koordinatora niti drži `synchronized(terminal)` preko čekanja — obalska
+straža jednostavno prekida sopstveni `ploviIstocno()` (`return false`), što je isti mehanizam
+kojim se metoda inače vraća kad joj ponestane pokušaja, samo namjerno izazvan. Traženo plovilo
+ne dobija posebnu "idi ka izlazu" logiku — `napustiZbogPratnje()` samo otkazuje rezervaciju
+njegovog veza, a ostatak (fizički izlazak) radi se ponovnom upotrebom postojećeg
+`napustiTerminal()`, potpuno isto kao svako drugo plovilo koje napušta luku; specifikacija traži
+da meta ode ka izlazu, ne da vizuelno prati baš obalsku stražu ćeliju po ćeliju. Trajanje uviđaja
+(3–5s) čita se iz već postojećih `MIN/MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS` konstanti (dodate 5.
+avgusta, D5, neiskorištene do sada) unutar `zavrsiPotjernicu()` — obično `Thread.sleep()`, van
+bilo kog ključa, pa ne blokira nikog drugog dok traje.
+
+**Korak 4 — evidencija (I6/I7 za potjernicu).** Ponovo upotrijebljen postojeći `Incident` — nova
+`TipIncidenta` enumeracija (`SUDAR`/`POTJERNICA`) i preopterećen konstruktor sa tim parametrom;
+stari petoargumentni konstruktor i dalje radi, sada samo delegira sa `TipIncidenta.SUDAR`, pa
+`KoordinatorUvidjaja` nije morao biti dirnut. `zavrsiPotjernicu()` konstruiše `Incident` sa
+traženim plovilom kao "učesnikom" i obalskom stražom kao "odazvanim službenim plovilom", ista
+podjela uloga kao kod sudara. Novo `BrodThread.DIREKTORIJUM_INCIDENTA_POTJERNICE` (`static
+volatile File`, podrazumijevano `null` ⇒ `user.home`) — isti princip injektovanja kao ostale D5
+statike, jer `BrodThread` (za razliku od `KoordinatorUvidjaja`) nema konstruktorski parametar za
+direktorijum, a nit se pravi mnogo prije nego što se zna hoće li do potjernice uopšte doći.
+
+**Na kraju:**
+- Test paket: **192 → 207** (15 novih kroz sva četiri koraka: 7 `SpisakPotjeraUtilTest` + 4
+  detekcija + 3 pratnja/blokada + 1 evidencija, 0 novih padova). Puni paket pokrenut tri puta
+  zaredom nakon svih koraka — bez varijacije.
 
 ## Otvoreni nalazi (nisu bagovi danas, postaju bagovi kasnije)
 

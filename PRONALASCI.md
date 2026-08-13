@@ -204,6 +204,71 @@ Ovaj tip greške (provjera stanja preko dva različita, nezavisno ažurirana pol
 opšti podsjetnik za ostatak `KoordinatorUvidjaja`/`BrodThread` interakcije — bilo gdje gdje jedna
 strana čita poziciju a druga zadatak kao uslov, isti obrazac trke je moguć.
 
+### K9 — Svjesne odluke pri implementaciji I5 (potjernica) + M6 (13. avgust)
+
+I5 je stigao kao zaseban zahtjev (`R4_ZAVRSEN_I5_ZAHTJEV.md`), sa eksplicitnim ograničenjima
+("ne blokiraj terminal", "ne diraj `KoordinatorUvidjaja` osim ako mora dijeliti kod", "bez
+JavaDoc-a na novom kodu"). Nekoliko mjesta je zahtijevalo odluku koju specifikacija ne propisuje:
+
+1. **Nema posebnog koordinatora/niti za potjernicu.** R4b je uveo `KoordinatorUvidjaja` kao
+   posebnu nit baš zato što je trebalo blokirati terminal i koordinisati dolazak tri službe dok
+   se druga plovila zaustavljaju iza blokade — detektujuća nit se nije smjela sama uspavati na
+   3–10s jer bi to zamrznulo i njenu sopstvenu petlju. Kod potjernice terminal se **nikad** ne
+   blokira (glavna razlika prema I3, po specifikaciji), pa taj razlog za posebnu nit ne postoji:
+   `pokreniPotjernicu()`/`zavrsiPotjernicu()` rade sinhrono unutar niti obalske straže koja je
+   detekciju i izvršila, bez ijednog `synchronized(terminal)` bloka koji bi obuhvatio čekanje.
+   Ovo je direktna primjena uputstva "ne diraj `KoordinatorUvidjaja` osim ako mora dijeliti kod"
+   — ovdje zaista ne mora.
+
+2. **Traženo plovilo ne dobija posebnu "idi ka izlazu" rutu.** Specifikacija kaže da meta mora
+   pratiti obalsku stražu ka izlazu iz luke, ali ne zahtijeva vizuelno praćenje ćelija po ćeliju.
+   `napustiZbogPratnje()` samo oslobađa rezervaciju veza; sam izlazak koristi postojeći
+   `napustiTerminal()` — identičnu putanju kojom bilo koje plovilo napušta terminal. Alternativa
+   (nova ruta koja doslovno prati poziciju obalske straže) bi udvostručila logiku kretanja bez
+   ikakvog dodatnog ispunjenja zahtjeva — oba plovila i dalje na kraju napuštaju terminal, što je
+   ono što testovi (i specifikacija) stvarno provjeravaju.
+
+3. **Detekcija provjerava sva četiri susjedna polja, na svakom uspješnom koraku — ne samo tokom
+   preticanja.** `provjeriSudar()` (I1) se namjerno poziva samo u grani preticanja jer sudar
+   pretpostavlja mimoilaženje dva plovila u suprotnim trakama. Potjernica nema taj preduslov —
+   obalska straža mora prepoznati traženo plovilo i dok prolazi pored doka, ne samo dok pretiče
+   u kanalu — pa `provjeriPotjernicu()` visi direktno u `ploviIstocno()`-ovoj glavnoj grani
+   uspjeha, bezuslovno.
+
+4. **`TipIncidenta` kao nova enumeracija + preopterećen konstruktor, ne novo polje na
+   `KoordinatorUvidjaja`.** I5-prompt je izričito predložio marker tipa ako zatreba. Umjesto
+   dodavanja zastavice `boolean jePotjernica` (lakše zaboraviti postaviti), nova `TipIncidenta{
+   SUDAR, POTJERNICA}` enumeracija plus šestoargumentni `Incident` konstruktor — stari
+   petoargumentni i dalje postoji i samo delegira sa `TipIncidenta.SUDAR`, pa ni jedan postojeći
+   pozivalac (`KoordinatorUvidjaja`) nije morao biti izmijenjen.
+
+5. **Novo `BrodThread.DIREKTORIJUM_INCIDENTA_POTJERNICE` (`static volatile File`), ne
+   konstruktorski parametar.** `KoordinatorUvidjaja` prima direktorijum kroz konstruktor jer se
+   pravi tačno u trenutku kad je incident već izvjestan. `BrodThread` se, nasuprot tome, pravi na
+   samom početku simulacije za svako plovilo — davno prije nego što je poznato hoće li ono ikad
+   učestvovati u potjernici. Isti obrazac injektovanja kao ostale D5 statike
+   (`VJEROVATNOCA_SUDARA`, `MIN/MAX_TRAJANJE_UVIDJAJA_MS`): `null` znači podrazumijevano
+   ponašanje (`incident.sacuvaj()` → `user.home`), testovi ga postave na privremeni direktorijum.
+
+6. **Deterministička dodjela dokova u testovima preko `Terminal.rezervisiSlobodanDok()` na
+   plovilu koje se nikad fizički ne pojavljuje, umjesto direktnog upisa u matricu.**
+   `rezervisiSlobodanDok()` isključuje dok iz budućih dodjela sve dok se rezervacija eksplicitno
+   ne otkaže (`otkaziRezervaciju()`) — pozivanjem te metode sa plovilom koje nikad ne dobija
+   sopstvenu nit i nikad se ne otkazuje, testovi "rezervišu unaprijed" prvih N vezova i time
+   tačno kontrolišu koji vez stvarna nit dobija (`Terminal.getDokovi()` je deterministički
+   poredak — red 0 pa red 3, po koloni), a da pritom ne diraju `Polje`/matricu direktno. Isti
+   trik omogućava da se detekcija u Koraku 3/4 testovima dogodi na tačno predvidljivoj koloni
+   (obalska straža prolazi pored doka mete dok plovi ka sopstvenom, dalje dodijeljenom doku) —
+   bez ijedne trke između stvarnih niti.
+
+7. **Podjela uloga u `Incident`-u za potjernicu: traženo plovilo je "učesnik", obalska straža je
+   "odazvano službeno plovilo".** `Incident` je dizajniran za sudar (dva "prekršioca" + službena
+   plovila koja se odazivaju), a specifikacija ne kaže eksplicitno kako se ta dva polja
+   preslikavaju na potjernicu koja ima samo jednog "prekršioca" (metu) i jedno odazvano službeno
+   plovilo (koje ju je i pronašlo, ne treće). Odabrano preslikavanje čuva semantiku oba polja
+   (`ucesniciSudara` = ko je "kriv", `odazvanaSluzbenaPlovila` = ko se odazvao) umjesto da se
+   izmišlja treće polje samo za ovaj slučaj.
+
 ### S1 — Duplirano knjigovodstvo vezova — ✅ RIJEŠENO (4. avgust)
 
 `Luka.brojSlobodnihVezova` je bila `Map<Terminal, AtomicInteger>` popunjena nulama
