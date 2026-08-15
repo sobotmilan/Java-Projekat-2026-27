@@ -108,6 +108,36 @@ class UredjivanjePlovilaServiceTest {
     }
 
     @Test
+    @DisplayName("izmijeniPlovilo(..., rotacijaEksplicitnoZadata=true) NE prepisuje rotaciju kandidata starom vrijednošću")
+    void izmjenaSaEksplicitnomRotacijomNePrepisujeVrijednost() {
+        var vatrogasci = TestFactory.tankerVatrogasci("109");
+        vatrogasci.setRotacija(true);
+        assertTrue(UredjivanjePlovilaService.dodajPlovilo(luka, t, vatrogasci).isEmpty());
+
+        var azurirano = TestFactory.tankerVatrogasci("109");
+        azurirano.setRotacija(false);
+        List<String> greske = UredjivanjePlovilaService.izmijeniPlovilo(luka, t, "109", azurirano, true);
+
+        assertTrue(greske.isEmpty());
+        assertFalse(azurirano.isRotacija(),
+                "Sa eksplicitnom zastavicom, kandidatova rotacija mora ostati onakva kakvu ju je pozivalac postavio.");
+    }
+
+    @Test
+    @DisplayName("izmijeniPlovilo(..., rotacijaEksplicitnoZadata=false) i dalje prenosi rotaciju kao ranije (G1)")
+    void izmjenaBezEksplicitneZastaviceIDaljeCuvaRotaciju() {
+        var vatrogasci = TestFactory.tankerVatrogasci("110");
+        vatrogasci.setRotacija(true);
+        assertTrue(UredjivanjePlovilaService.dodajPlovilo(luka, t, vatrogasci).isEmpty());
+
+        var azurirano = TestFactory.tankerVatrogasci("110");
+        List<String> greske = UredjivanjePlovilaService.izmijeniPlovilo(luka, t, "110", azurirano, false);
+
+        assertTrue(greske.isEmpty());
+        assertTrue(azurirano.isRotacija());
+    }
+
+    @Test
     @DisplayName("IMO broj se može ponovo iskoristiti nakon što je plovilo obrisano")
     void imoSeMozePonovoIskoristitiNakonBrisanja() {
         UredjivanjePlovilaService.dodajPlovilo(luka, t, TestFactory.kontejnerski("107"));

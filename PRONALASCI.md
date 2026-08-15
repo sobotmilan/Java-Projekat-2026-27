@@ -517,6 +517,33 @@ validiraj()` se poziva direktno i spaja sa specifičnom porukom, a `dodajPlovilo
 ukupno, 0 padova** (265 + 6 novih u `PlovilaValidatorTest`), pokrenut tri puta zaredom bez
 varijacije.
 
+**Status (15. avgust, peti prolaz) — checkbox rotacije (C6, zadatak 2):** Rotacija se do sada
+mogla upaliti/ugasiti isključivo kroz simulaciju (`KoordinatorUvidjaja`, potjernica), pa se `R`
+oznaka iz C6 nije mogla ni demonstrirati ni ručno provjeriti prije nego što je puna simulacija
+već pokrenuta. `PlovilaFormaDijalog` sad ima checkbox "Rotacija", vidljiv samo za tipove sa
+službom (`TipPlovila.getSluzba() != null`), predpopunjen trenutnim stanjem pri izmjeni.
+
+Sukob sa ranijom G1 popravkom (`izmijeniPlovilo` prenosi rotaciju sa starog plovila na novo, da
+obična izmjena naziva ne bi tiho ugasila rotaciju koju je simulacija upalila) — bez dodatne
+izmjene, taj prenos bi odmah prepisao checkbox-ovu vrijednost starom, i checkbox ne bi imao
+efekta pri izmjeni. Od dvije ponuđene opcije (validator "zna" da li je vrijednost eksplicitno
+postavljena, naspram novog preklopa metode), **odabrano je novo preopterećenje**
+`izmijeniPlovilo(..., boolean rotacijaEksplicitnoZadata)` — prva opcija bi zahtijevala treće,
+nullable stanje na `Plovilo`-vom `boolean rotacija` polju (širi zahvat u `model` sloj) da bi se
+uopšte moglo razlikovati "korisnik je namjerno isključio" od "vrijednost je samo podrazumijevana
+`false`"; preklop metode postiže isto bez ijedne izmjene u `model`-u, a postojeći
+četvoroargumentski poziv (i njegov regresioni test `izmjenaCuvaRotaciju`) ostaje netaknut. Puno
+obrazloženje, uključujući zašto je prva opcija odbačena, u `ZAHTJEVI.md`, "Riješeno 15. avgusta:
+checkbox rotacije u admin formi (C6)".
+
+Testiranje same forme (Swing komponenta bez javnih getter-a) riješeno paket-privatnim test-seam
+metodama (`imaRotacijuCheckbox()`, `postaviRotacijuZaTest()`, `jeRotacijaOznacenaZaTest()`,
+`popuniZaTest()`, `pokusajSacuvaj()` iz `private` u paket-privatno) — isti obrazac kao
+`provjeriSudar()`/`primijeniPauzu()`. Novi `PlovilaFormaDijalogTest` konstruiše i upravlja
+dijalogom programski, nikad ne poziva `setVisible(true)`, pa se tokom `mvn test` ne otvara
+stvaran prozor. Test paket: **277 ukupno, 0 padova** (271 + 6 novih: 4 `PlovilaFormaDijalogTest`,
+2 `UredjivanjePlovilaServiceTest` za novi preklop), pokrenut tri puta zaredom bez varijacije.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje

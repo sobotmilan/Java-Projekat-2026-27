@@ -40,6 +40,14 @@ public final class UredjivanjePlovilaService {
     }
 
     public static List<String> izmijeniPlovilo(Luka luka, Terminal terminal, String stariImoBroj, Plovilo azurirano) {
+        return izmijeniPlovilo(luka, terminal, stariImoBroj, azurirano, false);
+    }
+
+    // rotacijaEksplicitnoZadata=true preskače prenos rotacije sa starog plovila (ispod) — koristi
+    // ga PlovilaFormaDijalog kad je kandidat već dobio rotaciju iz checkbox-a na formi, inače bi
+    // prenos odmah prepisao tu vrijednost starom i checkbox ne bi imao efekta pri izmjeni.
+    public static List<String> izmijeniPlovilo(Luka luka, Terminal terminal, String stariImoBroj,
+                                                Plovilo azurirano, boolean rotacijaEksplicitnoZadata) {
         List<String> greske = PlovilaValidator.validiraj(luka, azurirano, stariImoBroj);
         if (!greske.isEmpty()) {
             return greske;
@@ -50,7 +58,9 @@ public final class UredjivanjePlovilaService {
                 Plovilo trenutno = d.getLokacija().getTrenutnoPlovilo();
                 if (trenutno != null && trenutno.getImoBroj().equals(stariImoBroj)) {
                     azurirano.setBrzina(trenutno.getBrzina());
-                    if (trenutno instanceof SluzbenoPlovilo staro && azurirano instanceof SluzbenoPlovilo novoSluzbeno) {
+                    if (!rotacijaEksplicitnoZadata
+                            && trenutno instanceof SluzbenoPlovilo staro
+                            && azurirano instanceof SluzbenoPlovilo novoSluzbeno) {
                         novoSluzbeno.setRotacija(staro.isRotacija());
                     }
                     d.getLokacija().setTrenutnoPlovilo(azurirano);

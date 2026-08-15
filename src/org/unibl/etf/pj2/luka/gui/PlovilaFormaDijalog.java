@@ -7,8 +7,10 @@ import org.unibl.etf.pj2.luka.model.classes.PutnickiKruzer;
 import org.unibl.etf.pj2.luka.model.classes.Tanker;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
 import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
+import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -37,6 +39,7 @@ public class PlovilaFormaDijalog extends JDialog {
     private final JTextField fotografijaPrikaz = new JTextField();
     private final JTextField specificnoPolje = new JTextField();
     private final JTextField spisakPotjeraPrikaz = new JTextField();
+    private final JCheckBox rotacijaCheckbox;
 
     private File fotografija;
     private File spisakPotjera;
@@ -48,6 +51,7 @@ public class PlovilaFormaDijalog extends JDialog {
         this.terminal = terminal;
         this.tip = tip;
         this.postojece = postojece;
+        this.rotacijaCheckbox = tip.getSluzba() != null ? new JCheckBox("Rotacija uključena") : null;
 
         izgradiUI();
         if (postojece != null) {
@@ -92,6 +96,11 @@ public class PlovilaFormaDijalog extends JDialog {
         if (tip.zahtijevaSpisakPotjera()) {
             polja.add(new JLabel("Spisak potjera:"));
             polja.add(redSaDugmetom(spisakPotjeraPrikaz, "Izaberi...", e -> izaberiSpisakPotjera()));
+        }
+
+        if (rotacijaCheckbox != null) {
+            polja.add(new JLabel("Rotacija:"));
+            polja.add(rotacijaCheckbox);
         }
 
         JButton sacuvajDugme = new JButton("Sačuvaj");
@@ -155,6 +164,10 @@ public class PlovilaFormaDijalog extends JDialog {
                 spisakPotjeraPrikaz.setText(spisakPotjera.getAbsolutePath());
             }
         }
+
+        if (rotacijaCheckbox != null && postojece instanceof SluzbenoPlovilo sluzbeno) {
+            rotacijaCheckbox.setSelected(sluzbeno.isRotacija());
+        }
     }
 
     private String specificnaVrijednostZa(Plovilo p) {
@@ -170,13 +183,40 @@ public class PlovilaFormaDijalog extends JDialog {
         return "";
     }
 
-    private void pokusajSacuvaj() {
+    // Paket-privatna vidljivost radi direktnog testiranja checkbox-a rotacije, bez potrebe za
+    // stvarnim klikanjem kroz UI (isti obrazac kao provjeriSudar()/primijeniPauzu()).
+    boolean imaRotacijuCheckbox() {
+        return rotacijaCheckbox != null;
+    }
+
+    void postaviRotacijuZaTest(boolean vrijednost) {
+        if (rotacijaCheckbox != null) {
+            rotacijaCheckbox.setSelected(vrijednost);
+        }
+    }
+
+    boolean jeRotacijaOznacenaZaTest() {
+        return rotacijaCheckbox != null && rotacijaCheckbox.isSelected();
+    }
+
+    void popuniZaTest(String naziv, String imo, String brojMotora, String registarskiBroj,
+                       File foto, String specificnoTekst, File spisak) {
+        nazivPolje.setText(naziv);
+        imoPolje.setText(imo);
+        brojMotoraPolje.setText(brojMotora);
+        registarskiBrojPolje.setText(registarskiBroj);
+        fotografija = foto;
+        specificnoPolje.setText(specificnoTekst);
+        spisakPotjera = spisak;
+    }
+
+    void pokusajSacuvaj() {
         List<String> greske = new ArrayList<>();
 
         double specificnaVrijednost = 0;
         String tekst = specificnoPolje.getText().trim();
         if (tekst.isBlank()) {
-            greske.add(tip.getNazivSpecificnogPolja() + " ne smije biti prazno.");
+            greske.add("Polje " + tip.getNazivSpecificnogPolja() + " ne smije biti prazno.");
         } else {
             try {
                 specificnaVrijednost = Double.parseDouble(tekst);
@@ -190,6 +230,10 @@ public class PlovilaFormaDijalog extends JDialog {
                 registarskiBrojPolje.getText().trim(), fotografija,
                 specificnaVrijednost, spisakPotjera);
 
+        if (rotacijaCheckbox != null && kandidat instanceof SluzbenoPlovilo sluzbeno) {
+            sluzbeno.setRotacija(rotacijaCheckbox.isSelected());
+        }
+
         String stariImo = postojece == null ? null : postojece.getImoBroj();
         greske.addAll(PlovilaValidator.validiraj(luka, kandidat, stariImo));
 
@@ -201,7 +245,8 @@ public class PlovilaFormaDijalog extends JDialog {
 
         List<String> rezultat = postojece == null
                 ? UredjivanjePlovilaService.dodajPlovilo(luka, terminal, kandidat)
-                : UredjivanjePlovilaService.izmijeniPlovilo(luka, terminal, stariImo, kandidat);
+                : UredjivanjePlovilaService.izmijeniPlovilo(luka, terminal, stariImo, kandidat,
+                rotacijaCheckbox != null);
 
         if (!rezultat.isEmpty()) {
             JOptionPane.showMessageDialog(this, String.join("\n", rezultat),

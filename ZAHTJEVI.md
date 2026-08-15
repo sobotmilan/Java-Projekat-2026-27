@@ -67,7 +67,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove                                                                                    | DONE — `simulation.PokretacSimulacije`, testovi |
 | C4 | Dopuna slučajnim plovilima do minimuma                                                                                                          | DONE — isto, testovi |
 | C5 | Prikaz terminala, izbor kombo boksom                                                                                                            | TODO |
-| C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju                                                                                                  | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi |
+| C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju                                                                                                  | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi. Rotacija se do sada palila isključivo iz simulacije (`KoordinatorUvidjaja`, potjernica), pa se taj dio prikaza nije mogao demonstrirati/ručno provjeriti prije pokretanja simulacije — `PlovilaFormaDijalog` sad ima checkbox "Rotacija" (samo za službena plovila) da se stanje može direktno postaviti kroz admin GUI, vidi "Riješeno 15. avgusta: checkbox rotacije". |
 | C7 | 15% plovila po terminalu odlazi iz luke                                                                                                         | TODO |
 | C8 | Dodavanje plovila tokom simulacije ako luka nije puna, MORA KORISTITI TERMINAL.REZERVISISLOBODANDOK() I DRZATI TERMINAL LOCK, NE SETUP HELPERE! | TODO |
 | C9 | Novo plovilo kreće od ulaza ka prvom slobodnom doku                                                                                             | PART — ruta postoji u `BrodThread` |
@@ -1054,3 +1054,63 @@ Novi testovi u `PlovilaValidatorTest`: prazan naziv, prazan broj motora, prazan 
 naziv od samih razmaka (potvrđuje da se koristi `isBlank()`, ne `isEmpty()`), obalska straža bez
 spiska potjernica, i plovilo sa više praznih polja odjednom (potvrđuje da se vraćaju sve poruke,
 ne samo prva).
+
+## Riješeno 15. avgusta: checkbox rotacije u admin formi (C6)
+
+Rotacija (`isRotacija()`/`setRotacija()`) se do sada palila i gasila isključivo iz simulacije
+(`KoordinatorUvidjaja` tokom uviđaja, `BrodThread.pokreniPotjernicu()` tokom potjernice) —
+dio C6 prikaza (`R` oznaka u `PrikazTerminala`) se zato nije mogao demonstrirati ni ručno
+provjeriti bez prethodnog pokretanja pune simulacije. `PlovilaFormaDijalog` sad ima checkbox
+"Rotacija" — vidljiv **samo** kad odabrani `TipPlovila` ima službu (`tip.getSluzba() != null`),
+predpopunjen sa `((SluzbenoPlovilo) postojece).isRotacija()` pri izmjeni, i primijenjen na
+kandidata (`sluzbeno.setRotacija(...)`) prije predaje `UredjivanjePlovilaService`-u.
+
+### Sukob sa G1 popravkom i odabrano rješenje
+
+`UredjivanjePlovilaService.izmijeniPlovilo()` je (G1, ranija runda) prenosila `rotacija` sa starog
+plovila na novo, da izmjena naziva/drugog polja ne bi tiho ugasila rotaciju koju je simulacija
+upravo upalila. Da je checkbox jednostavno dodat bez daljih izmjena, taj prenos bi **odmah
+prepisao** vrijednost checkbox-a starom — korisnik bi isključio rotaciju u formi, sačuvao, i
+vidio da je i dalje uključena, jer bi G1 logika "vratila" staro stanje odmah nakon što bi forma
+postavila novo.
+
+Razmotrene dvije opcije (obje pomenute u zahtjevu):
+
+1. **`izmijeniPlovilo` prenosi rotaciju samo ako kandidat "nema eksplicitno postavljenu"** —
+   odbačeno. `boolean rotacija` na `Plovilo`-vim podklasama nema pojam "nepostavljeno" — svaki
+   konstruktor inicijalizuje na `false`, isto kao vrijednost koju bi eksplicitno postavio checkbox
+   za isključenu rotaciju. Razlikovanje "korisnik je namjerno isključio" od "vrijednost je samo
+   podrazumijevana" zahtijevalo bi treće, nullable stanje (`Boolean` umjesto `boolean`, ili posebnu
+   zastavicu na samom `Plovilo`-u) — širi zahvat u model sloj radi nečega što pozivalac već zna u
+   trenutku poziva.
+
+2. **Novo preopterećenje `izmijeniPlovilo(..., boolean rotacijaEksplicitnoZadata)` — odabrano.**
+   Postojeći četvoroargumentski `izmijeniPlovilo` ostaje netaknut (delegira sa `false`) — čuva
+   tačno G1 ponašanje za bilo kog drugog pozivaoca koji ne zna/ne mari za rotaciju (npr. budući
+   C7/C8 klijentski kod), i postojeći regresioni test `izmjenaCuvaRotaciju` i dalje prolazi bez
+   izmjene. Novi petoargumentski preklop, pozvan iz `PlovilaFormaDijalog` sa `rotacijaCheckbox !=
+   null` kao zastavicom, preskače prenos kad je `true` — pozivalac (forma) je već postavio tačnu
+   vrijednost na kandidatu, prenos bi je samo prepisao. Prednost nad opcijom 1: nula izmjena u
+   `model` sloju, `Plovilo`/`SluzbenoPlovilo` API ostaje nepromijenjen, odluka "da li je rotacija
+   eksplicitno zadata" živi tačno tamo gdje se i donosi — u pozivaocu koji zna kontekst — umjesto
+   da se pokušava rekonstruisati iz stanja kandidata naknadno.
+
+Novi testovi u `UredjivanjePlovilaServiceTest`:
+`izmjenaSaEksplicitnomRotacijomNePrepisujeVrijednost` (petoargumentski poziv sa `true` čuva
+kandidatovu vrijednost) i `izmjenaBezEksplicitneZastaviceIDaljeCuvaRotaciju` (isti poziv sa
+`false` i dalje replicira staro G1 ponašanje) — potvrđuju oba puta preklopa nezavisno.
+
+### Testiranje forme
+
+`PlovilaFormaDijalog` je Swing komponenta bez javnih getter-a za unutrašnje stanje. Umjesto
+simuliranog/lažnog testa, dodata je paket-privatna vidljivost (isti obrazac kao
+`provjeriSudar()`/`primijeniPauzu()`/`obracunajIZabiljeziTaksu()`) koja omogućava pravi,
+end-to-end test bez stvarnog klikanja kroz UI: `imaRotacijuCheckbox()`,
+`postaviRotacijuZaTest(boolean)`, `jeRotacijaOznacenaZaTest()`, `popuniZaTest(...)` (puni
+zajednička/specifična polja), i `pokusajSacuvaj()` promijenjena iz `private` u paket-privatnu.
+Testovi (`PlovilaFormaDijalogTest`, nov fajl) nikad ne pozivaju `setVisible(true)` — dijalog se
+konstruiše i njime se upravlja programski, bez otvaranja stvarnog prozora tokom `mvn test`.
+Četiri testa: komercijalno plovilo nema checkbox, službeno plovilo ima checkbox, rotacija zadata
+u formi preživi `dodajPlovilo` (provjereno kroz `PregledTerminalaService.pronadjiPlovilo()` nakon
+čuvanja), i izmjena sa uključene na isključenu rotaciju stvarno je isključi (uz provjeru da je
+checkbox ispravno predpopunjen prije same izmjene).
