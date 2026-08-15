@@ -505,6 +505,18 @@ Detalji u `ZAHTJEVI.md`, "F1 ispravka"/"F2 ispravka" (unutar "Riješeno 15. avgu
 Test paket: **265 ukupno, 0 padova** (262 + 3 nova: 2 `PokretacIzvjestajaTest` za F1-regresiju i
 faktor 3600, 1 `IzvjestajServiceTest` za F2), pokrenut tri puta zaredom bez varijacije.
 
+**Status (15. avgust, četvrti prolaz):** `PlovilaFormaDijalog.pokusajSacuvaj()` je zaostajao za
+međuvremenskim proširenjem `PlovilaValidator`-a (naziv/broj motora/registarski broj/spisak
+potjernica) — na neuspjelom parsiranju specifičnog brojčanog polja i dalje je bezuslovno pozivao
+`dodajPlovilo()`/`izmijeniPlovilo()`, čiji interni poziv validatora je proizvodio drugu,
+redundantnu poruku o istom polju (npr. "TEU ne smije biti prazno" + "Kapacitet mora biti
+pozitivna vrijednost" istovremeno). Popravljeno: greške se sada sakupljaju, `PlovilaValidator.
+validiraj()` se poziva direktno i spaja sa specifičnom porukom, a `dodajPlovilo()`/
+`izmijeniPlovilo()` se pozivaju samo ako je spojena lista prazna. Detalji u `ZAHTJEVI.md`,
+"Ispravka nakon code review-a — `PlovilaFormaDijalog.pokusajSacuvaj()`". Test paket: **271
+ukupno, 0 padova** (265 + 6 novih u `PlovilaValidatorTest`), pokrenut tri puta zaredom bez
+varijacije.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje

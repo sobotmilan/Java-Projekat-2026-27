@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.unibl.etf.pj2.luka.model.classes.Dok;
 import org.unibl.etf.pj2.luka.model.classes.KontejnerskiBrod;
+import org.unibl.etf.pj2.luka.model.classes.KontejnerskiBrodObalskaStraza;
 import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.PutnickiKruzer;
 import org.unibl.etf.pj2.luka.model.classes.Tanker;
@@ -104,5 +105,55 @@ class PlovilaValidatorTest {
         KontejnerskiBrod kb = new KontejnerskiBrod("Aurora", "14", "M-1", "REG-1", TestFactory.FOTO, 100);
         List<String> greske = PlovilaValidator.validiraj(luka, kb, null);
         assertTrue(greske.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Prazan naziv se odbija")
+    void praznNaziv() {
+        KontejnerskiBrod kb = new KontejnerskiBrod("", "15", "M-1", "REG-1", TestFactory.FOTO, 100);
+        List<String> greske = PlovilaValidator.validiraj(luka, kb, null);
+        assertFalse(greske.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Prazan broj motora se odbija")
+    void praznBrojMotora() {
+        KontejnerskiBrod kb = new KontejnerskiBrod("Aurora", "16", "", "REG-1", TestFactory.FOTO, 100);
+        List<String> greske = PlovilaValidator.validiraj(luka, kb, null);
+        assertFalse(greske.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Prazan registarski broj se odbija")
+    void praznRegistarskiBroj() {
+        KontejnerskiBrod kb = new KontejnerskiBrod("Aurora", "17", "M-1", "", TestFactory.FOTO, 100);
+        List<String> greske = PlovilaValidator.validiraj(luka, kb, null);
+        assertFalse(greske.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Naziv od samih razmaka se odbija (isBlank, ne isEmpty)")
+    void nazivOdSamihRazmakaSeOdbija() {
+        KontejnerskiBrod kb = new KontejnerskiBrod("   ", "18", "M-1", "REG-1", TestFactory.FOTO, 100);
+        List<String> greske = PlovilaValidator.validiraj(luka, kb, null);
+        assertFalse(greske.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Obalska straža bez spiska potjernica se odbija")
+    void obalskaStrazaBezSpiskaPotjernicaSeOdbija() {
+        KontejnerskiBrodObalskaStraza os = new KontejnerskiBrodObalskaStraza(
+                "Straza", "19", "M-1", "REG-1", TestFactory.FOTO, 100, null);
+        List<String> greske = PlovilaValidator.validiraj(luka, os, null);
+        assertFalse(greske.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Plovilo sa više praznih polja vraća više poruka odjednom")
+    void viseProznihPoljaVracaViseGresaka() {
+        KontejnerskiBrod kb = new KontejnerskiBrod("", "20", "", "", TestFactory.FOTO, 100);
+        List<String> greske = PlovilaValidator.validiraj(luka, kb, null);
+        assertTrue(greske.size() >= 3,
+                "Očekivano bar tri poruke (naziv, broj motora, registarski broj), dobijeno: " + greske);
     }
 }

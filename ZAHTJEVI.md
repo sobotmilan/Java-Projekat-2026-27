@@ -1031,3 +1031,26 @@ kao "jedinu klasu u `gui` paketu bez njega" — provjereno da to nije tačno za 
 repozitorija (npr. `AdminProzor` takođe nema nijedan JavaDoc komentar), dosljedno originalnoj
 instrukciji iz `R4_POTVRDA_I_GUI_ZADATAK.md` ("Ne piši JavaDoc — autor ih piše sam") koja se
 primjenjuje na cio `gui` paket. Nije primijenjeno.
+
+### Ispravka nakon code review-a — `PlovilaFormaDijalog.pokusajSacuvaj()` (15. avgust)
+
+`PlovilaValidator` je u međuvremenu proširen provjerama za naziv, broj motora, registarski broj i
+spisak potjernica (van obima ove sesije — vidi git istoriju za detalje). `pokusajSacuvaj()` je
+zaostao za tom promjenom: kad parsiranje specifičnog brojčanog polja (TEU/putnici/zapremina) ne
+uspije, metoda je dodavala poruku u lokalnu listu, ali je zatim **bezuslovno** pozivala
+`UredjivanjePlovilaService.dodajPlovilo()`/`izmijeniPlovilo()` — koje interno takođe pozivaju
+`PlovilaValidator.validiraj()` — pa bi za prazno TEU polje korisnik vidio i "TEU ne smije biti
+prazno." i "Kapacitet mora biti pozitivna vrijednost." istovremeno, iz dva različita mjesta u kodu
+za istu grešku unosa.
+
+Popravka: `pokusajSacuvaj()` sada, na neuspjelom parsiranju, dodaje odgovarajuću poruku ("ne smije
+biti prazno" za prazno polje, "mora biti broj" za neparsibilan unos) i nastavlja sa
+`specificnaVrijednost = 0`, gradi kandidata preko `PlovilaFabrika.napravi()`, pa poziva
+`PlovilaValidator.validiraj()` **direktno** i spaja rezultat sa sopstvenom listom. Tek ako je
+spojena lista prazna, poziva `dodajPlovilo()`/`izmijeniPlovilo()` — čime se izbjegava nepotreban
+poziv (i njegov interni, redundantan poziv validatora) kad je unos već poznato neispravan.
+
+Novi testovi u `PlovilaValidatorTest`: prazan naziv, prazan broj motora, prazan registarski broj,
+naziv od samih razmaka (potvrđuje da se koristi `isBlank()`, ne `isEmpty()`), obalska straža bez
+spiska potjernica, i plovilo sa više praznih polja odjednom (potvrđuje da se vraćaju sve poruke,
+ne samo prva).

@@ -190,16 +190,25 @@ public class PlovilaFormaDijalog extends JDialog {
                 registarskiBrojPolje.getText().trim(), fotografija,
                 specificnaVrijednost, spisakPotjera);
 
-        greske.addAll(postojece == null
-                ? UredjivanjePlovilaService.dodajPlovilo(luka, terminal, kandidat)
-                : UredjivanjePlovilaService.izmijeniPlovilo(luka, terminal,
-                postojece.getImoBroj(), kandidat));
+        String stariImo = postojece == null ? null : postojece.getImoBroj();
+        greske.addAll(PlovilaValidator.validiraj(luka, kandidat, stariImo));
 
         if (!greske.isEmpty()) {
             JOptionPane.showMessageDialog(this, String.join("\n", greske),
                     "Greška", JOptionPane.ERROR_MESSAGE);
             return;
         }
+
+        List<String> rezultat = postojece == null
+                ? UredjivanjePlovilaService.dodajPlovilo(luka, terminal, kandidat)
+                : UredjivanjePlovilaService.izmijeniPlovilo(luka, terminal, stariImo, kandidat);
+
+        if (!rezultat.isEmpty()) {
+            JOptionPane.showMessageDialog(this, String.join("\n", rezultat),
+                    "Greška", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
         sacuvano = true;
         dispose();
     }
