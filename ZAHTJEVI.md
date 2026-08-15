@@ -786,3 +786,66 @@ pokreću stvarnu navigaciju a ne tiču ih se sudari zaštićeni su klasnim `@Bef
 ### NOVA OTVORENA ODLUKA
 
 Ulazni timestampovi se prenose kroz sesije iz "luka.ser" (omogucava perzistenciju simulacije), tako da plovilo koje je juce dokovano sada placa stvarne protekle sate, a ne striktno sate unutar simulacije. Da li resetovati brojac pri ponovnom pokretanju, ili koristiti neku vrstu vremenskog skaliranja unutar simulacije koje ce garantovati realne cijene i realne sate naplacene, a ne ekstremno velike vrijednosti samo zato sto je laptop ostao ugasen par dana?
+
+## Riješeno 15. avgusta: Administratorski GUI (A1–A13)
+
+Novi paket `gui`, izgrađen na postojećem `model`/`util` sloju bez ijedne izmjene u `simulation`,
+`model` ili `util`.
+
+### Odluka o toolkit-u (blokirala je početak)
+
+Odgovor profesora o JavaFX-u nije stigao. Odabran **Swing/AWT**: `FileDialog` je AWT komponenta
+koju specifikacija imenuje direktno, nulta Maven zavisnost (JavaFX je od Java 11 odvojen modul,
+rizik po tuđem laptopu), a `PrikazTerminala.render()` je već toolkit-agnostičan
+(`String[][]`) pa izbor toolkit-a ne diktira arhitekturu modelnog sloja.
+
+### Arhitektura — model/logika odvojeni od Swing komponenti
+
+Pet klasa bez ijednog Swing/AWT importa, sve pod `test/.../gui/` pokrivene testovima
+(ukupno 31 nov test):
+
+- **`TipPlovila`** — enum sa svih devet postojećih konkretnih kombinacija trup×služba.
+  `odObjekta(Plovilo)` mapira nazad na tip preko direktnog `instanceof` (sve klase su listovi
+  hijerarhije, redoslijed provjera nije bitan).
+- **`PlovilaFabrika`** — jedina tačka koja poziva konstruktore plovila iz sirovih vrijednosti
+  forme; drži svih devet poziva konstruktora na jednom mjestu umjesto razbacano po dijalogu.
+- **`PlovilaValidator`** — IMO ne smije biti prazan ni duplikat *u cijeloj luci* (ne samo na
+  odabranom terminalu) — sken cijele matrice svih terminala plus `Luka.getEvidencijaUlaska()`,
+  po uzoru na `GeneratorPlovila.obezbijediJedinstvenostImoZa()` (plovilo može biti serijalizovano
+  usred kanala, ne samo na doku). Parametar `izuzetiImo` isključuje sopstveni raniji IMO plovila
+  pri izmjeni bez promjene IMO-a — bez ovoga bi svaka izmjena postojećeg plovila lažno prijavila
+  duplikat sama sa sobom.
+- **`UredjivanjePlovilaService`** — dodavanje/izmjena/brisanje isključivo kroz `Terminal`,
+  nikad direktnim upisom u `Polje` van `synchronized(terminal)` bloka. Dodavanje ponavlja isti
+  obrazac kao `BrodThread.udjiULuku()`: `rezervisiSlobodanDok()` → fizičko postavljanje →
+  `otkaziRezervaciju()` — isti K6 razlog (rezervacija se mora osloboditi i na uspješnoj grani, ne
+  samo na neuspješnoj). Izmjena zamjenjuje referencu na plovilo na *istom* doku (nema nove
+  rezervacije), pa broj slobodnih vezova ostaje netaknut.
+- **`PregledTerminalaService`** — tabelarni prikaz (A4) i pretraga po IMO za predpopunjavanje
+  forme pri izmjeni.
+
+### Odluka: A5 (Pokreni klijentsku aplikaciju) nema šta pravo da pokrene još
+
+`Main.java` je i dalje prazan skelet — klijentska GUI aplikacija (C5/C7/C8) je eksplicitno budući
+zadatak, poslije admin GUI-ja. Dugme ipak radi tačno ono što traži A12/A13 redoslijed
+(`serijalizujStanjeLuke()` pa tek onda otvaranje prozora), a otvoreni prozor
+(`KlijentskiProzor`) je namjerno **samo statički snimak** — kombo za terminal +
+`PrikazTerminala.renderAsText()` u `JTextArea`-i, bez ijedne niti i bez auto-osvježavanja. Ovo
+daje dugmetu iskreno, radno ponašanje uz postojeću klasu građenu tačno za ovu svrhu
+(`PrikazTerminala`-in vlastiti komentar je već govorio "za prikaz u GUI-ju, C5, još TODO"), a da se
+ne zadire u C5-ov opseg (živi prikaz, odlazak plovila, dinamičko dodavanje tokom simulacije).
+
+### Ostale manje odluke
+
+- Admin aplikacija se pokreće preko `AdminProzor.main()` (entry point unutar `gui` paketa) — `Main.java`
+  nije diran, njegov postojeći komentar već kaže da je wireovanje admin/klijent GUI-ja budući posao.
+- Učitavanje (`SerializationUtil.ucitajStanjeLuke()`) i serijalizacija idu kroz `SwingWorker`, ne
+  direktno na EDT-u — eksplicitan zahtjev zadatka ("ne blokiraj EDT... čitanje fajlova i
+  serijalizacija mogu trajati").
+- Nema `PokretacSimulacije.rasporediNaSlucajneDokove`/`dopuniDoMinimuma` poziva iz GUI-ja — obje su
+  već označene kao setup-only (ne smiju se pozivati dok postoje žive korisničke niti; admin
+  aplikacija ionako nikad ne pokreće `BrodThread`-ove).
+- Tip plovila se bira u glavnom prozoru (padajući meni, A2) prije otvaranja forme — forma sama
+  (A7) gradi polja jednom, za taj fiksni tip; izmjena ne dozvoljava promjenu tipa (to bi značilo
+  brisanje + novo dodavanje, dosljedno tome što je tip ugrađen u hijerarhiju klasa, ne u jedno
+  polje).

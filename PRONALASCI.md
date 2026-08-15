@@ -424,6 +424,17 @@ K2/R4 (najveći preostali blok od početka retroaktivnog audita) je zatvoren. Pr
 (admin GUI) → C5/C8 (klijent GUI) → C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu), i M6/I5
 (spisak potjera, potjernica) kao samostalan zahtjev van obima R4b.
 
+**Status (15. avgust):** Administratorski GUI (A1–A13) završen — Swing/AWT (odluka i obrazloženje
+u `ZAHTJEVI.md`, "Riješeno 15. avgusta"), novi paket `gui`, `simulation`/`model`/`util` netaknuti.
+Model/logika sloj (`TipPlovila`, `PlovilaFabrika`, `PlovilaValidator`,
+`UredjivanjePlovilaService`, `PregledTerminalaService`) pokriven sa 31 novim testom; Swing
+komponente (`PlovilaFormaDijalog`, `AdminProzor`, `KlijentskiProzor`) provjerene kompajliranjem i
+smoke-testom pokretanja (nema izuzetaka pri startu), ali ne i ručnim klikanjem kroz UI u ovoj
+sesiji — nije bio dostupan alat za snimanje ekrana/kontrolu miša da se to uradi vizuelno, pa ta
+provjera ostaje otvorena za sljedeće pokretanje iz IDE-a. Test paket: **239 ukupno, 0 padova**
+(208 + 31 novih). Sljedeće: C5/C7/C8 (klijent GUI, prikaz terminala, odlazak, dinamičko
+dodavanje) — vidi `R4_POTVRDA_I_GUI_ZADATAK.md`.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje
