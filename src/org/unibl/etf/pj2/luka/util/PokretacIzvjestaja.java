@@ -65,7 +65,7 @@ public class PokretacIzvjestaja {
 
         Duration stvarnoTrajanje = Duration.between(vrijemeUlaska, vrijemeIzlaska);
         Duration simuliranoTrajanje = stvarnoTrajanje.multipliedBy(FAKTOR_SKALIRANJA_VREMENA);
-        long brojSati = (long) Math.ceil(simuliranoTrajanje.toMinutes() / 60.0);
+        long brojSati = (long) Math.ceil(simuliranoTrajanje.toSeconds() / 3600.0);
         if (brojSati < 1) {
             brojSati = 1;
         }

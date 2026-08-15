@@ -163,12 +163,16 @@ public class KlijentskiProzor extends JFrame {
 
                 osvjeziTerminalCombo();
                 List<BrodThread> sveNiti = PokretacSimulacije.pokreniPrivezanaPlovila(luka);
-                oznaciZaOdlazak(sveNiti);
+                // oznaciZaOdlazak(sveNiti);
 
                 dodajDugme.setEnabled(true);
                 tipCombo.setEnabled(true);
 
                 zapocniZiviPrikaz();
+
+                Timer odgoda = new Timer(3000, e -> oznaciZaOdlazak(sveNiti));
+                odgoda.setRepeats(false);
+                odgoda.start();
             }
         }.execute();
     }
