@@ -5,10 +5,16 @@ import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Polje;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
+import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
+import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
+import org.unibl.etf.pj2.luka.util.SpisakPotjeraUtil;
 
+import java.io.File;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -31,11 +37,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * {@link #parkLock} objektu (nikad na {@code synchronized(terminal)}, D4), sve dok je neko ne
  * pozove preko {@link #zatraziNapustanje()} da napusti terminal.</p>
  *
- * <p><b>Sudari (I1/D5):</b> {@link #provjeriSudar()} je i dalje placeholder za R4 — vraća ishod
- * "bacanja kockice" ({@link #VJEROVATNOCA_SUDARA}), ali ne pokreće nikakvu obradu incidenta.
- * {@link #SUDARI_OMOGUCENI} je trenutno {@code false} (namjerno odstupanje od specifikacije radi
- * determinizma testova nakon R0 — mora se vratiti na {@code true} kad R4 bude gotov).</p>
- *
  * @author Milan Šobot
  * @version 1.0
  * @see Terminal
@@ -55,12 +56,7 @@ public class BrodThread implements Runnable {
     /** Prioritet svakog plovila bez upaljene rotacije (podrazumijevana vrijednost iz {@link Plovilo}). */
     private static final int PRIORITET_BEZ_ROTACIJE = 10;
 
-    /**
-     * Globalni prekidač za sudare (I1). Trenutno {@code false} — namjerno odstupanje od
-     * specifikacije, uvedeno radi determinizma testova poslije R0. Mora se vratiti na
-     * {@code true} kad logika uviđaja (R4) bude implementirana.
-     */
-    public static volatile boolean SUDARI_OMOGUCENI = false;
+    public static volatile boolean SUDARI_OMOGUCENI = true;
 
     /** Vjerovatnoća sudara po provjeri (I1: 2%). Nije final — testovi je postavljaju na 1.0/0.0 radi determinizma (D5). */
     public static volatile double VJEROVATNOCA_SUDARA = 0.02;
@@ -72,6 +68,9 @@ public class BrodThread implements Runnable {
     /** Trajanje uviđaja kad je u pitanju plovilo sa potjernice (I5) — uže od opšteg incidenta. */
     public static volatile long MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 3000L;
     public static volatile long MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS = 5000L;
+
+    /** Direktorijum u koji se upisuje evidencija potjernice — {@code null} znači podrazumijevani (user.home), testovi ga postavljaju radi izolacije. */
+    public static volatile File DIREKTORIJUM_INCIDENTA_POTJERNICE = null;
 
     /** Plovilo kojim ova nit upravlja. */
     private final Plovilo plovilo;
@@ -90,11 +89,24 @@ public class BrodThread implements Runnable {
     /** Da li je plovilo trenutno privezano na dok. */
     private volatile boolean isPrivezan;
 
+    private volatile Dok trenutniDok;
+
     /** Zastavica koju postavlja {@link #zatraziNapustanje()} da probudi parkiranu nit. */
     private volatile boolean moraNapustiti;
 
     /** Trenutni zadatak niti (D3) — vidi {@link Zadatak}. */
     private volatile Zadatak zadatak;
+
+    private volatile Terminal ciljniTerminalIncidenta;
+    private volatile int ciljXIncidenta;
+    private volatile int ciljYIncidenta;
+
+    private volatile Dok dokPoUvidjaju;
+    private volatile boolean sudarMoraNapustiti;
+
+    private volatile boolean naPratnji;
+    private volatile Plovilo trazenoPlovilo;
+
     /** Izvor slučajnosti za provjeru sudara — injektabilan preko {@link #setGeneratorSudara(Random)} radi ponovljivih testova (D5). */
     private volatile Random generatorSudara;
 
@@ -134,6 +146,7 @@ public class BrodThread implements Runnable {
         this.x = dok.getLokacija().getX();
         this.y = dok.getLokacija().getY();
         this.isPrivezan = true;
+        this.trenutniDok = dok;
     }
 
     /**
@@ -153,10 +166,27 @@ public class BrodThread implements Runnable {
             boolean usidren = this.isPrivezan || udjiULuku();
 
             if (usidren) {
-                this.zadatak = Zadatak.PRIVEZAN;
-                cekajNapustanje();
+                boolean krajBoravka = false;
+                while (!krajBoravka) {
+                    this.zadatak = Zadatak.PRIVEZAN;
+                    cekajNapustanje();
+
+                    if (this.zadatak == Zadatak.KA_INCIDENTU) {
+                        otidjiNaIncident();
+                    } else if (this.zadatak == Zadatak.POD_PRATNJOM) {
+                        napustiZbogPratnje();
+                    }
+                    if (this.zadatak == Zadatak.KA_DOKU && vratiSeNaDok()) {
+                        continue;
+                    }
+                    krajBoravka = true;
+                }
                 this.zadatak = Zadatak.NAPUSTA;
                 napustiTerminal();
+            } else if (this.sudarMoraNapustiti) {
+                log("Napustio luku — učestvovao je u sudaru.");
+            } else if (this.naPratnji) {
+                log("Napustio luku — na pratnji potjernice.");
             } else {
                 log("Obišao sve terminale i napustio luku — nema slobodnih vezova.");
             }
@@ -204,12 +234,28 @@ public class BrodThread implements Runnable {
             log("Ušao u terminal " + (idx + 1) + ".");
 
             if (doploviDoDoka(rezervisan)) {
+                if (this.sudarMoraNapustiti) {
+                    t.otkaziRezervaciju(rezervisan);
+                    log("Učesnik sudara — napušta terminal " + (idx + 1) + " umjesto privezivanja.");
+                    this.zadatak = Zadatak.NAPUSTA;
+                    napustiTerminal();
+                    return false;
+                }
+                t.otkaziRezervaciju(rezervisan);
                 this.isPrivezan = true;
+                this.trenutniDok = rezervisan;
                 log("Usidren na vezu " + rezervisan.getOznakaVezova()
                         + " (" + this.x + "," + this.y + ") u terminalu " + (idx + 1) + ".");
                 return true;
             } else {
                 t.otkaziRezervaciju(rezervisan);
+                if (this.naPratnji) {
+                    // pokreniPotjernicu() je već odradio cijeli izlazak (uključujući napustiTerminal()) —
+                    // ovdje se samo prekida petlja, inače bi idx++ pokušao naredni terminal kao da je ovaj
+                    // bio privremeno pun, umjesto da prihvati da je plovilo trajno napustilo luku.
+                    log("Obalska straža na pratnji — napušta terminal " + (idx + 1) + ".");
+                    return false;
+                }
                 log("Ne može doći do veza u terminalu " + (idx + 1) + ", nastavlja dalje.");
                 napustiTerminal();
                 idx++;
@@ -225,7 +271,7 @@ public class BrodThread implements Runnable {
      */
     private void cekajNapustanje() throws InterruptedException {
         synchronized (parkLock) {
-            while (!moraNapustiti) {
+            while (!moraNapustiti && zadatak != Zadatak.KA_INCIDENTU && zadatak != Zadatak.POD_PRATNJOM) {
                 parkLock.wait();
             }
         }
@@ -242,6 +288,45 @@ public class BrodThread implements Runnable {
         }
     }
 
+    public void pozoviNaIncident(Terminal ciljniTerminal, int ciljX, int ciljY) {
+        synchronized (parkLock) {
+            if (this.zadatak != Zadatak.PRIVEZAN) {
+                return;
+            }
+            this.ciljniTerminalIncidenta = ciljniTerminal;
+            this.ciljXIncidenta = ciljX;
+            this.ciljYIncidenta = ciljY;
+            this.zadatak = Zadatak.KA_INCIDENTU;
+            parkLock.notifyAll();
+        }
+    }
+
+    public void pozoviNaPratnju() {
+        synchronized (parkLock) {
+            if (this.zadatak != Zadatak.PRIVEZAN) {
+                return;
+            }
+            this.zadatak = Zadatak.POD_PRATNJOM;
+            parkLock.notifyAll();
+        }
+    }
+
+    void oznaciKaoUcesnikaSudara() {
+        this.sudarMoraNapustiti = true;
+    }
+
+    boolean zavrsiUvidjaj(Dok noviDok) {
+        synchronized (parkLock) {
+            if (this.zadatak != Zadatak.NA_INCIDENTU) {
+                return false;
+            }
+            this.dokPoUvidjaju = noviDok;
+            this.zadatak = noviDok != null ? Zadatak.KA_DOKU : Zadatak.NAPUSTA;
+            parkLock.notifyAll();
+            return true;
+        }
+    }
+
     /**
      * Pokušava jednokratno zauzeti ulaznu ćeliju terminala ({@code [0][KOLONA_ULAZ]}). Ako je
      * slobodna, plovilo se postavlja na nju i postaje pozicionirano u tom terminalu.
@@ -250,6 +335,9 @@ public class BrodThread implements Runnable {
      * @return {@code true} ako je ulazna ćelija bila slobodna i plovilo je uspješno ušlo.
      */
     public boolean pokusajUciUTerminal(Terminal terminal) {
+        if (!terminal.smijeProci(this.plovilo)) {
+            return false;
+        }
         synchronized (terminal) {
             if (terminal.getMatrica()[0][Terminal.KOLONA_ULAZ].getTrenutnoPlovilo() == null) {
                 terminal.getMatrica()[0][Terminal.KOLONA_ULAZ].setTrenutnoPlovilo(this.plovilo);
@@ -326,9 +414,7 @@ public class BrodThread implements Runnable {
 
     /**
      * Vodi plovilo niz ulaznu kolonu ({@link Terminal#KOLONA_ULAZ}), red po red, dok ne stigne do
-     * reda {@link Terminal#KANAL_ULAZ} (istočnog traka kanala). Provjerava sudar
-     * ({@link #provjeriSudar()}) nakon svakog uspješnog koraka (D5 — placeholder, R4 ga tek
-     * treba obraditi).
+     * reda {@link Terminal#KANAL_ULAZ} (istočnog traka kanala).
      *
      * @param korak Trajanje jednog koraka kretanja, u milisekundama.
      * @return {@code true} ako je plovilo uspješno stiglo do kanala.
@@ -339,7 +425,6 @@ public class BrodThread implements Runnable {
             if (!pomjeriSaCekanjem(this.x + 1, Terminal.KOLONA_ULAZ, korak)) {
                 return false;
             }
-            provjeriSudar();
             Thread.sleep(korak);
         }
         return true;
@@ -370,14 +455,26 @@ public class BrodThread implements Runnable {
     private boolean ploviIstocno(int ciljY, long korak) throws InterruptedException {
         int neuspjesi = 0;
         int ukupnoPokusaja = 0;
+        int blokada = 0;
 
         while (this.y < ciljY) {
+            if (cekaZbogBlokade()) {
+                if (++blokada > maxBlokadaPokusaja()) {
+                    odustajemZbogBlokade();
+                    return false;
+                }
+                Thread.sleep(CEKANJE_MS);
+                continue;
+            }
+            blokada = 0;
+
             if (++ukupnoPokusaja > MAX_POKUSAJA * 4) {
                 return false;
             }
 
             boolean imamPrioritet = plovilo.getPrioritet() < PRIORITET_BEZ_ROTACIJE;
             boolean pomjeren = false;
+            boolean preticanje = false;
 
             if (this.x == Terminal.KANAL_ULAZ) {
                 boolean moraUstupitiProlaz = ustupaProlaz(this.trenutniTerminal, this.x, this.y, this.plovilo);
@@ -389,12 +486,14 @@ public class BrodThread implements Runnable {
                 boolean pragZaPreticanjeIspunjen = imamPrioritet || neuspjesi >= PRAG_PRETICANJA;
                 if (!pomjeren && pragZaPreticanjeIspunjen && smijePreticati(this.y + 1)) {
                     pomjeren = pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y);
+                    preticanje = pomjeren;
                     if (pomjeren) {
                         log("Započinje preticanje" + (imamPrioritet ? " (prioritet pod rotacijom)." : "."));
                     }
                 }
             } else {
                 pomjeren = pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y + 1);
+                preticanje = pomjeren;
                 if (pomjeren) {
                     Thread.sleep(korak);
                     pomjeriNaPolje(Terminal.KANAL_ULAZ, this.y);
@@ -403,7 +502,17 @@ public class BrodThread implements Runnable {
 
             if (pomjeren) {
                 neuspjesi = 0;
-                provjeriSudar();
+                if (preticanje) {
+                    Plovilo[] ucesniciSudara = provjeriSudar();
+                    if (ucesniciSudara != null) {
+                        pokreniUvidjaj(ucesniciSudara);
+                    }
+                }
+                Plovilo trazeno = provjeriPotjernicu();
+                if (trazeno != null) {
+                    pokreniPotjernicu((ObalskaStraza) this.plovilo, trazeno);
+                    return false;
+                }
                 Thread.sleep(korak);
             } else {
                 neuspjesi++;
@@ -493,26 +602,183 @@ public class BrodThread implements Runnable {
             }
 
             int pokusaja = 0;
-            while (this.y > Terminal.KOLONA_IZLAZ && pokusaja++ < MAX_POKUSAJA * 4) {
+            int blokada = 0;
+            while (this.y > Terminal.KOLONA_IZLAZ && pokusaja < MAX_POKUSAJA * 4) {
                 if (pomjeriNaPolje(Terminal.KANAL_IZLAZ, this.y - 1)) {
                     Thread.sleep(korak);
                 } else {
+                    if (cekaZbogBlokade()) {
+                        if (++blokada > maxBlokadaPokusaja()) {
+                            odustajemZbogBlokade();
+                            break;
+                        }
+                    } else {
+                        blokada = 0;
+                        pokusaja++;
+                    }
                     Thread.sleep(CEKANJE_MS);
                 }
             }
         }
 
         int pokusaja = 0;
-        while (this.x > 0 && pokusaja++ < MAX_POKUSAJA * 2) {
+        int blokada = 0;
+        while (this.x > 0 && pokusaja < MAX_POKUSAJA * 2) {
             if (pomjeriNaPolje(this.x - 1, Terminal.KOLONA_IZLAZ)) {
                 Thread.sleep(korak);
             } else {
+                if (cekaZbogBlokade()) {
+                    if (++blokada > maxBlokadaPokusaja()) {
+                        odustajemZbogBlokade();
+                        break;
+                    }
+                } else {
+                    blokada = 0;
+                    pokusaja++;
+                }
                 Thread.sleep(CEKANJE_MS);
             }
         }
 
         oslobodiTrenutnoPolje();
         log("Napustio terminal.");
+    }
+
+    private void napustiZbogPratnje() {
+        Terminal t = this.trenutniTerminal;
+        Dok dok = this.trenutniDok;
+        this.trenutniDok = null;
+        if (t != null && dok != null) {
+            t.otkaziRezervaciju(dok);
+        }
+    }
+
+    private void otidjiNaIncident() throws InterruptedException {
+        Terminal staviTerminal = this.trenutniTerminal;
+        Dok dokKojiNapustam = this.trenutniDok;
+        this.trenutniDok = null;
+        if (staviTerminal != null && dokKojiNapustam != null) {
+            staviTerminal.otkaziRezervaciju(dokKojiNapustam);
+        }
+
+        Terminal ciljniTerminal = this.ciljniTerminalIncidenta;
+        int ciljX = this.ciljXIncidenta;
+        int ciljY = this.ciljYIncidenta;
+        long korak = trajanjeKoraka();
+
+        if (this.trenutniTerminal != ciljniTerminal) {
+            predjiLogickiUTerminal(ciljniTerminal, korak);
+        }
+
+        if (this.trenutniTerminal == ciljniTerminal) {
+            napredujKaPolju(ciljX, ciljY, korak);
+        }
+
+        this.zadatak = Zadatak.NA_INCIDENTU;
+        cekajKrajUvidjaja();
+        if (this.zadatak != Zadatak.KA_DOKU) {
+            this.zadatak = Zadatak.NAPUSTA;
+        }
+    }
+
+    private void predjiLogickiUTerminal(Terminal ciljniTerminal, long korak) throws InterruptedException {
+        Terminal stariTerminal = this.trenutniTerminal;
+        int stariX = this.x;
+        int stariY = this.y;
+
+        oslobodiTrenutnoPolje();
+
+        if (!pokusajUciUTerminal(ciljniTerminal) && !udjiUTerminal(ciljniTerminal)) {
+            LoggerUtil.logWarning("Patrola " + plovilo.getImoBroj() + " ne moze uci u terminal "
+                    + ciljniTerminal.getIdTerminala() + ".");
+            if (!vratiNaPolje(stariTerminal, stariX, stariY)) {
+                LoggerUtil.logError("Patrola " + plovilo.getImoBroj()
+                        + " je izgubila poziciju u luci.",
+                        new IllegalStateException("Plovilo bez terminala"));
+            }
+            return;
+        }
+        sidjiDoKanala(korak);
+    }
+
+    private boolean vratiNaPolje(Terminal t, int px, int py) {
+        if (t == null || px < 0 || py < 0) {
+            return false;
+        }
+        synchronized (t) {
+            Polje p = t.getMatrica()[px][py];
+            if (p.getTrenutnoPlovilo() != null) {
+                return false;
+            }
+            p.setTrenutnoPlovilo(this.plovilo);
+        }
+        this.trenutniTerminal = t;
+        this.x = px;
+        this.y = py;
+        return true;
+    }
+
+    private boolean pomjeriSeURed(int ciljniRed, long korak) throws InterruptedException {
+        while (this.x != ciljniRed) {
+            int sljedeciX = this.x < ciljniRed ? this.x + 1 : this.x - 1;
+            if (!pomjeriSaCekanjem(sljedeciX, this.y, korak)) {
+                return false;
+            }
+            Thread.sleep(korak);
+        }
+        return true;
+    }
+
+    private boolean napredujKaPolju(int ciljX, int ciljY, long korak) throws InterruptedException {
+        int traka = (ciljY > this.y) ? Terminal.KANAL_ULAZ : Terminal.KANAL_IZLAZ;
+        if (!pomjeriSeURed(traka, korak)) {
+            return false;
+        }
+
+        while (this.y != ciljY) {
+            int sljedeciY = this.y < ciljY ? this.y + 1 : this.y - 1;
+            if (!pomjeriSaCekanjem(this.x, sljedeciY, korak)) {
+                return false;
+            }
+            Thread.sleep(korak);
+        }
+
+        return pomjeriSeURed(ciljX, korak);
+    }
+
+    private boolean vratiSeNaDok() throws InterruptedException {
+        Dok noviDok = this.dokPoUvidjaju;
+        this.dokPoUvidjaju = null;
+        Terminal t = this.trenutniTerminal;
+        if (noviDok == null || t == null) {
+            return false;
+        }
+
+        long korak = trajanjeKoraka();
+        int ciljX = noviDok.getLokacija().getX();
+        int ciljY = noviDok.getLokacija().getY();
+
+        if (!napredujKaPolju(ciljX, ciljY, korak)) {
+            t.otkaziRezervaciju(noviDok);
+            return false;
+        }
+
+        this.isPrivezan = true;
+        this.trenutniDok = noviDok;
+        return true;
+    }
+
+    private void cekajKrajUvidjaja() throws InterruptedException {
+        long krajnjeVrijeme = System.currentTimeMillis() + maxCekanjeKrajaUvidjaja();
+        synchronized (parkLock) {
+            while (this.zadatak == Zadatak.NA_INCIDENTU) {
+                long preostalo = krajnjeVrijeme - System.currentTimeMillis();
+                if (preostalo <= 0) {
+                    return;
+                }
+                parkLock.wait(preostalo);
+            }
+        }
     }
 
     /**
@@ -545,14 +811,36 @@ public class BrodThread implements Runnable {
      * (provjerom referentnog identiteta {@code ==}, namjerno ne {@code equals()} — vidi napomenu
      * uz {@link #oslobodiTrenutnoPolje()}) i ažurira {@link #x}/{@link #y}.
      *
+     * <p><b>Blokada saobraćaja (I3/I4):</b> ovo je jedina fizička primitiva kretanja kroz koju
+     * prolaze sve metode kretanja ({@link #sidjiDoKanala}, {@link #ploviIstocno},
+     * {@link #napustiTerminal}, {@link #doploviDoDoka}), pa je ovo mjesto na kojem se provjerava
+     * {@link Terminal#smijeProci(Plovilo)} — ako je terminal pod blokadom, pomjeranje ne uspijeva
+     * osim za plovilo pod aktivnom rotacijom. Provjera je čitanje jedne {@code volatile} zastavice,
+     * van {@code synchronized(t)} bloka i bez čekanja — ne krši D4 (nikad {@code wait()}/
+     * {@code sleep()} dok je {@code synchronized(terminal)} držan).</p>
+     *
+     * <p>Paket-privatna vidljivost namjerno (isti obrazac kao {@link #ustupaProlaz} i
+     * {@link #provjeriSudar}) — testovi u paketu {@code simulation} provjeravaju efekat blokade
+     * direktno, bez pokretanja cijele niti.</p>
+     *
      * @param targetX Ciljni red u matrici terminala.
      * @param targetY Ciljna kolona u matrici terminala.
-     * @return {@code true} ako je pomjeranje uspjelo, {@code false} ako je ciljna ćelija zauzeta
-     *         ili plovilo trenutno nije pozicionirano ni u jednom terminalu.
+     * @return {@code true} ako je pomjeranje uspjelo, {@code false} ako je ciljna ćelija zauzeta,
+     *         terminal blokira ovo plovilo, ili plovilo trenutno nije pozicionirano ni u jednom
+     *         terminalu.
      */
-    private boolean pomjeriNaPolje(int targetX, int targetY) {
+    boolean pomjeriNaPolje(int targetX, int targetY) {
         Terminal t = this.trenutniTerminal;
         if (t == null || this.x < 0 || this.y < 0) {
+            return false;
+        }
+        if (Math.abs(targetX - this.x) + Math.abs(targetY - this.y) != 1) {
+            LoggerUtil.logError("Pokusaj skoka sa (" + this.x + "," + this.y + ") na ("
+                    + targetX + "," + targetY + ") — plovilo " + plovilo.getImoBroj(),
+                    new IllegalArgumentException("Polja nisu susjedna"));
+            return false;
+        }
+        if (!t.smijeProci(this.plovilo)) {
             return false;
         }
 
@@ -578,6 +866,18 @@ public class BrodThread implements Runnable {
      * Ponavlja {@link #pomjeriNaPolje(int, int)} do {@link #MAX_POKUSAJA} puta, čekajući
      * {@link #CEKANJE_MS} između pokušaja, dok se ciljna ćelija ne oslobodi.
      *
+     * <p><b>Blokada saobraćaja ne troši budžet pokušaja (R4a):</b> {@link #MAX_POKUSAJA} ×
+     * {@link #CEKANJE_MS} = 10000ms, što je tačno {@link #MAX_TRAJANJE_UVIDJAJA_MS} (podrazumijevana
+     * vrijednost). Da neuspjeh izazvan {@link Terminal#smijeProci(Plovilo)} broji isto kao neuspjeh
+     * izazvan zauzetom ćelijom, plovilo koje čeka baš na posljednjem koraku ulaska u dok bi moglo
+     * iscrpiti čitav budžet pokušaja samo zato što je uviđaj potrajao maksimalno dugo — otkazati
+     * rezervaciju veza koji je legitimno dobilo i produžiti dalje ka narednom terminalu, iako ničim
+     * nije "zaslužilo" taj neuspjeh (nije postojala trajno zauzeta ćelija, samo privremena blokada).
+     * Zato se pokušaj koji propadne zbog blokade ne broji — nit i dalje čeka i ponovo pokušava svaki
+     * {@link #CEKANJE_MS}, ali {@code i} se ne inkrementira dok terminal ostaje blokiran za ovo
+     * plovilo. Ovo odgovara namjeri specifikacije: plovilo je zaustavljeno, ne neuspješno u traženju
+     * rute (I3).</p>
+     *
      * @param targetX Ciljni red u matrici terminala.
      * @param targetY Ciljna kolona u matrici terminala.
      * @param korak Trajanje jednog koraka kretanja, u milisekundama (parametar se ovdje ne
@@ -586,14 +886,65 @@ public class BrodThread implements Runnable {
      * @return {@code true} ako je pomjeranje uspjelo u okviru dozvoljenog broja pokušaja.
      * @throws InterruptedException Ako je nit prekinuta tokom čekanja.
      */
-    private boolean pomjeriSaCekanjem(int targetX, int targetY, long korak) throws InterruptedException {
-        for (int i = 0; i < MAX_POKUSAJA; i++) {
+    boolean pomjeriSaCekanjem(int targetX, int targetY, long korak) throws InterruptedException {
+        int i = 0;
+        int blokada = 0;
+
+        while (i < MAX_POKUSAJA) {
             if (pomjeriNaPolje(targetX, targetY)) {
                 return true;
+            }
+            if (cekaZbogBlokade()) {
+                if (++blokada > maxBlokadaPokusaja()) {
+                    odustajemZbogBlokade();
+                    return false;
+                }
+            } else {
+                blokada = 0;
+                i++;
             }
             Thread.sleep(CEKANJE_MS);
         }
         return false;
+    }
+
+    /**
+     * Najveći broj uzastopnih pokušaja pomjeranja koji smiju propasti zbog blokade saobraćaja
+     * prije nego što plovilo odustane. Izvedeno iz {@link #MAX_TRAJANJE_UVIDJAJA_MS} (dvostruko,
+     * kao sigurnosna margina), računa se pri svakom pozivu jer testovi mijenjaju trajanje uviđaja
+     *
+     * @return broj maksimalnih dozvoljenih pokušaja blokiranja terminala.
+     */
+    private static int maxBlokadaPokusaja() {
+        return (int) Math.max(1, (MAX_TRAJANJE_UVIDJAJA_MS * 2) / CEKANJE_MS);
+    }
+
+    public static long maxCekanjeKrajaUvidjaja() {
+        return KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS + MAX_TRAJANJE_UVIDJAJA_MS + 5000L;
+    }
+
+    /**
+     * Evidentira odustajanje zbog predugačke blokade.
+     *
+     * */
+    private void odustajemZbogBlokade() {
+        LoggerUtil.logWarning("Blokada terminala traje predugo — plovilo "
+                + plovilo.getImoBroj() + " odustaje.");
+    }
+
+    /**
+     * Provjerava da li bi posljednji neuspjeh {@link #pomjeriNaPolje(int, int)} mogao biti
+     * posljedica blokade saobraćaja na terminalu (I3), a ne trajno zauzete ciljne ćelije — koristi
+     * {@link #pomjeriSaCekanjem} da takve neuspjehe izuzme iz budžeta pokušaja (vidi napomenu uz tu
+     * metodu). Terminal koji nije postavljen (plovilo nikad nije ušlo) se tretira kao "nije blokada"
+     * — taj slučaj već rezultuje trajnim neuspjehom preko {@link #pomjeriNaPolje(int, int)}, pa ne
+     * smije zaobići budžet pokušaja (inače bi nit čekala unedogled bez ikakvog terminala).
+     *
+     * @return {@code true} ako je terminal postavljen i trenutno blokira ovo plovilo.
+     */
+    private boolean cekaZbogBlokade() {
+        Terminal t = this.trenutniTerminal;
+        return t != null && !t.smijeProci(this.plovilo);
     }
 
     /**
@@ -608,21 +959,124 @@ public class BrodThread implements Runnable {
         return Math.max(20L, Math.min(korak, 400L));
     }
 
-    /**
-     * Provjerava da li je u ovom koraku kretanja došlo do sudara. I dalje samo placeholder za
-     * R4: vraća ishod "bacanja kockice", ali ne pokreće nikakvu obradu (nema {@code Incident}
-     * objekta, dispečovanja službenih plovila ni blokade terminala) — to je predmet R4.
-     * Paket-privatna vidljivost namjerno, po uzoru na {@link #ustupaProlaz}, da bi testovi mogli
-     * direktno provjeriti determinizam bez pokretanja cijele niti.
-     *
-     * @return true ako je slučajno izvučena vrijednost pogodila prag {@link #VJEROVATNOCA_SUDARA},
-     *         inače false. Uvijek false dok je {@link #SUDARI_OMOGUCENI} isključeno (I1).
-     */
-    boolean provjeriSudar() {
+    Plovilo[] provjeriSudar() {
         if (!SUDARI_OMOGUCENI) {
-            return false;
+            return null;
         }
-        return generator().nextDouble() < VJEROVATNOCA_SUDARA;
+        Plovilo drugi = drugoPloviloUPreticanju();
+        boolean pogodak = generator().nextDouble() < VJEROVATNOCA_SUDARA;
+        if (drugi == null || !pogodak) {
+            return null;
+        }
+        return new Plovilo[]{this.plovilo, drugi};
+    }
+
+    private Plovilo drugoPloviloUPreticanju() {
+        Terminal t = this.trenutniTerminal;
+        if (t == null) {
+            return null;
+        }
+        int suprotniRed = this.x == Terminal.KANAL_ULAZ ? Terminal.KANAL_IZLAZ : Terminal.KANAL_ULAZ;
+        synchronized (t) {
+            return t.getMatrica()[suprotniRed][this.y].getTrenutnoPlovilo();
+        }
+    }
+
+    private void pokreniUvidjaj(Plovilo[] ucesnici) {
+        KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
+                luka, this.trenutniTerminal, List.of(ucesnici[0], ucesnici[1]), this.x, this.y);
+        Thread nit = new Thread(koordinator, "koordinator-uvidjaja-" + plovilo.getImoBroj());
+        nit.setDaemon(true);
+        nit.start();
+    }
+
+    Plovilo provjeriPotjernicu() {
+        if (!(this.plovilo instanceof ObalskaStraza obalskaStraza)) {
+            return null;
+        }
+        File spisak = obalskaStraza.getSpisakPotjera();
+        if (spisak == null) {
+            return null;
+        }
+        Set<String> potjernice = SpisakPotjeraUtil.ucitaj(spisak);
+        if (potjernice.isEmpty()) {
+            return null;
+        }
+        Terminal t = this.trenutniTerminal;
+        if (t == null) {
+            return null;
+        }
+        int[][] pomjeraji = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        synchronized (t) {
+            Polje[][] m = t.getMatrica();
+            for (int[] pom : pomjeraji) {
+                int nx = this.x + pom[0];
+                int ny = this.y + pom[1];
+                if (nx < 0 || nx >= m.length || ny < 0 || ny >= m[nx].length) {
+                    continue;
+                }
+                Plovilo kandidat = m[nx][ny].getTrenutnoPlovilo();
+                if (kandidat != null && kandidat != this.plovilo && potjernice.contains(kandidat.getImoBroj())) {
+                    return kandidat;
+                }
+            }
+        }
+        return null;
+    }
+
+    void pokreniPotjernicu(ObalskaStraza obalskaStraza, Plovilo trazeno) throws InterruptedException {
+        obalskaStraza.setRotacija(true);
+        this.naPratnji = true;
+        this.trazenoPlovilo = trazeno;
+
+        BrodThread trazenaNit = pronadjiNit(trazeno);
+        if (trazenaNit != null) {
+            trazenaNit.pozoviNaPratnju();
+        }
+
+        long trajanje = trajanjePotjernice();
+        Thread.sleep(trajanje);
+        sacuvajEvidencijuPotjernice(trajanje);
+
+        this.zadatak = Zadatak.NAPUSTA;
+        napustiTerminal();
+
+        if (this.plovilo instanceof SluzbenoPlovilo sluzbeno) {
+            sluzbeno.setRotacija(false);
+        }
+    }
+
+    private BrodThread pronadjiNit(Plovilo p) {
+        for (BrodThread kandidat : luka.getAktivnaPlovila()) {
+            if (kandidat.getPlovilo() == p) {
+                return kandidat;
+            }
+        }
+        return null;
+    }
+
+    private long trajanjePotjernice() {
+        long min = MIN_TRAJANJE_UVIDJAJA_POTJERNICE_MS;
+        long max = MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS;
+        if (max <= min) {
+            return min;
+        }
+        return min + ThreadLocalRandom.current().nextLong(max - min + 1);
+    }
+
+    private void sacuvajEvidencijuPotjernice(long trajanje) {
+        // Mora se pozvati prije napustiTerminal() — poslije njega je trenutniTerminal null i idTerminala bi ispao -1.
+        Terminal t = this.trenutniTerminal;
+        int idTerminala = t != null ? t.getIdTerminala() : -1;
+        Incident incident = new Incident(List.of(this.trazenoPlovilo), List.of(this.plovilo),
+                LocalDateTime.now(), trajanje, idTerminala, TipIncidenta.POTJERNICA);
+
+        File dir = DIREKTORIJUM_INCIDENTA_POTJERNICE;
+        if (dir != null) {
+            incident.sacuvaj(dir);
+        } else {
+            incident.sacuvaj();
+        }
     }
 
     /**
@@ -688,6 +1142,10 @@ public class BrodThread implements Runnable {
      */
     public Zadatak getZadatak() {
         return zadatak;
+    }
+
+    void setZadatak(Zadatak zadatak) {
+        this.zadatak = zadatak;
     }
 
     /**
