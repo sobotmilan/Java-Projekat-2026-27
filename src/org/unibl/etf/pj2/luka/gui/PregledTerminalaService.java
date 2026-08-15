@@ -25,25 +25,29 @@ public final class PregledTerminalaService {
     }
 
     public static List<String[]> redovi(Terminal terminal) {
-        List<String[]> redovi = new ArrayList<>();
-        for (Dok d : terminal.getDokovi()) {
-            Plovilo p = d.getLokacija().getTrenutnoPlovilo();
-            if (p == null) {
-                continue;
+        synchronized (terminal) {
+            List<String[]> redovi = new ArrayList<>();
+            for (Dok d : terminal.getDokovi()) {
+                Plovilo p = d.getLokacija().getTrenutnoPlovilo();
+                if (p == null) {
+                    continue;
+                }
+                redovi.add(red(p));
             }
-            redovi.add(red(p));
+            return redovi;
         }
-        return redovi;
     }
 
     public static Plovilo pronadjiPlovilo(Terminal terminal, String imoBroj) {
-        for (Dok d : terminal.getDokovi()) {
-            Plovilo p = d.getLokacija().getTrenutnoPlovilo();
-            if (p != null && p.getImoBroj().equals(imoBroj)) {
-                return p;
+        synchronized (terminal) {
+            for (Dok d : terminal.getDokovi()) {
+                Plovilo p = d.getLokacija().getTrenutnoPlovilo();
+                if (p != null && p.getImoBroj().equals(imoBroj)) {
+                    return p;
+                }
             }
+            return null;
         }
-        return null;
     }
 
     private static String[] red(Plovilo p) {
@@ -81,7 +85,7 @@ public final class PregledTerminalaService {
         if (p instanceof Tanker t) {
             return String.format(Locale.US, "%.2f barela", t.getZapreminaBarel());
         }
-        return "—";
+        return "-";
     }
 
     private static String sluzba(Plovilo p) {
@@ -94,13 +98,13 @@ public final class PregledTerminalaService {
         if (p instanceof Carina) {
             return "Carina";
         }
-        return "—";
+        return "-";
     }
 
     private static String rotacija(Plovilo p) {
         if (p instanceof SluzbenoPlovilo sluzbeno) {
             return sluzbeno.isRotacija() ? "Da" : "Ne";
         }
-        return "—";
+        return "-";
     }
 }

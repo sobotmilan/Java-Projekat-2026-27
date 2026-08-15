@@ -57,6 +57,6 @@ public final class PlovilaValidator {
                 }
             }
         }
-        return !luka.getEvidencijaUlaska().containsKey(imo);
+        return true;
     }
 }

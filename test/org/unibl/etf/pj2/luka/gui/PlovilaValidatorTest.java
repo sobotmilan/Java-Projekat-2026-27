@@ -47,12 +47,12 @@ class PlovilaValidatorTest {
     }
 
     @Test
-    @DisplayName("Duplikat IMO u evidenciji ulaska se odbija")
-    void duplikatImoUEvidenciji() {
+    @DisplayName("IMO prisutan samo u evidenciji ulaska (plovilo davno otišlo) ne blokira validaciju")
+    void imoUEvidencijiBezFizickogPrisustvaNeBlokira() {
         luka.addToEvidencija("EVID", java.time.LocalDateTime.now());
         KontejnerskiBrod kandidat = new KontejnerskiBrod("Neptun", "EVID", "M-2", "REG-2", TestFactory.FOTO, 100);
         List<String> greske = PlovilaValidator.validiraj(luka, kandidat, null);
-        assertFalse(greske.isEmpty());
+        assertTrue(greske.isEmpty());
     }
 
     @Test

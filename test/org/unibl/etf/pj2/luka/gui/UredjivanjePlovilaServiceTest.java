@@ -78,4 +78,51 @@ class UredjivanjePlovilaServiceTest {
         List<String> greske = UredjivanjePlovilaService.dodajPlovilo(luka, t, TestFactory.kontejnerski("104"));
         assertFalse(greske.isEmpty());
     }
+
+    @Test
+    @DisplayName("Izmjena naziva ne mijenja brzinu plovila")
+    void izmjenaNazivaNeMijenjaBrzinu() {
+        UredjivanjePlovilaService.dodajPlovilo(luka, t, TestFactory.kontejnerski("105"));
+        double originalnaBrzina = PregledTerminalaService.pronadjiPlovilo(t, "105").getBrzina();
+
+        KontejnerskiBrod azurirano = new KontejnerskiBrod("Novo ime", "105", "M-novi", "REG-novi", TestFactory.FOTO, 999);
+        List<String> greske = UredjivanjePlovilaService.izmijeniPlovilo(luka, t, "105", azurirano);
+
+        assertTrue(greske.isEmpty());
+        assertEquals(originalnaBrzina, PregledTerminalaService.pronadjiPlovilo(t, "105").getBrzina());
+    }
+
+    @Test
+    @DisplayName("Izmjena službenog plovila čuva stanje rotacije")
+    void izmjenaCuvaRotaciju() {
+        var vatrogasci = TestFactory.tankerVatrogasci("106");
+        vatrogasci.setRotacija(true);
+        List<String> greskeDodavanja = UredjivanjePlovilaService.dodajPlovilo(luka, t, vatrogasci);
+        assertTrue(greskeDodavanja.isEmpty());
+
+        var azurirano = TestFactory.tankerVatrogasci("106");
+        List<String> greske = UredjivanjePlovilaService.izmijeniPlovilo(luka, t, "106", azurirano);
+
+        assertTrue(greske.isEmpty());
+        assertTrue(azurirano.isRotacija());
+    }
+
+    @Test
+    @DisplayName("IMO broj se može ponovo iskoristiti nakon što je plovilo obrisano")
+    void imoSeMozePonovoIskoristitiNakonBrisanja() {
+        UredjivanjePlovilaService.dodajPlovilo(luka, t, TestFactory.kontejnerski("107"));
+        assertTrue(UredjivanjePlovilaService.obrisiPlovilo(t, "107"));
+
+        List<String> greske = UredjivanjePlovilaService.dodajPlovilo(luka, t, TestFactory.kruzer("107"));
+        assertTrue(greske.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Dodavanje briše zaostalu evidenciju ulaska za taj IMO")
+    void dodavanjeBrisePreostaluEvidenciju() {
+        luka.addToEvidencija("108", java.time.LocalDateTime.now().minusDays(3));
+        List<String> greske = UredjivanjePlovilaService.dodajPlovilo(luka, t, TestFactory.kontejnerski("108"));
+        assertTrue(greske.isEmpty());
+        assertFalse(luka.getEvidencijaUlaska().containsKey("108"));
+    }
 }

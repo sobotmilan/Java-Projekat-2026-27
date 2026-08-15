@@ -431,9 +431,17 @@ Model/logika sloj (`TipPlovila`, `PlovilaFabrika`, `PlovilaValidator`,
 komponente (`PlovilaFormaDijalog`, `AdminProzor`, `KlijentskiProzor`) provjerene kompajliranjem i
 smoke-testom pokretanja (nema izuzetaka pri startu), ali ne i ručnim klikanjem kroz UI u ovoj
 sesiji — nije bio dostupan alat za snimanje ekrana/kontrolu miša da se to uradi vizuelno, pa ta
-provjera ostaje otvorena za sljedeće pokretanje iz IDE-a. Test paket: **239 ukupno, 0 padova**
-(208 + 31 novih). Sljedeće: C5/C7/C8 (klijent GUI, prikaz terminala, odlazak, dinamičko
-dodavanje) — vidi `R4_POTVRDA_I_GUI_ZADATAK.md`.
+provjera ostaje otvorena za sljedeće pokretanje iz IDE-a.
+
+Vanjski code review istog dana (`GUI_KORAK1_PREGLED.md`) je našao tri nalaza u modelnom sloju,
+sva popravljena — detalji u `ZAHTJEVI.md`, "Popravke nakon code review-a": G1 (izmjena kroz formu
+je tiho regenerisala brzinu plovila, kršeći invarijantu koju `SerializationUtilTest` tvrdi), G2
+(nepotreban rezerviši→postavi→otkaži put u `dodajPlovilo`, zamijenjen jednim atomarnim upisom), G3
+(provjera jedinstvenosti IMO-a je gledala i `evidencijaUlaska`, pa je broj davno otišlog plovila
+ostajao trajno zabranjen — sužena na fizičko prisustvo, uz čišćenje zaostale evidencije pri
+dodavanju). Test paket: **243 ukupno, 0 padova** (208 + 35 novih), pokrenut tri puta zaredom bez
+varijacije. Sljedeće: C5/C7/C8 (klijent GUI, prikaz terminala, odlazak, dinamičko dodavanje) —
+vidi `R4_POTVRDA_I_GUI_ZADATAK.md`.
 
 ## Otvoreno pitanje za tebe
 

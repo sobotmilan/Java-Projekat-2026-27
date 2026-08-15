@@ -23,7 +23,7 @@ public class KlijentskiProzor extends JFrame {
     private final JTextArea prikazPolje = new JTextArea();
 
     public KlijentskiProzor(Luka luka) {
-        super("Klijentska aplikacija — pregled luke");
+        super("Klijentska aplikacija");
         this.luka = luka;
         setSize(700, 500);
         setLocationRelativeTo(null);

@@ -51,8 +51,8 @@ class PregledTerminalaServiceTest {
         assertEquals("200", red[0]);
         assertEquals("Kontejnerski brod", red[2]);
         assertEquals("1500 TEU", red[4]);
-        assertEquals("—", red[5]);
-        assertEquals("—", red[6]);
+        assertEquals("-", red[5]);
+        assertEquals("-", red[6]);
     }
 
     @Test

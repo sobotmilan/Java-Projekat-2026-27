@@ -849,3 +849,50 @@ ne zadire u C5-ov opseg (živi prikaz, odlazak plovila, dinamičko dodavanje tok
   (A7) gradi polja jednom, za taj fiksni tip; izmjena ne dozvoljava promjenu tipa (to bi značilo
   brisanje + novo dodavanje, dosljedno tome što je tip ugrađen u hijerarhiju klasa, ne u jedno
   polje).
+
+### Popravke nakon code review-a (`GUI_KORAK1_PREGLED.md`, 15. avgust)
+
+Tri nalaza, sva popravljena isti dan.
+
+**G1 (blokirao nastavak).** `izmijeniPlovilo` je zamjenjivao cijeli objekat plovila novom
+instancom iz `PlovilaFabrika` — a `Plovilo`-in konstruktor generiše `brzina` slučajno pri svakom
+pozivu. Administrator koji samo ispravi slovnu grešku u nazivu je nesvjesno mijenjao brzinu
+plovila, kršeći invarijantu koju `SerializationUtilTest.plovilaPrezivljavajuRoundTrip` izričito
+tvrdi (brzina se čuva, ne regeneriše). Popravka: `izmijeniPlovilo` prenosi `brzina` (i, ako je
+plovilo `SluzbenoPlovilo`, stanje `rotacija`) sa starog objekta na novi prije zamjene na doku —
+oboje je stanje koje admin forma namjerno ne izlaže (rotacija se uključuje/isključuje isključivo
+kroz `KoordinatorUvidjaja`/`BrodThread`, ne kroz admin formu), pa mora preživjeti izmjenu
+nepromijenjeno. Novi testovi: `izmjenaNazivaNeMijenjaBrzinu`, `izmjenaCuvaRotaciju`.
+
+**G2.** `dodajPlovilo` je pozivao `Terminal.rezervisiSlobodanDok()`/`otkaziRezervaciju()` —
+mehanizam namijenjen simulaciji, gdje plovilo putuje ka vezu kroz više koraka i rezervacija
+sprečava trku dva broda za isti vez (R2/K5). Admin plovilo se postavlja odmah, u jednom koraku,
+pa je rezervacija bila suvišan trostepeni put (rezerviši → postavi → otkaži) koji otvara prozor
+u kojem je vez lažno rezervisan, i ostavlja curenje ako bi izuzetak pukao između koraka. Popravka:
+jedan `synchronized(terminal)` blok, direktan upis u `Polje`. Bezbjedno je **samo** zato što admin
+aplikacija radi dok simulacija ne radi (nema `BrodThread`-ova koji bi se takmičili za isti vez) —
+komentar iznad metode to eksplicitno kaže, isto upozorenje kao nad
+`PokretacSimulacije`-ovim setup-only metodama.
+
+**G3 (srednje).** `PlovilaValidator` je odbijao IMO broj ako je postojao u
+`Luka.getEvidencijaUlaska()`, bez obzira da li je plovilo još fizički u luci. Evidencija je zapis
+za naplatu taksi i nikad se ne prazni (K-nalazi iz `PRONALASCI.md`), pa je IMO broj plovila koje je
+davno napustilo luku ostajao trajno zabranjen — administrator poslije nekoliko simulacija ne bi
+mogao ponovo upotrijebiti taj broj. Popravka: `PlovilaValidator` provjerava jedinstvenost samo
+kroz fizičku matricu (stvarno prisustvo), ne kroz evidenciju; `dodajPlovilo` sada briše zaostali
+zapis evidencije za taj IMO neposredno prije postavljanja na dok, tako da novo plovilo (ili
+ponovo iskorišten broj) ne naslijedi tuđe vrijeme ulaska preko `putIfAbsent`-a u
+`Luka.addToEvidencija()`. Namjerno **ne** i u `izmijeniPlovilo` — brisanje evidencije pri izmjeni
+bi resetovalo vrijeme ulaska (i time taksu) plovilu koje je stvarno stiglo kroz simulaciju i sada
+se samo uređuje kroz GUI, što bi bio novi bug, ne popravka. Novi testovi:
+`imoSeMozePonovoIskoristitiNakonBrisanja`, `dodavanjeBrisePreostaluEvidenciju`,
+`PlovilaValidatorTest.imoUEvidencijiBezFizickogPrisustvaNeBlokira` (zamjenjuje raniji
+`duplikatImoUEvidenciji`, koji je tvrdio suprotno ponašanje).
+
+**Sitnije, takođe primijenjeno:** `PregledTerminalaService.redovi()`/`pronadjiPlovilo()` sada
+čitaju matricu terminala unutar `synchronized(terminal)`, po uzoru na
+`PrikazTerminala.render()` — dok simulacija ne radi razlika je kozmetička, ali dosljednost
+("svako čitanje matrice ide pod istim ključem") je jeftina i vrijedna zadržati. Provjereno da
+`AdminProzor` već traži plovilo po IMO broju (kolona 0), ne po indeksu reda tabele — nalaz o
+tome da `redovi()` preskače prazne vezove (pa indeks reda ≠ oznaka veza) nije zahtijevao izmjenu,
+samo potvrdu.

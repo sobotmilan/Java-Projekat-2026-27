@@ -4,6 +4,7 @@ import org.unibl.etf.pj2.luka.model.classes.Dok;
 import org.unibl.etf.pj2.luka.model.classes.Luka;
 import org.unibl.etf.pj2.luka.model.classes.Plovilo;
 import org.unibl.etf.pj2.luka.model.classes.Terminal;
+import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,24 +14,29 @@ public final class UredjivanjePlovilaService {
     private UredjivanjePlovilaService() {
     }
 
+    // Direktan upis u Polje umjesto Terminal.rezervisiSlobodanDok()/otkaziRezervaciju() —
+    // bezbjedno je SAMO zato što admin aplikacija radi dok simulacija ne radi (nema BrodThread-ova
+    // koji bi se takmičili za isti vez). Ista pretpostavka kao PokretacSimulacije-ove
+    // setup-only metode.
     public static List<String> dodajPlovilo(Luka luka, Terminal terminal, Plovilo novo) {
         List<String> greske = PlovilaValidator.validiraj(luka, novo, null);
         if (!greske.isEmpty()) {
             return greske;
         }
 
-        Dok dok = terminal.rezervisiSlobodanDok(novo);
-        if (dok == null) {
-            greske = new ArrayList<>();
-            greske.add("Terminal je pun, nema slobodnog veza.");
-            return greske;
+        synchronized (terminal) {
+            for (Dok d : terminal.getDokovi()) {
+                if (d.isSlobodan()) {
+                    luka.getEvidencijaUlaska().remove(novo.getImoBroj());
+                    d.getLokacija().setTrenutnoPlovilo(novo);
+                    return List.of();
+                }
+            }
         }
 
-        synchronized (terminal) {
-            dok.getLokacija().setTrenutnoPlovilo(novo);
-        }
-        terminal.otkaziRezervaciju(dok);
-        return List.of();
+        List<String> puno = new ArrayList<>();
+        puno.add("Terminal je pun, nema slobodnog veza.");
+        return puno;
     }
 
     public static List<String> izmijeniPlovilo(Luka luka, Terminal terminal, String stariImoBroj, Plovilo azurirano) {
@@ -43,6 +49,10 @@ public final class UredjivanjePlovilaService {
             for (Dok d : terminal.getDokovi()) {
                 Plovilo trenutno = d.getLokacija().getTrenutnoPlovilo();
                 if (trenutno != null && trenutno.getImoBroj().equals(stariImoBroj)) {
+                    azurirano.setBrzina(trenutno.getBrzina());
+                    if (trenutno instanceof SluzbenoPlovilo staro && azurirano instanceof SluzbenoPlovilo novoSluzbeno) {
+                        novoSluzbeno.setRotacija(staro.isRotacija());
+                    }
                     d.getLokacija().setTrenutnoPlovilo(azurirano);
                     return List.of();
                 }

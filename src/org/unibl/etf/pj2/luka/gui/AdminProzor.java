@@ -43,7 +43,7 @@ public class AdminProzor extends JFrame {
     private final JTable tabela = new JTable(tabelaModel);
 
     public AdminProzor() {
-        super("Administratorska aplikacija — Luka");
+        super("Administratorska aplikacija");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(900, 500);
         setLocationRelativeTo(null);

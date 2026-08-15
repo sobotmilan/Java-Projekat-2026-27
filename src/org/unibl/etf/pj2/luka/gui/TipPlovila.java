@@ -13,14 +13,14 @@ import org.unibl.etf.pj2.luka.model.classes.TankerVatrogasci;
 
 public enum TipPlovila {
     KONTEJNERSKI("Kontejnerski brod", null, "Kapacitet (TEU)"),
-    KONTEJNERSKI_OBALSKA_STRAZA("Kontejnerski brod — Obalska straža", "Obalska straža", "Kapacitet (TEU)"),
+    KONTEJNERSKI_OBALSKA_STRAZA("Kontejnerski brod (obalska straza)", "Obalska straža", "Kapacitet (TEU)"),
     KRUZER("Putnički kruzer", null, "Broj putnika"),
-    KRUZER_OBALSKA_STRAZA("Putnički kruzer — Obalska straža", "Obalska straža", "Broj putnika"),
-    KRUZER_CARINA("Putnički kruzer — Carina", "Carina", "Broj putnika"),
+    KRUZER_OBALSKA_STRAZA("Putnički kruzer (obalska straza)", "Obalska straža", "Broj putnika"),
+    KRUZER_CARINA("Putnički kruzer (carina)", "Carina", "Broj putnika"),
     TANKER("Tanker", null, "Zapremina (barel)"),
-    TANKER_OBALSKA_STRAZA("Tanker — Obalska straža", "Obalska straža", "Zapremina (barel)"),
-    TANKER_CARINA("Tanker — Carina", "Carina", "Zapremina (barel)"),
-    TANKER_VATROGASCI("Tanker — Vatrogasci", "Vatrogasci", "Zapremina (barel)");
+    TANKER_OBALSKA_STRAZA("Tanker (obalska straza)", "Obalska straža", "Zapremina (barel)"),
+    TANKER_CARINA("Tanker (carina)", "Carina", "Zapremina (barel)"),
+    TANKER_VATROGASCI("Tanker (vatrogasci)", "Vatrogasci", "Zapremina (barel)");
 
     private final String naziv;
     private final String sluzba;
