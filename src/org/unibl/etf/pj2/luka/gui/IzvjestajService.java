@@ -3,6 +3,7 @@ package org.unibl.etf.pj2.luka.gui;
 import org.unibl.etf.pj2.luka.util.PokretacIzvjestaja;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -17,7 +18,10 @@ public final class IzvjestajService {
     }
 
     public static void preuzmiIzvjestaj(File odrediste) throws IOException {
-        Files.copy(PokretacIzvjestaja.getPutanjaCsv().toPath(), odrediste.toPath(),
-                StandardCopyOption.REPLACE_EXISTING);
+        File izvor = PokretacIzvjestaja.getPutanjaCsv();
+        if (!izvor.exists()) {
+            throw new FileNotFoundException("CSV izvještaj (" + izvor.getPath() + ") još ne postoji.");
+        }
+        Files.copy(izvor.toPath(), odrediste.toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
 }

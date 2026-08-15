@@ -94,7 +94,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | F3 | Državna plovila ne plaćaju | DONE — test |
 | F4 | CSV izvoz | DONE — `BrodThread.obracunajIZabiljeziTaksu()` poziva `PokretacIzvjestaja.izracunajTaksuZaPlovilo()`/`evidentirajUCSV()` na sva tri fizička mjesta konačnog izlaska iz luke (normalan odlazak, prisilan izlazak učesnika sudara, izlazak obalske straže nakon potjernice); briše zapis iz evidencije nakon obračuna |
 | F5 | Preuzimanje CSV evidencije (dugme + odabir odredišta) | DONE — `AdminProzor` dugme "Preuzmi CSV izvještaj", `gui.IzvjestajService.preuzmiIzvjestaj(File)`, `FileDialog.SAVE` |
-| F6 | Skaliranje stvarnog vremena u simulaciono (profesorovo pojašnjenje: "Vi trebate skalirati") | DONE — dva nezavisna mehanizma, vidi "Riješeno 15. avgusta" ispod: (1) `Luka.pomjeriEvidencijuZaPauzu()`/`SerializationUtil.primijeniPauzu()` isključuju period dok je aplikacija bila ugašena iz obračuna; (2) `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (60×) ubrzava tempo naplate unutar aktivne sesije |
+| F6 | Skaliranje stvarnog vremena u simulaciono (profesorovo pojašnjenje: "Vi trebate skalirati") | DONE — dva nezavisna mehanizma, vidi "Riješeno 15. avgusta" ispod: (1) `Luka.pomjeriEvidencijuZaPauzu()`/`SerializationUtil.primijeniPauzu()` isključuju period dok je aplikacija bila ugašena iz obračuna; (2) `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (3600×, ispravljeno sa prvobitnog 60× — vidi F1 nalaz iz `F5_F6_PREGLED.md`) ubrzava tempo naplate unutar aktivne sesije |
 | E1 | Kraj kad odabrana plovila izađu i klijentska se privežu | TODO |
 | E2 | Ponovna serijalizacija u `luka.ser` | TODO |
 | E3 | Svi izuzeci u `error.log` preko `Logger` | DONE — provjereno 15. avgusta (N4, `PROPUSTENI_ZAHTJEVI_V2.md`): svaki `catch` blok u `src/` je pregledan ručno (`grep -rn "catch(" src/`). Svaki ili loguje preko `LoggerUtil`, ili je standardni `InterruptedException` idiom (`Thread.currentThread().interrupt()` — ne "guta" grešku, propagira signal prekida dalje), ili prebacuje izuzetak u drugi tip i baca ga dalje (`LoggerUtil`, `AdminProzor.ucitajStanje()`), ili je namjerno dokumentovan javadoc-om (`GeneratorPlovila.parsirajImoBezbjedno()`), ili je vraćen korisniku preko `JOptionPane`-a u GUI komponentama gdje log fajl nije prirodno mjesto za interaktivnu grešku (`PlovilaFormaDijalog`, `AdminProzor.preuzmiCsvIzvjestaj()`). Nijedan blok tiho ne guta grešku bez traga. |
@@ -952,17 +952,30 @@ pauziranja, ne množilac.
 
 2. **Tempo naplate unutar aktivne sesije** (kozmetička, orijentisana na demonstraciju — ono što je
    prvi predlog pokušavao da uradi, ali primijenjeno na ispravnom mjestu). Novo
-   `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (podrazumijevano `60L`, "1 stvarni minut = 1
-   simulacioni sat"), primijenjeno tek **nakon** što je pauza (mehanizam 1) već isključena iz
-   proteklog vremena — pa uvećava samo genuino "živo" trajanje unutar tekuće sesije, nikad
-   period ugašene aplikacije. Puna tarifna ljestvica (do plafona od 2000 KM) se tako odigra za
-   dvadesetak stvarnih minuta žive demonstracije umjesto pola dana.
+   `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA`, primijenjeno tek **nakon** što je pauza
+   (mehanizam 1) već isključena iz proteklog vremena — pa uvećava samo genuino "živo" trajanje
+   unutar tekuće sesije, nikad period ugašene aplikacije.
+
+   **F1 ispravka (`F5_F6_PREGLED.md`, isti dan):** prvobitna vrijednost `60L` ("1 stvarni minut =
+   1 simulacioni sat") je bila pogrešno kalibrisana protiv stvarnog trajanja boravka plovila u
+   luci tokom jedne žive simulacije. Vrijeme provedeno privezano je reda **sekundi do minuta**
+   (T11: `trajanjeKoraka()` 20–400ms po polju, ruta kroz terminal ~20 polja), ne desetina minuta.
+   Sa faktorom `60`, dostizanje i prvog praga tarifne ljestvice (12h) zahtijevalo bi 12 stvarnih
+   *minuta* neprekidnog boravka — u praksi bi svako plovilo platilo tačno minimalnih 100 KM, a
+   cijela ljestvica (plafoni od 1000/2000 KM, tarifa preko 24h) se nikad ne bi aktivirala na
+   demonstraciji. Postojeći testovi to nisu uhvatili jer pozivaju `izracunajTaksuZaPlovilo()`
+   direktno sa izmišljenim vremenima, ne kroz stvarnu simulaciju. Ispravljeno na **`3600L`** (1
+   stvarna sekunda = 1 simulacioni sat) — puna ljestvica se sada odigra za desetak-dvadesetak
+   stvarnih *sekundi* boravka, unutar dometa jedne žive demonstracije.
 
    `public static volatile` (D5 obrazac) radi determinizma testova. Postojeći
-   `PokretacIzvjestajaTest` (tarifna ljestvica, pisan prije F6) sada spušta faktor na `1L` u
+   `PokretacIzvjestajaTest` (tarifna ljestvica, pisan prije F6) spušta faktor na `1L` u
    `@BeforeEach`/vraća ga u `@AfterEach` — testira čistu ljestvicu (sat→KM), nezavisno od tempa;
-   novi testovi (`jedanStvarniMinutJeJedanSimulacioniSat`, `dvanaestStvarnihMinutaDostizePlafon`)
-   provjeravaju sâmo skaliranje.
+   dodatni testovi provjeravaju sâmo skaliranje sa faktorom `3600` eksplicitno, i jedan
+   (`podrazumijevaniFaktorRazlikujeKratkeBoravke`) direktno provjerava F1-regresiju: da boravak od
+   2 stvarne sekunde i boravak od 10 stvarnih sekundi, sa **podrazumijevanom** vrijednošću
+   faktora, daju različit iznos — bez ovog testa bi se F1 moglo ponovo tiho uvući ako neko
+   ubuduće promijeni podrazumijevanu vrijednost bez razmišljanja o stvarnom trajanju boravka.
 
 ### F4 — naplata pri stvarnom izlasku iz luke
 
@@ -1003,3 +1016,18 @@ dugme u `AdminProzor` ("Preuzmi CSV izvještaj") otvara `FileDialog.SAVE` za odr
 ne postoji (nijedno plovilo još nije platilo taksu), korisnik dobija informativnu poruku umjesto
 prazne/nepostojeće datoteke. Kopiranje ide kroz `SwingWorker` (ne blokira EDT, isti obrazac kao
 ostatak `AdminProzor`-a).
+
+**F2 ispravka (`F5_F6_PREGLED.md`, isti dan):** `AdminProzor` je od početka pozivao
+`izvjestajPostoji()` prije otvaranja `FileDialog`-a (ispravan redoslijed, potvrđeno pregledom), ali
+sâm `IzvjestajService.preuzmiIzvjestaj()` se oslanjao isključivo na tu spoljnu provjeru — pozvan
+direktno (npr. iz testa, ili buduće druge pozivne tačke) nad nepostojećim CSV-om bi propustio sirov
+`NoSuchFileException` do pozivaoca. Dodata eksplicitna provjera unutar same metode, sa čitljivom
+`FileNotFoundException` porukom — isti "samodovoljnost bez obzira ko poziva" obrazac kao K10.
+Ostavljena je javna signatura `throws IOException` (ne uvodi se novi tip greške ka pozivaocu),
+`AdminProzor`-ov postojeći `catch (IOException)` blok i dalje ispravno hvata i prikazuje poruku.
+
+Reviewer je u istom nalazu (F2, "sitnije") predložio i dodavanje JavaDoc-a na `IzvjestajService`
+kao "jedinu klasu u `gui` paketu bez njega" — provjereno da to nije tačno za trenutno stanje
+repozitorija (npr. `AdminProzor` takođe nema nijedan JavaDoc komentar), dosljedno originalnoj
+instrukciji iz `R4_POTVRDA_I_GUI_ZADATAK.md` ("Ne piši JavaDoc — autor ih piše sam") koja se
+primjenjuje na cio `gui` paket. Nije primijenjeno.

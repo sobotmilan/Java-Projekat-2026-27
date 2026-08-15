@@ -477,6 +477,34 @@ Test paket: **262 ukupno, 0 padova** (243 prije ovog kruga + 19 novih: 4 `LukaTe
 `SerializationUtilTest`, 4 `PokretacIzvjestajaTest`, 3 `BrodThreadTest` za F4/F6, i 4 nova
 `IzvjestajServiceTest` za F5).
 
+**Status (15. avgust, treći prolaz istog dana):** Code review F5/F6 (`F5_F6_PREGLED.md`) je našao
+dvije stvari, obje popravljene.
+
+**F1 (blokirao) — pogrešno kalibrisan faktor skaliranja.** `FAKTOR_SKALIRANJA_VREMENA = 60L` ("1
+stvarni minut = 1 simulacioni sat") je zvučalo razumno u izolaciji, ali stvarno trajanje boravka
+plovila u luci tokom jedne simulacije je reda **sekundi**, ne desetina minuta (`trajanjeKoraka()`
+20–400ms po polju, T11). Sa faktorom 60, prvi prag tarifne ljestvice (12h) bi zahtijevao 12
+stvarnih *minuta* neprekidnog boravka — u praksi bi svako plovilo platilo tačno minimum od 100 KM,
+i cijela ljestvica iz specifikacije se nikad ne bi vidjela na demonstraciji. Ispravljeno na
+`3600L` (1 stvarna sekunda = 1 simulacioni sat) — ista greška klase kao "testovi prolaze ali
+funkcionalnost nikad ne okine u stvarnoj upotrebi", vrijedan opšti podsjetnik: testovi koji
+pozivaju logiku direktno sa izmišljenim vremenima (kao ovdje) ne hvataju kalibracijske greške u
+odnosu na stvarno trajanje operacija koje ta logika mjeri — potreban je bar jedan test protiv
+podrazumijevane vrijednosti i realističnog opsega ulaza, ne samo protiv proizvoljno odabranih
+testnih vrijednosti koje uvijek "rade" bez obzira na kalibraciju.
+
+**F2 (nisko) — `IzvjestajService` se oslanjao na spoljnu provjeru.** `AdminProzor` je već
+ispravno pozivao `izvjestajPostoji()` prije `FileDialog`-a, ali sâma servisna metoda nije bila
+samodovoljna — pozvana direktno bez te provjere, propustila bi sirov `NoSuchFileException`.
+Dodata eksplicitna provjera sa čitljivom porukom (K10 obrazac). Reviewerov prateći predlog da se
+doda JavaDoc na `IzvjestajService` kao "jedinu klasu bez njega" u `gui` paketu je provjeren i
+odbačen — nijedna klasa u `gui` paketu nema JavaDoc, dosljedno eksplicitnoj instrukciji iz
+`R4_POTVRDA_I_GUI_ZADATAK.md`; reviewerova premisa o trenutnom stanju koda nije bila tačna.
+
+Detalji u `ZAHTJEVI.md`, "F1 ispravka"/"F2 ispravka" (unutar "Riješeno 15. avgusta: F4/F5/F6").
+Test paket: **265 ukupno, 0 padova** (262 + 3 nova: 2 `PokretacIzvjestajaTest` za F1-regresiju i
+faktor 3600, 1 `IzvjestajServiceTest` za F2), pokrenut tri puta zaredom bez varijacije.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje

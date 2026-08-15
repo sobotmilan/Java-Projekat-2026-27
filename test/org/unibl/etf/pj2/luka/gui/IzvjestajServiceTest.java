@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,6 +50,18 @@ class IzvjestajServiceTest {
     void izvjestajPostojiTrueKadPostojiFajl() throws IOException {
         Files.writeString(CSV, "IMO Broj,Naziv,Tip,Vrijeme ulaska,Vrijeme izlaska,Iznos\n");
         assertTrue(IzvjestajService.izvjestajPostoji());
+    }
+
+    @Test
+    @DisplayName("F2 (F5_F6_PREGLED.md): preuzmiIzvjestaj() baca čitljiv izuzetak kad CSV ne postoji, "
+            + "ne pušta sirov NoSuchFileException")
+    void preuzmiIzvjestajBacaCitljivIzuzetakBezFajla(@TempDir Path tempDir) {
+        File odrediste = tempDir.resolve("preuzeto.csv").toFile();
+
+        FileNotFoundException greska = assertThrows(FileNotFoundException.class,
+                () -> IzvjestajService.preuzmiIzvjestaj(odrediste));
+        assertTrue(greska.getMessage().contains("takse.csv"),
+                "Poruka mora jasno reći koji fajl nedostaje.");
     }
 
     @Test

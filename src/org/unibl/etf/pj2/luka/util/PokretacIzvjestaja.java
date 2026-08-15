@@ -29,14 +29,19 @@ public class PokretacIzvjestaja {
 
     /**
      * Faktor skaliranja stvarnog proteklog vremena u simulirano, za potrebe obračuna takse (F6):
-     * koliko simuliranih sati odgovara jednom stvarnom minutu proteklog vremena. Podrazumijevano
-     * {@code 60} (1 stvarni minut = 1 simulacioni sat) — tarifna ljestvica se tako odigra tokom
-     * žive demonstracije za par minuta umjesto sati. Primjenjuje se isključivo na vrijeme koje je
+     * koliko simuliranih sati odgovara jednoj stvarnoj sekundi proteklog vremena. Podrazumijevano
+     * {@code 3600} (1 stvarna sekunda = 1 simulacioni sat). Stvaran boravak plovila u luci tokom
+     * jedne žive simulacije je reda sekundi do minuta (T11: `trajanjeKoraka()` 20–400ms po polju,
+     * ruta kroz terminal ~20 polja) — manji faktor (npr. raniji `60`, 1 stvarni minut = 1
+     * simulacioni sat) bi zahtijevao 12+ stvarnih minuta boravka da bi se dostigao i prvi prag
+     * tarifne ljestvice (12h), pa bi svako plovilo u praksi plaćalo samo minimalnih 100 KM i
+     * cijela ljestvica (1000/2000 KM plafoni, tarifa preko 24h) se nikad ne bi aktivirala na
+     * demonstraciji (F1 nalaz, `F5_F6_PREGLED.md`). Primjenjuje se isključivo na vrijeme koje je
      * već isključilo eventualnu pauzu rada aplikacije ({@link org.unibl.etf.pj2.luka.model.classes.Luka#pomjeriEvidencijuZaPauzu(Duration)}),
      * pa ne uvećava efekat prekida rada — samo tempo unutar aktivne sesije. {@code public static
      * volatile} (ne {@code final}) po D5 obrascu, radi determinizma testova tarifne ljestvice.
      */
-    public static volatile long FAKTOR_SKALIRANJA_VREMENA = 60L;
+    public static volatile long FAKTOR_SKALIRANJA_VREMENA = 3600L;
 
     /**
      * Obračunava taksu za dato plovilo prema proteklom vremenu boravka prema sljedećem principu:
