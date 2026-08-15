@@ -137,7 +137,7 @@ public class AdminProzor extends JFrame {
                 try {
                     luka = get();
                 } catch (Exception ex) {
-                    throw new IllegalStateException("Neuspješno učitavanje stanja luke.", ex);
+                    throw new IllegalStateException("Neuspjesno ucitavanje stanja luke.", ex);
                 }
                 DefaultComboBoxModel<Terminal> model = new DefaultComboBoxModel<>();
                 for (Terminal t : luka.getTerminali()) {
@@ -222,7 +222,7 @@ public class AdminProzor extends JFrame {
 
     private void preuzmiCsvIzvjestaj() {
         if (!IzvjestajService.izvjestajPostoji()) {
-            JOptionPane.showMessageDialog(this, "Nema još evidentiranih taksi — CSV izvještaj ne postoji.",
+            JOptionPane.showMessageDialog(this, "Nema još evidentiranih taksi.",
                     "Preuzimanje CSV izvještaja", JOptionPane.INFORMATION_MESSAGE);
             return;
         }

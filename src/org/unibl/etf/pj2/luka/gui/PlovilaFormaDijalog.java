@@ -19,6 +19,7 @@ import java.awt.FileDialog;
 import java.awt.Frame;
 import java.awt.GridLayout;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -170,31 +171,35 @@ public class PlovilaFormaDijalog extends JDialog {
     }
 
     private void pokusajSacuvaj() {
-        double specificnaVrijednost;
-        try {
-            specificnaVrijednost = Double.parseDouble(specificnoPolje.getText().trim());
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, tip.getNazivSpecificnogPolja() + " mora biti broj.",
+        List<String> greske = new ArrayList<>();
+
+        double specificnaVrijednost = 0;
+        String tekst = specificnoPolje.getText().trim();
+        if (tekst.isBlank()) {
+            greske.add(tip.getNazivSpecificnogPolja() + " ne smije biti prazno.");
+        } else {
+            try {
+                specificnaVrijednost = Double.parseDouble(tekst);
+            } catch (NumberFormatException ex) {
+                greske.add(tip.getNazivSpecificnogPolja() + " mora biti broj.");
+            }
+        }
+
+        Plovilo kandidat = PlovilaFabrika.napravi(tip, nazivPolje.getText().trim(),
+                imoPolje.getText().trim(), brojMotoraPolje.getText().trim(),
+                registarskiBrojPolje.getText().trim(), fotografija,
+                specificnaVrijednost, spisakPotjera);
+
+        greske.addAll(postojece == null
+                ? UredjivanjePlovilaService.dodajPlovilo(luka, terminal, kandidat)
+                : UredjivanjePlovilaService.izmijeniPlovilo(luka, terminal,
+                postojece.getImoBroj(), kandidat));
+
+        if (!greske.isEmpty()) {
+            JOptionPane.showMessageDialog(this, String.join("\n", greske),
                     "Greška", JOptionPane.ERROR_MESSAGE);
             return;
         }
-
-        Plovilo kandidat = PlovilaFabrika.napravi(tip, nazivPolje.getText().trim(), imoPolje.getText().trim(),
-                brojMotoraPolje.getText().trim(), registarskiBrojPolje.getText().trim(), fotografija,
-                specificnaVrijednost, spisakPotjera);
-
-        List<String> greske;
-        if (postojece == null) {
-            greske = UredjivanjePlovilaService.dodajPlovilo(luka, terminal, kandidat);
-        } else {
-            greske = UredjivanjePlovilaService.izmijeniPlovilo(luka, terminal, postojece.getImoBroj(), kandidat);
-        }
-
-        if (!greske.isEmpty()) {
-            JOptionPane.showMessageDialog(this, String.join("\n", greske), "Greška", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
         sacuvano = true;
         dispose();
     }
