@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 13. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica — vidi "Riješeno 13. avgusta" ispod).
-Test paket: 208 ukupno, 0 pada, 0 ignorisano.
+Stanje: 15. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica) + administratorski GUI (A1–A14, `GUI_KORAK1_PREGLED.md` ispravke) + F4/F5/F6 (naplata pri izlasku, preuzimanje CSV-a, skaliranje vremena — vidi "Riješeno 15. avgusta" ispod, uzrokovano nalazima N1/N2 iz `PROPUSTENI_ZAHTJEVI_V2.md`).
+Test paket: 258 ukupno, 0 pada, 0 ignorisano.
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -34,28 +34,29 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | T5 | Nikad dva plovila na istom polju | DONE | `pomjeriNaPolje()` pod ključem, test |
 | T6 | Evidencija slobodnih vezova po terminalu | DONE | `getBrojSlobodnihVezova()` |
 | T7 | Ako su svi terminali puni — nema ulaza u luku | DONE | petlja u `run()` |
-| T8 | Pun terminal — plovilo ide pravo na naredni | DONE | rezervacija prije ulaska |
-| T9 | Slobodan dok — ulazak i kružni prolazak | DONE | ruta kanal → dok |
+| T8 | Pun terminal — plovilo ide pravo na naredni | DONE | `Terminal.rezervisiSlobodanDok()` vraća `null` kad terminal nema slobodnog nerezervisanog veza — plovilo **uopšte ne ulazi** u taj terminal (vidi `udjiULuku()`), umjesto da uđe pa se probije "pravo" kroz njega kao doslovan čitanje sugeriše. Ishod je isti (plovilo završi na narednom terminalu), a način je bolji (nema nepotrebnog ulaska u terminal koji se odmah napušta) — vidi napomenu u N6 pregledu (`PROPUSTENI_ZAHTJEVI_V2.md`). |
+| T9 | Slobodan dok — ulazak i kružni prolazak | DONE | Doslovno "kružni prolazak po terminalu ka narednom terminalu ili izlazu" **nije implementiran bukvalno** — plovilo rezerviše konkretan slobodan vez preko `rezervisiSlobodanDok()` **prije** ulaska (R2/K5, sprečava trku), uđe, i ide direktno kanalom do tog veza (`doploviDoDoka()`), bez obilaska cijelog terminala. Odbranjivo iz dva razloga: (1) profesorovo pojašnjenje pomjera značenje — *"Ako terminal ima slobodnih mjesta, onda se ulazi u terminal"* — dakle ulazak je uslovljen postojanjem veza, ne obilaskom radi obilaska; (2) rezervacija-prije-ulaska je upravo mehanizam koji je uklonio originalni livelock (K5). Ono što specifikacija suštinski traži — plovilo koje ne nađe vez ne staje, nego nastavlja na naredni terminal — jeste implementirano (vidi T8). Nalaz N6 (`PROPUSTENI_ZAHTJEVI_V2.md`). |
 | T10 | Svaki brod je nit | DONE | `BrodThread implements Runnable` |
 | T11 | Simulacija ni prebrza ni prespora | DONE | `trajanjeKoraka()` 20–400ms |
 
 ## Administratorska aplikacija
 
-| # | Zahtjev | Status |
-|---|---|---|
-| A1 | GUI administratorska aplikacija | TODO |
-| A2 | Padajući meni sa svim tipovima plovila | TODO |
-| A3 | Dugme za dodavanje plovila | TODO |
-| A4 | Tabelarni prikaz plovila po terminalu | TODO |
-| A5 | Dugme za pokretanje korisničke aplikacije | TODO |
-| A6 | Prazna tabela pri prvom pokretanju | TODO |
-| A7 | **Jedna** forma, polja se kreiraju dinamički po tipu | TODO |
-| A8 | FileDialog / JavaFX ekvivalent za fajlove | TODO |
-| A9 | Automatsko osvježavanje tabele nakon dodavanja | TODO |
-| A10 | Kombo boks za izbor terminala mijenja tabelu | TODO |
-| A11 | Izmjena i brisanje plovila | TODO |
-| A12 | Serijalizacija u `luka.ser` prije pokretanja klijenta | PART — `SerializationUtil` radi, nije pozvan iz GUI-ja |
-| A13 | Deserijalizacija pri pokretanju admin dijela | PART — isto |
+| # | Zahtjev | Status | Gdje |
+|---|---|---|---|
+| A1 | GUI administratorska aplikacija | DONE | `gui.AdminProzor` (Swing, ne JavaFX — vidi "Riješeno 15. avgusta" ispod) |
+| A2 | Padajući meni sa svim tipovima plovila | DONE | `gui.TipPlovila` (9 kombinacija) u `AdminProzor`-ovom `JComboBox` |
+| A3 | Dugme za dodavanje plovila | DONE | `AdminProzor.dodajAkcija()` |
+| A4 | Tabelarni prikaz plovila po terminalu | DONE | `gui.PregledTerminalaService.redovi(Terminal)` |
+| A5 | Dugme za pokretanje korisničke aplikacije | DONE | `AdminProzor.pokreniKlijentskuAplikaciju()` → `gui.KlijentskiProzor` (statički snimak, ne C5) |
+| A6 | Prazna tabela pri prvom pokretanju | DONE | `AdminProzor.ucitajStanje()`, bez `PokretacSimulacije`-ovih setup-only metoda |
+| A7 | **Jedna** forma, polja se kreiraju dinamički po tipu | DONE | `gui.PlovilaFormaDijalog` |
+| A8 | FileDialog / JavaFX ekvivalent za fajlove | DONE | `java.awt.FileDialog` u `PlovilaFormaDijalog`/`AdminProzor` (F5) |
+| A9 | Automatsko osvježavanje tabele nakon dodavanja | DONE | `AdminProzor.osvjeziTabelu()`, pozvano nakon svake CRUD operacije |
+| A10 | Kombo boks za izbor terminala mijenja tabelu | DONE | `AdminProzor` terminal-kombo `ItemListener` |
+| A11 | Izmjena i brisanje plovila | DONE | `AdminProzor.izmijeniAkciju()`/`obrisiAkciju()`, `gui.UredjivanjePlovilaService` |
+| A12 | Serijalizacija u `luka.ser` prije pokretanja klijenta | DONE | `AdminProzor.pokreniKlijentskuAplikaciju()` — `SerializationUtil.serijalizujStanjeLuke()` prije otvaranja `KlijentskiProzor`-a |
+| A13 | Deserijalizacija pri pokretanju admin dijela | DONE | `AdminProzor.ucitajStanje()` — `SerializationUtil.ucitajStanjeLuke()` + `GeneratorPlovila.obezbijediJedinstvenostImoZa()` |
+| A14 | Login forma | NIJE IMPLEMENTIRANO | Opciono po pojašnjenju 1 ("Može se napraviti i login forma") — svjesno preskočeno, vrijeme uloženo u obavezne zahtjeve. Nalaz N3 (`PROPUSTENI_ZAHTJEVI_V2.md`). |
 
 ## Korisnička aplikacija
 
@@ -91,10 +92,12 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | F1 | Evidencija ulaska po IMO broju i vremenu | DONE — `Luka`, poziv iz `BrodThread` |
 | F2 | 100 KM/sat, do 12h 1000 KM, do 24h 2000 KM | DONE — `PokretacIzvjestaja`, testovi |
 | F3 | Državna plovila ne plaćaju | DONE — test |
-| F4 | CSV izvoz | PART — piše, nije pozvan pri izlasku broda |
+| F4 | CSV izvoz | DONE — `BrodThread.obracunajIZabiljeziTaksu()` poziva `PokretacIzvjestaja.izracunajTaksuZaPlovilo()`/`evidentirajUCSV()` na sva tri fizička mjesta konačnog izlaska iz luke (normalan odlazak, prisilan izlazak učesnika sudara, izlazak obalske straže nakon potjernice); briše zapis iz evidencije nakon obračuna |
+| F5 | Preuzimanje CSV evidencije (dugme + odabir odredišta) | DONE — `AdminProzor` dugme "Preuzmi CSV izvještaj", `gui.IzvjestajService.preuzmiIzvjestaj(File)`, `FileDialog.SAVE` |
+| F6 | Skaliranje stvarnog vremena u simulaciono (profesorovo pojašnjenje: "Vi trebate skalirati") | DONE — dva nezavisna mehanizma, vidi "Riješeno 15. avgusta" ispod: (1) `Luka.pomjeriEvidencijuZaPauzu()`/`SerializationUtil.primijeniPauzu()` isključuju period dok je aplikacija bila ugašena iz obračuna; (2) `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (60×) ubrzava tempo naplate unutar aktivne sesije |
 | E1 | Kraj kad odabrana plovila izađu i klijentska se privežu | TODO |
 | E2 | Ponovna serijalizacija u `luka.ser` | TODO |
-| E3 | Svi izuzeci u `error.log` preko `Logger` | DONE |
+| E3 | Svi izuzeci u `error.log` preko `Logger` | DONE — provjereno 15. avgusta (N4, `PROPUSTENI_ZAHTJEVI_V2.md`): svaki `catch` blok u `src/` je pregledan ručno (`grep -rn "catch(" src/`). Svaki ili loguje preko `LoggerUtil`, ili je standardni `InterruptedException` idiom (`Thread.currentThread().interrupt()` — ne "guta" grešku, propagira signal prekida dalje), ili prebacuje izuzetak u drugi tip i baca ga dalje (`LoggerUtil`, `AdminProzor.ucitajStanje()`), ili je namjerno dokumentovan javadoc-om (`GeneratorPlovila.parsirajImoBezbjedno()`), ili je vraćen korisniku preko `JOptionPane`-a u GUI komponentama gdje log fajl nije prirodno mjesto za interaktivnu grešku (`PlovilaFormaDijalog`, `AdminProzor.preuzmiCsvIzvjestaj()`). Nijedan blok tiho ne guta grešku bez traga. |
 
 ---
 
@@ -896,3 +899,107 @@ se samo uređuje kroz GUI, što bi bio novi bug, ne popravka. Novi testovi:
 `AdminProzor` već traži plovilo po IMO broju (kolona 0), ne po indeksu reda tabele — nalaz o
 tome da `redovi()` preskače prazne vezove (pa indeks reda ≠ oznaka veza) nije zahtijevao izmjenu,
 samo potvrdu.
+
+## Riješeno 15. avgusta: F4 (naplata pri izlasku), F5 (preuzimanje CSV-a), F6 (skaliranje vremena)
+
+Tri nalaza iz konačnog poređenja specifikacije (`PROPUSTENI_ZAHTJEVI_V2.md`, N1/N2), zajedno sa
+N3/N4/N6 (dokumentacija/audit, vidi izmjene u matrici iznad).
+
+### F6 — najveći pojedinačni rad, uz jednu ispravku toka razmišljanja usred rada
+
+Profesorovo pojašnjenje: *"Jedno je vrijeme kretanja broda u simulaciji a drugo stvarno vrijeme
+koje Vi trebate skalirati."* Prije ove izmjene, `PokretacIzvjestaja.izracunajTaksuZaPlovilo()` je
+računao `Duration.between(vrijemeUlaska, vrijemeIzlaska)` direktno nad stvarnim (wall-clock)
+vremenom — plovilo zatečeno u `luka.ser` od prethodne sesije bi platilo taksu i za period dok je
+aplikacija bila potpuno ugašena.
+
+**Prvi predlog (odbačen usred rada, prije pisanja koda):** pomnožiti stvarno proteklo vrijeme
+faktorom skaliranja (npr. "1 stvarna sekunda = 1 simulacioni sat"). Provjera matematike je
+pokazala da ovo **pogoršava** tačno problem koji treba riješiti — množenje ne pravi razliku
+između "aplikacija je radila cijelo vrijeme" i "aplikacija je bila ugašena": realni prekid od 2
+dana (2880 minuta) pomnožen faktorom 60 postaje 172.800 *simuliranih* sati, daleko gore od
+~48-satne takse bez ikakvog skaliranja. Nijedan skalar primijenjen na sirovu kalendarsku razliku
+ne može razlikovati "živo" vrijeme od "ugašeno" vrijeme — za to je potreban stvaran mehanizam
+pauziranja, ne množilac.
+
+**Usvojeno rješenje — dva nezavisna, ortogonalna mehanizma:**
+
+1. **Pauziranje toka vremena preko restarta aplikacije** (stvarna ispravka N2 problema).
+   `Luka` dobija novo polje `vrijemeZadnjegCuvanja` (`LocalDateTime`, ne `transient` — mora
+   preživjeti serijalizaciju), postavljeno u `SerializationUtil.serijalizujStanjeLuke()`
+   neposredno prije upisa. Pri sljedećem `ucitajStanjeLuke()`, paket-privatna `primijeniPauzu(Luka)`
+   izračuna `pauza = Duration.between(vrijemeZadnjegCuvanja, LocalDateTime.now())` i, ako je pauza
+   bar `PRAG_PAUZE_MS` (podrazumijevano 60000 — spriječava da beznačajna razlika od par
+   milisekundi između uzastopnih save/load poziva, npr. unutar iste test metode, okine pomjeranje),
+   poziva `Luka.pomjeriEvidencijuZaPauzu(pauza)` — pomjera **sve** postojeće timestampove u
+   `evidencijaUlaska` unaprijed za tačno taj period. Efekat: iz ugla obračuna takse, kao da
+   plovilo uopšte nije čekalo dok je aplikacija bila zatvorena — period se "preskače", ne broji.
+   Ovo ispravno rješava proizvoljan broj uzastopnih zatvaranja/otvaranja (svako zatvaranje pomjeri
+   `vrijemeZadnjegCuvanja` unaprijed, svako pomjeranje evidencije "gura" anchor tačku kroz tačno
+   onoliko koliko je aplikacija bila neaktivna, kumulativno).
+
+   Nova, prazna serijalizovana polja su bezbjedna za stare `luka.ser` fajlove — `Luka` već ima
+   eksplicitan `serialVersionUID = 1L` (S2), pa dodavanje polja ne mijenja kompatibilnost;
+   nedostajuće polje u starom toku jednostavno ostaje `null`, a `primijeniPauzu()` to tretira kao
+   "luka nikad ranije nije sačuvana preko ovog mehanizma" i ne radi ništa.
+
+   **Zamka na koju je trebalo paziti:** `SerializationUtilTest.plovilaPrezivljavajuRoundTrip` (već
+   postojeći protective-net test) provjerava da tačno isti `LocalDateTime` iz evidencije
+   preživljava trenutan save→load unutar iste test metode. Bez praga (`PRAG_PAUZE_MS`), i
+   najmanja vremenska razlika (par milisekundi između dva `LocalDateTime.now()` poziva) bi
+   pomjerila evidenciju i pokvarila taj test. Prag od 60s garantuje da brzi round-trip ostaje
+   netaknut, dok stvaran prekid rada (uvijek reda minuta/sati/dana u praksi) uvijek prelazi prag.
+
+2. **Tempo naplate unutar aktivne sesije** (kozmetička, orijentisana na demonstraciju — ono što je
+   prvi predlog pokušavao da uradi, ali primijenjeno na ispravnom mjestu). Novo
+   `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (podrazumijevano `60L`, "1 stvarni minut = 1
+   simulacioni sat"), primijenjeno tek **nakon** što je pauza (mehanizam 1) već isključena iz
+   proteklog vremena — pa uvećava samo genuino "živo" trajanje unutar tekuće sesije, nikad
+   period ugašene aplikacije. Puna tarifna ljestvica (do plafona od 2000 KM) se tako odigra za
+   dvadesetak stvarnih minuta žive demonstracije umjesto pola dana.
+
+   `public static volatile` (D5 obrazac) radi determinizma testova. Postojeći
+   `PokretacIzvjestajaTest` (tarifna ljestvica, pisan prije F6) sada spušta faktor na `1L` u
+   `@BeforeEach`/vraća ga u `@AfterEach` — testira čistu ljestvicu (sat→KM), nezavisno od tempa;
+   novi testovi (`jedanStvarniMinutJeJedanSimulacioniSat`, `dvanaestStvarnihMinutaDostizePlafon`)
+   provjeravaju sâmo skaliranje.
+
+### F4 — naplata pri stvarnom izlasku iz luke
+
+`PokretacIzvjestaja.izracunajTaksuZaPlovilo()`/`evidentirajUCSV()` su postojale i radile ispravno,
+ali ih niko nije pozivao kad plovilo stvarno napusti luku — `BrodThread.napustiTerminal()` samo
+fizički kreće plovilo ka izlazu, bez ikakvog obračuna.
+
+**Bitno:** `napustiTerminal()` sâm **nije** bezbjedna tačka za kačenje naplate — poziva se i kad
+plovilo samo privremeno napušta jedan terminal da bi pokušalo naredni (`udjiULuku()`-ova petlja,
+T7/T8), što nije stvaran odlazak iz luke. Mapirana su tačno tri fizička mjesta konačnog izlaska:
+
+1. `BrodThread.run()`, nakon glavne `PRIVEZAN`/`KA_INCIDENTU`/`POD_PRATNJOM` petlje — kanonski
+   slučaj (normalan odlazak, povratak iz uviđaja bez novog doka, traženo plovilo poslije pratnje).
+2. `udjiULuku()`, grana učesnika sudara — presretnuto **prije** nego što `doploviDoDoka()` uspije
+   (I8), plovilo se nikad ne priveže.
+3. `pokreniPotjernicu()` — obalska straža nakon završene potjernice (K10). Državno plovilo, taksa
+   uvijek 0 (F3), ali CSV red se ipak piše radi potpune evidencije, a zapis se briše iz
+   `evidencijaUlaska` kao i za bilo koje drugo plovilo.
+
+Sve tri tačke pozivaju jedan zajednički paket-privatni `BrodThread.obracunajIZabiljeziTaksu()`
+(K10-stil samodovoljnosti — direktno testiran, ne zavisi od toga ko ga poziva):
+`luka.getEvidencijaUlaska().remove(imo)` (atomarno vraća i uklanja vrijednost), bez efekta ako
+zapis ne postoji (plovilo nikad nije uspjelo ući ni u jedan terminal), inače obračun + CSV upis.
+
+**Odluka: brisanje zapisa iz evidencije nakon obračuna, ne čuvanje zauvijek.** O1 je ranije
+namjerno čuvao evidenciju zauvijek upravo "radi obračuna taksi" — jednom kad se taksa stvarno
+obračuna pri izlasku (F4), ta svrha je ispunjena za taj konkretan zapis, pa dalje čuvanje samo
+blokira ponovnu upotrebu IMO broja bez razloga (isti duh kao G3-popravka u admin GUI validatoru —
+`ZAHTJEVI.md`, "Popravke nakon code review-a"). Konzistentno ponašanje za bilo koji način na koji
+plovilo definitivno napušta luku, bilo kroz simulaciju bilo kroz admin GUI.
+
+### F5 — preuzimanje CSV evidencije
+
+Nova `gui.IzvjestajService` (bez Swing importa, testirano): `izvjestajPostoji()` provjerava
+`PokretacIzvjestaja.getPutanjaCsv()` (nov getter, izbjegava duplirati hardkodovanu putanju "takse.csv"
+u dva fajla), `preuzmiIzvjestaj(File)` kopira preko `Files.copy(..., REPLACE_EXISTING)`. Novo
+dugme u `AdminProzor` ("Preuzmi CSV izvještaj") otvara `FileDialog.SAVE` za odredište; ako CSV još
+ne postoji (nijedno plovilo još nije platilo taksu), korisnik dobija informativnu poruku umjesto
+prazne/nepostojeće datoteke. Kopiranje ide kroz `SwingWorker` (ne blokira EDT, isti obrazac kao
+ostatak `AdminProzor`-a).

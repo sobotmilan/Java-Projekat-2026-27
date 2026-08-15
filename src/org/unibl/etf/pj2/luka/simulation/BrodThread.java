@@ -8,6 +8,7 @@ import org.unibl.etf.pj2.luka.model.classes.Terminal;
 import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
 import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
+import org.unibl.etf.pj2.luka.util.PokretacIzvjestaja;
 import org.unibl.etf.pj2.luka.util.SpisakPotjeraUtil;
 
 import java.io.File;
@@ -182,6 +183,7 @@ public class BrodThread implements Runnable {
                     krajBoravka = true;
                 }
                 this.zadatak = Zadatak.NAPUSTA;
+                obracunajIZabiljeziTaksu();
                 napustiTerminal();
             } else if (this.sudarMoraNapustiti) {
                 log("Napustio luku — učestvovao je u sudaru.");
@@ -238,6 +240,7 @@ public class BrodThread implements Runnable {
                     t.otkaziRezervaciju(rezervisan);
                     log("Učesnik sudara — napušta terminal " + (idx + 1) + " umjesto privezivanja.");
                     this.zadatak = Zadatak.NAPUSTA;
+                    obracunajIZabiljeziTaksu();
                     napustiTerminal();
                     return false;
                 }
@@ -374,6 +377,27 @@ public class BrodThread implements Runnable {
      */
     private void evidentirajUlazak() {
         luka.addToEvidencija(plovilo.getImoBroj(), LocalDateTime.now());
+    }
+
+    /**
+     * Obračunava i evidentira taksu za konačan izlazak plovila iz luke (F4), koristeći
+     * {@link Luka#getEvidencijaUlaska()} kao vrijeme ulaska. Bez efekta ako plovilo nema zapis u
+     * evidenciji (npr. nikad nije uspjelo ući ni u jedan terminal) — ne baca izuzetak, samo
+     * preskače obračun. Uklanja zapis nakon obračuna: čim je taksa obračunata, dalje čuvanje tog
+     * IMO broja u evidenciji ima jedinu svrhu (O1: sprečavanje kolizije IMO brojača), a G3 (vidi
+     * {@code ZAHTJEVI.md}) je iz istog razloga već napravio da admin GUI oslobađa IMO odmah po
+     * brisanju plovila — konzistentno ponašanje za bilo koji način na koji plovilo definitivno
+     * napušta luku. Paket-privatna vidljivost radi direktnog testiranja bez potrebe da se
+     * plovilo stvarno dovede do fizičkog izlaska iz terminala.
+     */
+    void obracunajIZabiljeziTaksu() {
+        LocalDateTime vrijemeUlaska = luka.getEvidencijaUlaska().remove(plovilo.getImoBroj());
+        if (vrijemeUlaska == null) {
+            return;
+        }
+        LocalDateTime vrijemeIzlaska = LocalDateTime.now();
+        double iznos = PokretacIzvjestaja.izracunajTaksuZaPlovilo(plovilo, vrijemeUlaska, vrijemeIzlaska);
+        PokretacIzvjestaja.evidentirajUCSV(plovilo, vrijemeUlaska, vrijemeIzlaska, iznos);
     }
 
     /**
@@ -1039,6 +1063,7 @@ public class BrodThread implements Runnable {
         sacuvajEvidencijuPotjernice(trajanje);
 
         this.zadatak = Zadatak.NAPUSTA;
+        obracunajIZabiljeziTaksu();
         napustiTerminal();
 
         if (this.plovilo instanceof SluzbenoPlovilo sluzbeno) {

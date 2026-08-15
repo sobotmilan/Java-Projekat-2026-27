@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serial;
 import java.io.Serializable;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,17 @@ public class Luka implements Serializable {
      * {@link #readObject(ObjectInputStream)}.</p>
      */
     private transient Set<BrodThread> aktivnaPlovila;
+
+    /**
+     * Vrijeme posljednjeg čuvanja stanja luke (F6), postavlja ga {@code SerializationUtil} pri
+     * svakom pozivu {@code serijalizujStanjeLuke()}. Koristi se pri sljedećem učitavanju da se
+     * period dok je JVM bio ugašen (aplikacija zatvorena) isključi iz obračuna proteklog vremena
+     * boravka plovila u evidenciji ulaska — bez ovoga bi plovilo zatečeno u {@code luka.ser} od
+     * prošle sesije platilo taksu i za vrijeme dok aplikacija uopšte nije radila.
+     * {@code null} za luku koja još nikad nije sačuvana (prvo pokretanje) ili učitanu iz starijeg
+     * {@code luka.ser} fajla nastalog prije uvođenja ovog polja.
+     */
+    private LocalDateTime vrijemeZadnjegCuvanja;
 
     /**
      * Kreira luku sa zadatim terminalima i evidencijom ulaska. Evidencija se kopira u novu
@@ -131,6 +143,43 @@ public class Luka implements Serializable {
      */
     public Set<BrodThread> getAktivnaPlovila() {
         return aktivnaPlovila;
+    }
+
+    /**
+     * Omogućava dobijanje vremena posljednjeg čuvanja stanja luke (F6).
+     *
+     * @return Vrijeme posljednjeg poziva {@code serijalizujStanjeLuke()}, ili {@code null} ako
+     *         luka još nije sačuvana ili je učitana iz starijeg fajla bez ovog polja.
+     * @see #vrijemeZadnjegCuvanja
+     */
+    public LocalDateTime getVrijemeZadnjegCuvanja() {
+        return vrijemeZadnjegCuvanja;
+    }
+
+    /**
+     * Omogućava postavljanje vremena posljednjeg čuvanja stanja luke (F6). Poziva ga
+     * {@code SerializationUtil} neposredno prije upisa u {@code luka.ser}.
+     *
+     * @param vrijemeZadnjegCuvanja Vrijeme čuvanja koje treba zapamtiti.
+     */
+    public void setVrijemeZadnjegCuvanja(LocalDateTime vrijemeZadnjegCuvanja) {
+        this.vrijemeZadnjegCuvanja = vrijemeZadnjegCuvanja;
+    }
+
+    /**
+     * Pomjera sve postojeće timestampove u evidenciji ulaska unaprijed za zadatu pauzu (F6) —
+     * "preskače" period koji pauza predstavlja, kao da plovila nisu čekala dok je aplikacija bila
+     * ugašena. Bez efekta ako je {@code pauza} {@code null}, nula ili negativna.
+     *
+     * @param pauza Trajanje pauze koje treba isključiti iz obračuna proteklog vremena.
+     */
+    public void pomjeriEvidencijuZaPauzu(Duration pauza) {
+        if (pauza == null || pauza.isZero() || pauza.isNegative()) {
+            return;
+        }
+        for (Map.Entry<String, LocalDateTime> unos : evidencijaUlaska.entrySet()) {
+            unos.setValue(unos.getValue().plus(pauza));
+        }
     }
 
     /**

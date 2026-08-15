@@ -21,9 +21,12 @@ import javax.swing.SwingWorker;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.FileDialog;
 import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -97,9 +100,13 @@ public class AdminProzor extends JFrame {
             }
         });
 
+        JButton preuzmiCsvDugme = new JButton("Preuzmi CSV izvještaj");
+        preuzmiCsvDugme.addActionListener(e -> preuzmiCsvIzvjestaj());
+
         JButton pokreniDugme = new JButton("Pokreni klijentsku aplikaciju");
         pokreniDugme.addActionListener(e -> pokreniKlijentskuAplikaciju());
         JPanel donjaTraka = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        donjaTraka.add(preuzmiCsvDugme);
         donjaTraka.add(pokreniDugme);
 
         setLayout(new BorderLayout());
@@ -211,6 +218,45 @@ public class AdminProzor extends JFrame {
             UredjivanjePlovilaService.obrisiPlovilo(t, imo);
             osvjeziTabelu();
         }
+    }
+
+    private void preuzmiCsvIzvjestaj() {
+        if (!IzvjestajService.izvjestajPostoji()) {
+            JOptionPane.showMessageDialog(this, "Nema još evidentiranih taksi — CSV izvještaj ne postoji.",
+                    "Preuzimanje CSV izvještaja", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        FileDialog fd = new FileDialog(this, "Sačuvaj CSV izvještaj kao...", FileDialog.SAVE);
+        fd.setFile("takse.csv");
+        fd.setVisible(true);
+        if (fd.getFile() == null) {
+            return;
+        }
+        File odrediste = new File(fd.getDirectory(), fd.getFile()).getAbsoluteFile();
+
+        new SwingWorker<Void, Void>() {
+            private IOException greska;
+
+            @Override
+            protected Void doInBackground() {
+                try {
+                    IzvjestajService.preuzmiIzvjestaj(odrediste);
+                } catch (IOException ioe) {
+                    greska = ioe;
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                if (greska != null) {
+                    JOptionPane.showMessageDialog(AdminProzor.this,
+                            "Greška pri preuzimanju CSV izvještaja: " + greska.getMessage(),
+                            "Greška", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     private void pokreniKlijentskuAplikaciju() {

@@ -443,6 +443,40 @@ dodavanju). Test paket: **243 ukupno, 0 padova** (208 + 35 novih), pokrenut tri 
 varijacije. Sljedeće: C5/C7/C8 (klijent GUI, prikaz terminala, odlazak, dinamičko dodavanje) —
 vidi `R4_POTVRDA_I_GUI_ZADATAK.md`.
 
+**Status (15. avgust, kasnije istog dana):** Konačno poređenje cijele specifikacije protiv
+`ZAHTJEVI.md` (`PROPUSTENI_ZAHTJEVI_V2.md`) je našlo šest nalaza (N1–N6), sva zatvorena isti dan.
+
+Najveći: **F6 (skaliranje vremena)** — profesorov eksplicitan zahtjev, dotad vođen samo kao
+"otvoreno pitanje" bez ijedne linije koda. Prvi predlog iz pregled-dokumenta (množenje stvarnog
+proteklog vremena faktorom skaliranja) je provjerom matematike ispao **pogrešnog smjera** — bilo
+koji faktor > 1 primijenjen na sirovu kalendarsku razliku pravi period-dok-je-aplikacija-ugašena
+problem *gorim*, ne boljim (nema načina da skalar razlikuje "živo" vrijeme od "ugašeno" vrijeme).
+Usvojeno rješenje razdvaja dvije stvari koje su u prvom predlogu bile pomiješane: `Luka` sad pamti
+`vrijemeZadnjegCuvanja` i pri učitavanju pomjera cijelu evidenciju ulaska unaprijed za tačno
+onoliko koliko je aplikacija bila zatvorena (`SerializationUtil.primijeniPauzu()`) — to je stvarna
+ispravka; `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (60×) je odvojen, kozmetički tempo koji
+se primjenjuje tek na već "očišćeno" živo vrijeme, radi bržeg odigravanja tarifne ljestvice tokom
+demonstracije. Puna analiza (uključujući zašto je prvi predlog odbačen) u `ZAHTJEVI.md`, "Riješeno
+15. avgusta: F4/F5/F6".
+
+**F4 (naplata pri izlasku)** je bio djelimično urađen mjesecima — `PokretacIzvjestaja` je ispravno
+računala i pisala CSV, ali niko je nije pozivao kad plovilo stvarno napusti luku. Mapirana su tačno
+tri fizička mjesta konačnog izlaska u `BrodThread` (normalan odlazak, prisilan izlazak učesnika
+sudara, izlazak obalske straže poslije potjernice) — `napustiTerminal()` sâm nije bio bezbjedna
+kuka jer se poziva i pri internom prelasku sa terminala na terminal (T7/T8), ne samo pri stvarnom
+napuštanju luke.
+
+**F5 (preuzimanje CSV-a)** i **N3/N4/N6** (login forma — svjesno preskočena; audit svih `catch`
+blokova u `src/` za E3 — nijedan tiho ne guta grešku; T8/T9 dokumentacija — implementacija
+"rezervacija prije ulaska" umjesto doslovnog "kružnog prolaska" kroz terminal) zatvoreni u istom
+prolazu. Puna matrica zahtjeva u `ZAHTJEVI.md` ažurirana u cijelosti (A1–A14 su bili ostali na
+TODO/PART otkad je admin GUI završen ranije istog dana — matrica nije bila sinhronizovana sa
+stvarnim stanjem koda dok ovaj pregled to nije primijetio).
+
+Test paket: **262 ukupno, 0 padova** (243 prije ovog kruga + 19 novih: 4 `LukaTest`, 4
+`SerializationUtilTest`, 4 `PokretacIzvjestajaTest`, 3 `BrodThreadTest` za F4/F6, i 4 nova
+`IzvjestajServiceTest` za F5).
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje

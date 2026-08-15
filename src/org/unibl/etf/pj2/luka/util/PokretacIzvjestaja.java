@@ -28,11 +28,23 @@ public class PokretacIzvjestaja {
     }
 
     /**
+     * Faktor skaliranja stvarnog proteklog vremena u simulirano, za potrebe obračuna takse (F6):
+     * koliko simuliranih sati odgovara jednom stvarnom minutu proteklog vremena. Podrazumijevano
+     * {@code 60} (1 stvarni minut = 1 simulacioni sat) — tarifna ljestvica se tako odigra tokom
+     * žive demonstracije za par minuta umjesto sati. Primjenjuje se isključivo na vrijeme koje je
+     * već isključilo eventualnu pauzu rada aplikacije ({@link org.unibl.etf.pj2.luka.model.classes.Luka#pomjeriEvidencijuZaPauzu(Duration)}),
+     * pa ne uvećava efekat prekida rada — samo tempo unutar aktivne sesije. {@code public static
+     * volatile} (ne {@code final}) po D5 obrascu, radi determinizma testova tarifne ljestvice.
+     */
+    public static volatile long FAKTOR_SKALIRANJA_VREMENA = 60L;
+
+    /**
      * Obračunava taksu za dato plovilo prema proteklom vremenu boravka prema sljedećem principu:
      * -do 12h po principu "plafona" od 100 KM po započetom satu (najviše 1000 KM),
      * -do 24h analogno (najviše 2000 KM)
      * -preko 24h 2000 KM plus 100 KM po svakom narednom započetom satu
      * Vrijeme se zaokružuje naviše ({@link Math#ceil}) na cijele sate, tj. započeti sat se naplaćuje kao pun (35 min == 1h cjenovno, 1h 1 min == 2h cjenovno).
+     * Prije zaokruživanja, stvarno proteklo vrijeme se skalira faktorom {@link #FAKTOR_SKALIRANJA_VREMENA} (F6).
      * Državna plovila (obalska straža, carina, vatrogasci) ne plaćaju taksu.
      *
      * @param plovilo Plovilo za koje se obračunava taksa.
@@ -46,7 +58,9 @@ public class PokretacIzvjestaja {
             return 0.0;
         }
 
-        long brojSati = (long) Math.ceil(Duration.between(vrijemeUlaska, vrijemeIzlaska).toMinutes() / 60.0);
+        Duration stvarnoTrajanje = Duration.between(vrijemeUlaska, vrijemeIzlaska);
+        Duration simuliranoTrajanje = stvarnoTrajanje.multipliedBy(FAKTOR_SKALIRANJA_VREMENA);
+        long brojSati = (long) Math.ceil(simuliranoTrajanje.toMinutes() / 60.0);
         if (brojSati < 1) {
             brojSati = 1;
         }
@@ -66,6 +80,16 @@ public class PokretacIzvjestaja {
         } else {
             return 2000.00 + ((brojSati - 24) * 100.00);
         }
+    }
+
+    /**
+     * Omogućava dobijanje putanje do CSV datoteke u koju se evidentiraju obračunate takse (F5:
+     * administrator je preuzima preko admin GUI-ja).
+     *
+     * @return Putanja do CSV datoteke sa evidencijom taksi.
+     */
+    public static File getPutanjaCsv() {
+        return new File(DEFAULT_PATH);
     }
 
     /**

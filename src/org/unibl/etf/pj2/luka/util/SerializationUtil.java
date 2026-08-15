@@ -3,6 +3,8 @@ package org.unibl.etf.pj2.luka.util;
 import org.unibl.etf.pj2.luka.model.classes.Luka;
 
 import java.io.*;
+import java.time.Duration;
+import java.time.LocalDateTime;
 
 /**
  * Pomoćna klasa koja sadrži statičke metoda za serijalizaciju i deserijalizaciju stanja luke.
@@ -18,11 +20,23 @@ public class SerializationUtil {
     private static final String DEFAULT_PATH = "luka.ser";
 
     /**
-     * Serijalizuje stanje luke u {@value #DEFAULT_PATH}. Greška pri upisu se bilježi u log i ne prekida izvršavanje aplikacije.
+     * Donja granica pauze (F6) ispod koje se {@link Luka#pomjeriEvidencijuZaPauzu(Duration)} ne
+     * poziva — sprečava da beznačajna vremenska razlika između uzastopnih save/load poziva (npr.
+     * unutar iste test metode, svega par milisekundi) nepotrebno pomjeri evidenciju. Podešljivo
+     * (ne {@code final}) po istom obrascu kao ostale D5-stil konstante, radi determinizma testova.
+     */
+    public static volatile long PRAG_PAUZE_MS = 60_000L;
+
+    /**
+     * Serijalizuje stanje luke u {@value #DEFAULT_PATH}, prethodno bilježeći trenutno vrijeme kao
+     * {@link Luka#setVrijemeZadnjegCuvanja(LocalDateTime)} (F6) — osnova za isključivanje perioda
+     * dok je aplikacija ugašena iz narednog obračuna proteklog vremena boravka. Greška pri upisu
+     * se bilježi u log i ne prekida izvršavanje aplikacije.
      *
      * @param luka Trenutno stanje luke koje treba sačuvati.
      */
     public static void serijalizujStanjeLuke(Luka luka) {
+        luka.setVrijemeZadnjegCuvanja(LocalDateTime.now());
         try(FileOutputStream fos = new FileOutputStream(DEFAULT_PATH); ObjectOutputStream oos = new ObjectOutputStream(fos)) {
             oos.writeObject(luka);
         }catch(IOException ioe) {
@@ -44,10 +58,34 @@ public class SerializationUtil {
         }
 
         try(FileInputStream fis = new FileInputStream(DEFAULT_PATH); ObjectInputStream ois = new ObjectInputStream(fis)) {
-            return (Luka) ois.readObject();
+            Luka luka = (Luka) ois.readObject();
+            primijeniPauzu(luka);
+            return luka;
         }catch(IOException | ClassNotFoundException e) {
             LoggerUtil.logError("Greska prilikom deserijalizacije stanja luke. Pokrece se nova konfiguracija, ", e);
             return null;
         }
+    }
+
+    /**
+     * Izračunava koliko je vremena prošlo od posljednjeg čuvanja luke (F6) i, ako je razlika bar
+     * {@link #PRAG_PAUZE_MS}, pomjera evidenciju ulaska za taj period preko
+     * {@link Luka#pomjeriEvidencijuZaPauzu(Duration)}. Bez efekta ako luka nikad nije sačuvana
+     * (npr. {@code luka.ser} nastao prije uvođenja ovog polja) — {@link Luka#getVrijemeZadnjegCuvanja()}
+     * tada vraća {@code null}. Paket-privatna vidljivost radi direktnog testiranja bez potrebe za
+     * stvarnim čekanjem od {@value #PRAG_PAUZE_MS} ms između save i load poziva.
+     *
+     * @param luka Upravo učitana luka čiju evidenciju treba eventualno pomjeriti.
+     */
+    static void primijeniPauzu(Luka luka) {
+        LocalDateTime zadnjeCuvanje = luka.getVrijemeZadnjegCuvanja();
+        if (zadnjeCuvanje == null) {
+            return;
+        }
+        Duration pauza = Duration.between(zadnjeCuvanje, LocalDateTime.now());
+        if (pauza.toMillis() < PRAG_PAUZE_MS) {
+            return;
+        }
+        luka.pomjeriEvidencijuZaPauzu(pauza);
     }
 }
