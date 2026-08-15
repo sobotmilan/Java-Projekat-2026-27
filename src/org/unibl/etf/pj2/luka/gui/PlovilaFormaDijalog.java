@@ -27,10 +27,22 @@ import java.util.Locale;
 
 public class PlovilaFormaDijalog extends JDialog {
 
+    // Kako se kandidat "dodaje" zavisi od konteksta u kojem je forma otvorena: admin dodaje
+    // direktno u matricu (UredjivanjePlovilaService.dodajPlovilo — simulacija ne radi, bezbjedno),
+    // a klijent tokom žive simulacije mora ići kroz punu BrodThread navigaciju (K8/C9) —
+    // vidi KlijentskaSimulacijaService.dodajTokomSimulacije(). Izmjena (postojece != null) uvijek
+    // ide kroz UredjivanjePlovilaService.izmijeniPlovilo(), bez obzira na kontekst — izmjena
+    // postojećeg plovila na terminalu ne pokreće novu nit.
+    @FunctionalInterface
+    interface DodavanjeStrategija {
+        List<String> dodaj(Luka luka, Terminal terminal, Plovilo kandidat);
+    }
+
     private final Luka luka;
     private final Terminal terminal;
     private final TipPlovila tip;
     private final Plovilo postojece;
+    private final DodavanjeStrategija dodavanjeStrategija;
 
     private final JTextField nazivPolje = new JTextField();
     private final JTextField imoPolje = new JTextField();
@@ -46,11 +58,17 @@ public class PlovilaFormaDijalog extends JDialog {
     private boolean sacuvano = false;
 
     public PlovilaFormaDijalog(Frame vlasnik, Luka luka, Terminal terminal, TipPlovila tip, Plovilo postojece) {
+        this(vlasnik, luka, terminal, tip, postojece, UredjivanjePlovilaService::dodajPlovilo);
+    }
+
+    PlovilaFormaDijalog(Frame vlasnik, Luka luka, Terminal terminal, TipPlovila tip, Plovilo postojece,
+                        DodavanjeStrategija dodavanjeStrategija) {
         super(vlasnik, postojece == null ? "Dodaj plovilo" : "Izmijeni plovilo", true);
         this.luka = luka;
         this.terminal = terminal;
         this.tip = tip;
         this.postojece = postojece;
+        this.dodavanjeStrategija = dodavanjeStrategija;
         this.rotacijaCheckbox = tip.getSluzba() != null ? new JCheckBox("Rotacija uključena") : null;
 
         izgradiUI();
@@ -64,6 +82,10 @@ public class PlovilaFormaDijalog extends JDialog {
 
     public boolean jeSacuvano() {
         return sacuvano;
+    }
+
+    public String getSacuvaniImo() {
+        return imoPolje.getText().trim();
     }
 
     private void izgradiUI() {
@@ -244,7 +266,7 @@ public class PlovilaFormaDijalog extends JDialog {
         }
 
         List<String> rezultat = postojece == null
-                ? UredjivanjePlovilaService.dodajPlovilo(luka, terminal, kandidat)
+                ? dodavanjeStrategija.dodaj(luka, terminal, kandidat)
                 : UredjivanjePlovilaService.izmijeniPlovilo(luka, terminal, stariImo, kandidat,
                 rotacijaCheckbox != null);
 

@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 15. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica) + administratorski GUI (A1–A14, `GUI_KORAK1_PREGLED.md` ispravke) + F4/F5/F6 (naplata pri izlasku, preuzimanje CSV-a, skaliranje vremena — vidi "Riješeno 15. avgusta" ispod, uzrokovano nalazima N1/N2 iz `PROPUSTENI_ZAHTJEVI_V2.md`).
-Test paket: 258 ukupno, 0 pada, 0 ignorisano.
+Stanje: 16. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica) + administratorski GUI (A1–A14, `GUI_KORAK1_PREGLED.md` ispravke) + F4/F5/F6 (naplata pri izlasku, preuzimanje CSV-a, skaliranje vremena — vidi "Riješeno 15. avgusta" ispod, uzrokovano nalazima N1/N2 iz `PROPUSTENI_ZAHTJEVI_V2.md`) + checkbox rotacije u formi (C6 demonstrabilnost) + živa klijentska simulacija (C5/C7/C8/C9/E1/E2 — vidi "Riješeno 16. avgusta" ispod).
+Test paket: 301 ukupno, 0 pada, 0 ignorisano.
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -47,7 +47,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | A2 | Padajući meni sa svim tipovima plovila | DONE | `gui.TipPlovila` (9 kombinacija) u `AdminProzor`-ovom `JComboBox` |
 | A3 | Dugme za dodavanje plovila | DONE | `AdminProzor.dodajAkcija()` |
 | A4 | Tabelarni prikaz plovila po terminalu | DONE | `gui.PregledTerminalaService.redovi(Terminal)` |
-| A5 | Dugme za pokretanje korisničke aplikacije | DONE | `AdminProzor.pokreniKlijentskuAplikaciju()` → `gui.KlijentskiProzor` (statički snimak, ne C5) |
+| A5 | Dugme za pokretanje korisničke aplikacije | DONE | `AdminProzor.pokreniKlijentskuAplikaciju()` → `gui.KlijentskiProzor`, sada puna živa simulacija (C5/C7/C8/C9/E1/E2), ne više statički snimak |
 | A6 | Prazna tabela pri prvom pokretanju | DONE | `AdminProzor.ucitajStanje()`, bez `PokretacSimulacije`-ovih setup-only metoda |
 | A7 | **Jedna** forma, polja se kreiraju dinamički po tipu | DONE | `gui.PlovilaFormaDijalog` |
 | A8 | FileDialog / JavaFX ekvivalent za fajlove | DONE | `java.awt.FileDialog` u `PlovilaFormaDijalog`/`AdminProzor` (F5) |
@@ -66,11 +66,11 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | C2 | Slučajan tip, 90% komercijalna                                                                                                                  | DONE — `util.GeneratorPlovila.generisiSlucajno()`/`(Random)`, testovi |
 | C3 | Prvo se postavljaju plovila iz `luka.ser` na slučajne dokove                                                                                    | DONE — `simulation.PokretacSimulacije`, testovi |
 | C4 | Dopuna slučajnim plovilima do minimuma                                                                                                          | DONE — isto, testovi |
-| C5 | Prikaz terminala, izbor kombo boksom                                                                                                            | TODO |
+| C5 | Prikaz terminala, izbor kombo boksom                                                                                                            | DONE — `gui.KlijentskiProzor`, `javax.swing.Timer` (ne Thread) na `PokretacSimulacije.INTERVAL_RENDEROVANJA_MS`, vidi "Riješeno 16. avgusta: živa klijentska simulacija" |
 | C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju                                                                                                  | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi. Rotacija se do sada palila isključivo iz simulacije (`KoordinatorUvidjaja`, potjernica), pa se taj dio prikaza nije mogao demonstrirati/ručno provjeriti prije pokretanja simulacije — `PlovilaFormaDijalog` sad ima checkbox "Rotacija" (samo za službena plovila) da se stanje može direktno postaviti kroz admin GUI, vidi "Riješeno 15. avgusta: checkbox rotacije". |
-| C7 | 15% plovila po terminalu odlazi iz luke                                                                                                         | TODO |
-| C8 | Dodavanje plovila tokom simulacije ako luka nije puna, MORA KORISTITI TERMINAL.REZERVISISLOBODANDOK() I DRZATI TERMINAL LOCK, NE SETUP HELPERE! | TODO |
-| C9 | Novo plovilo kreće od ulaza ka prvom slobodnom doku                                                                                             | PART — ruta postoji u `BrodThread` |
+| C7 | 15% plovila po terminalu odlazi iz luke                                                                                                         | DONE — `gui.KlijentskaSimulacijaService.odaberiZaOdlazak()`, pozvano odmah nakon `pokreniPrivezanaPlovila()`, testovi |
+| C8 | Dodavanje plovila tokom simulacije ako luka nije puna, MORA KORISTITI TERMINAL.REZERVISISLOBODANDOK() I DRZATI TERMINAL LOCK, NE SETUP HELPERE! | DONE — `gui.KlijentskaSimulacijaService.dodajTokomSimulacije()` pokreće pravu `BrodThread` nit (koja sama poziva `Terminal.rezervisiSlobodanDok()` unutar `udjiULuku()`), nikad `UredjivanjePlovilaService.dodajPlovilo()` |
+| C9 | Novo plovilo kreće od ulaza ka prvom slobodnom doku                                                                                             | DONE — `new BrodThread(kandidat, luka).start()` ide kroz identičnu `udjiULuku()` navigaciju kao svako drugo ulazeće plovilo, ništa novo napisano |
 
 ## Incidenti
 
@@ -95,8 +95,8 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | F4 | CSV izvoz | DONE — `BrodThread.obracunajIZabiljeziTaksu()` poziva `PokretacIzvjestaja.izracunajTaksuZaPlovilo()`/`evidentirajUCSV()` na sva tri fizička mjesta konačnog izlaska iz luke (normalan odlazak, prisilan izlazak učesnika sudara, izlazak obalske straže nakon potjernice); briše zapis iz evidencije nakon obračuna |
 | F5 | Preuzimanje CSV evidencije (dugme + odabir odredišta) | DONE — `AdminProzor` dugme "Preuzmi CSV izvještaj", `gui.IzvjestajService.preuzmiIzvjestaj(File)`, `FileDialog.SAVE` |
 | F6 | Skaliranje stvarnog vremena u simulaciono (profesorovo pojašnjenje: "Vi trebate skalirati") | DONE — dva nezavisna mehanizma, vidi "Riješeno 15. avgusta" ispod: (1) `Luka.pomjeriEvidencijuZaPauzu()`/`SerializationUtil.primijeniPauzu()` isključuju period dok je aplikacija bila ugašena iz obračuna; (2) `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (3600×, ispravljeno sa prvobitnog 60× — vidi F1 nalaz iz `F5_F6_PREGLED.md`) ubrzava tempo naplate unutar aktivne sesije |
-| E1 | Kraj kad odabrana plovila izađu i klijentska se privežu | TODO |
-| E2 | Ponovna serijalizacija u `luka.ser` | TODO |
+| E1 | Kraj kad odabrana plovila izađu i klijentska se privežu | DONE — `gui.KlijentskaSimulacijaService.jeSimulacijaZavrsena()`, provjereno na svakom Timer tiku |
+| E2 | Ponovna serijalizacija u `luka.ser` | DONE — `KlijentskiProzor.zavrsiSimulaciju()`, `SerializationUtil.serijalizujStanjeLuke()` kroz `SwingWorker` (ne na EDT-u) |
 | E3 | Svi izuzeci u `error.log` preko `Logger` | DONE — provjereno 15. avgusta (N4, `PROPUSTENI_ZAHTJEVI_V2.md`): svaki `catch` blok u `src/` je pregledan ručno (`grep -rn "catch(" src/`). Svaki ili loguje preko `LoggerUtil`, ili je standardni `InterruptedException` idiom (`Thread.currentThread().interrupt()` — ne "guta" grešku, propagira signal prekida dalje), ili prebacuje izuzetak u drugi tip i baca ga dalje (`LoggerUtil`, `AdminProzor.ucitajStanje()`), ili je namjerno dokumentovan javadoc-om (`GeneratorPlovila.parsirajImoBezbjedno()`), ili je vraćen korisniku preko `JOptionPane`-a u GUI komponentama gdje log fajl nije prirodno mjesto za interaktivnu grešku (`PlovilaFormaDijalog`, `AdminProzor.preuzmiCsvIzvjestaj()`). Nijedan blok tiho ne guta grešku bez traga. |
 
 ---
@@ -1114,3 +1114,114 @@ konstruiše i njime se upravlja programski, bez otvaranja stvarnog prozora tokom
 u formi preživi `dodajPlovilo` (provjereno kroz `PregledTerminalaService.pronadjiPlovilo()` nakon
 čuvanja), i izmjena sa uključene na isključenu rotaciju stvarno je isključi (uz provjeru da je
 checkbox ispravno predpopunjen prije same izmjene).
+
+## Riješeno 16. avgusta: živa klijentska simulacija (C5, C7, C8, C9, E1, E2)
+
+`KlijentskiProzor` je do sada bio samo statički snimak — simulacioni motor
+(`PokretacSimulacije`/`BrodThread`/`KoordinatorUvidjaja`) je postojao i bio testiran, ali ga
+klijentska aplikacija nikad nije pokretala. Rađeno korak po korak, testovi poslije svakog koraka.
+
+### Nova klasa `gui.KlijentskaSimulacijaService`
+
+Sva logika koja podupire Korake 3–5 izvučena je u jednu testabilnu, ne-Swing klasu (isti princip
+kao Korak 1 admin GUI-ja — "sve što se može testirati ide van Swing komponente"):
+
+- `validirajMinimum(String)` — Korak 1, pozitivan cio broj, ne veći od 30 (kapacitet terminala).
+- `odaberiZaOdlazak(List<BrodThread>)` — Korak 3 (C7): `ceil(0.15 * n)` po terminalu, preferira
+  komercijalna plovila, službena bira samo ako komercijalnih nema dovoljno.
+- `imaSlobodnogVezaBiloGdje(Luka)` / `dodajTokomSimulacije(Luka, Plovilo)` — Korak 4 (C8/C9).
+- `pronadjiAktivnuNit(Luka, String)` / `jeSimulacijaZavrsena(Luka, Set, Set)` — Korak 5 (E1).
+
+### Korak 1 — pokretanje
+
+Dugme "Pokreni simulaciju" poziva `PokretacSimulacije.pripremiPocetnoStanje(minimum)` kroz
+`SwingWorker` (čita `luka.properties`/`luka.ser` sa diska — ne na EDT-u) i **zamjenjuje** polje
+`luka` rezultatom. **Svjesna odluka:** `Luka` proslijeđena `KlijentskiProzor`-u iz `AdminProzor`-a
+(admin-postavljena, sa tačno onim dokovima koje je administrator ručno izabrao) se koristi
+isključivo za prikaz PRIJE pokretanja simulacije — sam čin pokretanja je odbacuje i gradi novu
+preko `pripremiPocetnoStanje()`, koja ponovo učitava `luka.ser` (upravo zapisan od strane
+`AdminProzor.pokreniKlijentskuAplikaciju()`, A12) kao "zatečenu flotu" i **ponovo je nasumično
+raspoređuje** po dokovima nove strukture terminala (C3), pa dopunjuje do minimuma (C1/C4). Admin-ov
+tačan izbor dokova se time gubi, ali to je postojeće, već testirano i dokumentovano ponašanje
+`pripremiPocetnoStanje()`-a (C3/C4 su već bili DONE prije ovog zadatka) — zadatak eksplicitno
+traži pozivanje te metode "kao što jeste", ne pisanje nove logike postavljanja.
+
+### Korak 2 — živi prikaz (C5)
+
+`javax.swing.Timer` (ne `Thread`) na `PokretacSimulacije.INTERVAL_RENDEROVANJA_MS`, poziva
+`PrikazTerminala.renderAsText(odabraniTerminal)` na svakom tiku. Kombo boks terminala mijenja šta
+se prikazuje bez ikakvog uticaja na Timer. Bezbjedno jer nijedna nit broda nikad ne spava/čeka
+unutar `synchronized(terminal)` (D4, nepromijenjeno — `simulation` paket nije diran) — EDT se
+zaključa samo za trajanje jednog brzog snimka matrice, nikad duže.
+
+### Korak 3 — odlazak 15% (C7)
+
+Poziva se **odmah** nakon `pokreniPrivezanaPlovila()`, prije nego Timer uopšte krene. Grupisanje
+po terminalu preko `BrodThread.getTrenutniTerminal()`, pa `zatraziNapustanje()` na odabrane niti.
+Bezbjedno pozvati odmah nakon `Thread.start()`, čak i prije nego nova nit stigne izvršiti ijednu
+liniju: `zatraziNapustanje()` samo postavlja `volatile boolean moraNapustiti = true` i zove
+`notifyAll()` — `cekajNapustanje()`-ova `while (!moraNapustiti && ...)` provjera se dešava tek kad
+nit stvarno stigne do parkiranog stanja, i tada već vidi `true`, pa nikad ne uđe u `wait()` —
+klasičan bezbjedan "postavi zastavicu pa probudi" obrazac, bez izgubljenog signala bez obzira na
+redoslijed.
+
+### Korak 4 — dodavanje tokom simulacije (C8/C9)
+
+**Isti** `PlovilaFormaDijalog` kao admin, ali admin-ova podrazumijevana strategija
+(`UredjivanjePlovilaService.dodajPlovilo()` — direktan upis u matricu, setup-only, race-uje se sa
+živim nitima) nije smjela ostati. `PlovilaFormaDijalog` je dobio novi paket-privatni funkcionalni
+interfejs `DodavanjeStrategija` i paket-privatni konstruktor koji ga prima — javni petoargumentski
+konstruktor (admin) i dalje delegira na `UredjivanjePlovilaService::dodajPlovilo` kao
+podrazumijevanu strategiju, bez ijedne izmjene ponašanja za admin. `KlijentskiProzor` prosljeđuje
+sopstvenu strategiju: `(l, t, kandidat) -> KlijentskaSimulacijaService.dodajTokomSimulacije(l,
+kandidat)` — ignoriše `terminal` parametar (nebitan: nova nit sama obilazi sve terminale kroz
+`udjiULuku()`, isto kao svako drugo ulazeće plovilo — C9 je time već ispunjeno, ništa novo nije
+trebalo napisati u `simulation` paketu). Samo izmjena postojećeg plovila (`postojece != null`)
+uvijek ide kroz `UredjivanjePlovilaService.izmijeniPlovilo()`, bez obzira na kontekst — izmjena ne
+pokreće novu nit ni u jednom slučaju, pa nema race-a kojeg treba izbjeći.
+
+Odbijanje kad je luka puna provjerava se preko `Terminal.getBrojRaspolozivihVezova()` (fizički
+slobodno **i** nerezervisano) po svim terminalima — ista provjera koju `BrodThread` sam koristi za
+T7/T8 odluke, ne naivno `getBrojSlobodnihVezova()`. Ovo je provjera-prije-pokušaja, ne garancija —
+ako druga nit uzme posljednji vez u uskom prozoru između provjere i stvarnog `rezervisiSlobodanDok()`
+poziva nove niti, novo plovilo jednostavno obiđe sve terminale i napusti luku bez pristajanja,
+isto kao i svako drugo plovilo u toj situaciji (postojeće, testirano ponašanje). Prihvaćen rizik,
+dokumentovan ovdje — vjerovatnoća je zanemarljiva u praksi demonstracije.
+
+### Korak 5 — kraj simulacije (E1/E2)
+
+`jeSimulacijaZavrsena()` provjerava na svakom Timer tiku: (a) nijedno plovilo označeno za odlazak
+(Korak 3) više nije u `Luka.getAktivnaPlovila()`, (b) svako plovilo dodato tokom simulacije
+(Korak 4) je ili privezano ili više nije aktivno.
+
+**Svjesna odluka o rubnom slučaju (b):** plovilo dodato preko Korak 4 čija nit završi **bez**
+privezivanja (npr. ako se luka baš napuni u uskom prozoru iz Koraka 4 — vidi gore) se tretira kao
+"razriješeno", ne kao trajna blokada kraja simulacije. Doslovno čitanje zahtjeva ("sva dodata
+plovila privezana") bi ovdje ostavilo simulaciju da čeka zauvijek za plovilo koje je već
+provjereno napustilo luku i nikad se neće privezati — nerazumno ponašanje koje specifikacija
+sigurno nije namjeravala. Kad se uslov ispuni: `Timer.stop()`, `SerializationUtil.
+serijalizujStanjeLuke()` kroz `SwingWorker` (ne na EDT-u), pa obavještenje korisniku.
+
+### Otkriven, važan obrazac za buduće GUI testove: `JOptionPane.showMessageDialog()` blokira zauvijek kad se pozove van EDT-a bez ijednog klika
+
+Prvi pokušaj `KlijentskiProzorTest`-a je zamrznuo cijeli `mvn test` proces (13+ minuta, nula
+napretka) — `jstack` je pokazao test nit blokiranu unutar `JOptionPane.showOptionDialog()`.
+Uzrok: `pokreniSimulacijuZaTest()` (test-seam koji direktno poziva `pokreniSimulaciju()`, van EDT-a)
+je sa neispravnim unosom pozvao `JOptionPane.showMessageDialog()` — ta metoda pumpa sopstvenu
+**ugniježđenu petlju događaja** i blokira dok se dijalog ne zatvori. U pravoj upotrebi to radi jer
+poziv dolazi sa EDT-a preko klika na dugme, i korisnik postoji da klikne "OK". Pozvano direktno sa
+test niti, bez EDT-a i bez ijednog klika, blokira **zauvijek** — nijedan timeout u pozivaocu ne
+pomaže jer sâm poziv nikad ne vraća kontrolu.
+
+Popravka: sve `JOptionPane.showMessageDialog()` pozive u `KlijentskiProzor` (validacija minimuma,
+poruka o kraju simulacije) prolaze kroz jednu paket-privatnu, override-abilnu metodu
+`prikaziPoruku(String, String, int)`. `KlijentskiProzorTest` koristi lokalni test-podrazred koji
+je preklapa i samo bilježi poruke umjesto da ih stvarno prikazuje — isti obrazac kao
+`DodavanjeStrategija` (injektovano ponašanje umjesto stvarnog efekta, radi testiranja).
+
+**Isti rizik postoji latentno i u `PlovilaFormaDijalogTest`** (`pokusajSacuvaj()` je takođe
+paket-privatna i poziva `JOptionPane.showMessageDialog()` na neuspjeloj validaciji) — dosad
+neotkriven jer nijedan postojeći test tamo namjerno ne prolazi kroz granu greške. Nije popravljeno
+danas (van obima ovog zadatka, i nijedan trenutni test ga ne okida), ali vrijedno zapisati: bilo
+koji budući test koji pozove `pokusajSacuvaj()`/`pokreniSimulaciju()` sa neispravnim unosom mora
+ili koristiti isti obrazac test-podrazreda, ili očekivati identično zamrzavanje.

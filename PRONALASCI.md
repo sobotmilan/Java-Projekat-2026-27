@@ -544,6 +544,39 @@ dijalogom programski, nikad ne poziva `setVisible(true)`, pa se tokom `mvn test`
 stvaran prozor. Test paket: **277 ukupno, 0 padova** (271 + 6 novih: 4 `PlovilaFormaDijalogTest`,
 2 `UredjivanjePlovilaServiceTest` za novi preklop), pokrenut tri puta zaredom bez varijacije.
 
+**Status (16. avgust) — živa klijentska simulacija (C5/C7/C8/C9/E1/E2):** `KlijentskiProzor` je
+bio samo statički snimak od kad je napravljen — simulacioni motor je postojao i bio testiran, ali
+ga niko nije pokretao iz klijenta. Urađeno u pet koraka (unos+pokretanje, živi prikaz preko
+`javax.swing.Timer`, odlazak 15%, dodavanje tokom simulacije, kraj+serijalizacija), sva logika
+koja nije čisto Swing izvučena u novu `gui.KlijentskaSimulacijaService`.
+
+Najvažnija odluka: `PlovilaFormaDijalog` (ista forma kao admin) je morao dobiti injektovanu
+strategiju dodavanja — admin piše direktno u matricu (`UredjivanjePlovilaService.dodajPlovilo`,
+bezbjedno jer simulacija ne radi), a klijent tokom **žive** simulacije mora ići kroz pravu
+`BrodThread` nit (`Terminal.rezervisiSlobodanDok()` iznutra, ne mimo njega) da se ne utrkuje sa
+postojećim nitima — novi paket-privatni `DodavanjeStrategija` funkcionalni interfejs, admin-ov
+javni konstruktor i dalje delegira na staro ponašanje bez izmjene.
+
+**Otkriven pravi bug tokom pisanja testova, ne u produkcijskom kodu:** prvi pokušaj
+`KlijentskiProzorTest`-a je zamrznuo cijeli `mvn test` proces na 13+ minuta bez ijednog rezultata.
+`jstack` na zaglavljenoj JVM je pokazao tačan uzrok: `JOptionPane.showMessageDialog()` pozvan
+direktno sa test niti (ne sa EDT-a, preko test-seam metode koja poziva `pokreniSimulaciju()`
+sinhrono) pumpa sopstvenu ugniježđenu petlju događaja čekajući da neko zatvori dijalog — a niko
+ga nikad ne zatvara u testu bez pravog korisnika. Nije problem u produkcijskom kodu (u pravoj
+upotrebi poziv dolazi sa EDT-a preko klika na dugme, korisnik postoji da klikne "OK") — problem je
+isključivo u tome KAKO se produkcijski kod poziva iz testa. Popravka: sve pozive
+`JOptionPane.showMessageDialog()` u `KlijentskiProzor` provući kroz jednu override-abilnu metodu
+(`prikaziPoruku()`), test koristi lokalni podrazred koji je preklapa i samo bilježi poruke.
+Isti latentni rizik postoji u `PlovilaFormaDijalog.pokusajSacuvaj()` (dosad neotkriven jer ga
+nijedan postojeći test namjerno ne provocira) — dokumentovano u `ZAHTJEVI.md` kao poznat rizik za
+sljedeći test koji bi tamo pokrio granu greške, nije popravljano danas (van obima).
+
+Puno obrazloženje svih odluka (uključujući rubni slučaj E1-a kad dodato plovilo ne uspije da se
+priveže, i zašto `pripremiPocetnoStanje()` odbacuje admin-ovu tačnu rasporedbu dokova) u
+`ZAHTJEVI.md`, "Riješeno 16. avgusta: živa klijentska simulacija". Test paket: **301 ukupno, 0
+padova** (277 + 24 nova: 18 `KlijentskaSimulacijaServiceTest`, 6 `KlijentskiProzorTest`),
+pokrenut tri puta zaredom bez varijacije — nijedna nestabilnost primijećena.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje
