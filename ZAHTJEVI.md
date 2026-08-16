@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 16. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica) + administratorski GUI (A1–A14, `GUI_KORAK1_PREGLED.md` ispravke) + F4/F5/F6 (naplata pri izlasku, preuzimanje CSV-a, skaliranje vremena — vidi "Riješeno 15. avgusta" ispod, uzrokovano nalazima N1/N2 iz `PROPUSTENI_ZAHTJEVI_V2.md`) + checkbox rotacije u formi (C6 demonstrabilnost) + živa klijentska simulacija (C5/C7/C8/C9/E1/E2 — vidi "Riješeno 16. avgusta" ispod).
-Test paket: 301 ukupno, 0 pada, 0 ignorisano.
+Stanje: 16. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica) + administratorski GUI (A1–A14, `GUI_KORAK1_PREGLED.md` ispravke) + F4/F5/F6 (naplata pri izlasku, preuzimanje CSV-a, skaliranje vremena — vidi "Riješeno 15. avgusta" ispod, uzrokovano nalazima N1/N2 iz `PROPUSTENI_ZAHTJEVI_V2.md`) + checkbox rotacije u formi (C6 demonstrabilnost) + živa klijentska simulacija (C5/C7/C8/C9/E1/E2) + ispravka dvostruke/apsurdne naplate zbog zastarjelog admin-ovog stanja (vidi "Riješeno 16. avgusta" ispod).
+Test paket: 303 ukupno, 0 pada, 0 ignorisano.
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -92,7 +92,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | F1 | Evidencija ulaska po IMO broju i vremenu | DONE — `Luka`, poziv iz `BrodThread` |
 | F2 | 100 KM/sat, do 12h 1000 KM, do 24h 2000 KM | DONE — `PokretacIzvjestaja`, testovi |
 | F3 | Državna plovila ne plaćaju | DONE — test |
-| F4 | CSV izvoz | DONE — `BrodThread.obracunajIZabiljeziTaksu()` poziva `PokretacIzvjestaja.izracunajTaksuZaPlovilo()`/`evidentirajUCSV()` na sva tri fizička mjesta konačnog izlaska iz luke (normalan odlazak, prisilan izlazak učesnika sudara, izlazak obalske straže nakon potjernice); briše zapis iz evidencije nakon obračuna |
+| F4 | CSV izvoz | DONE — `BrodThread.obracunajIZabiljeziTaksu()` poziva `PokretacIzvjestaja.izracunajTaksuZaPlovilo()`/`evidentirajUCSV()` na sva tri fizička mjesta konačnog izlaska iz luke (normalan odlazak, prisilan izlazak učesnika sudara, izlazak obalske straže nakon potjernice); briše zapis iz evidencije nakon obračuna. **Ispravljen 16. avgusta bug** gdje se obrisan zapis vraćao kroz zastarjelo `AdminProzor` stanje — vidi "Riješeno 16. avgusta: zastarjelo admin-ovo stanje" ispod. |
 | F5 | Preuzimanje CSV evidencije (dugme + odabir odredišta) | DONE — `AdminProzor` dugme "Preuzmi CSV izvještaj", `gui.IzvjestajService.preuzmiIzvjestaj(File)`, `FileDialog.SAVE` |
 | F6 | Skaliranje stvarnog vremena u simulaciono (profesorovo pojašnjenje: "Vi trebate skalirati") | DONE — dva nezavisna mehanizma, vidi "Riješeno 15. avgusta" ispod: (1) `Luka.pomjeriEvidencijuZaPauzu()`/`SerializationUtil.primijeniPauzu()` isključuju period dok je aplikacija bila ugašena iz obračuna; (2) `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (3600×, ispravljeno sa prvobitnog 60× — vidi F1 nalaz iz `F5_F6_PREGLED.md`) ubrzava tempo naplate unutar aktivne sesije |
 | E1 | Kraj kad odabrana plovila izađu i klijentska se privežu | DONE — `gui.KlijentskaSimulacijaService.jeSimulacijaZavrsena()`, provjereno na svakom Timer tiku |
@@ -1225,3 +1225,62 @@ neotkriven jer nijedan postojeći test tamo namjerno ne prolazi kroz granu greš
 danas (van obima ovog zadatka, i nijedan trenutni test ga ne okida), ali vrijedno zapisati: bilo
 koji budući test koji pozove `pokusajSacuvaj()`/`pokreniSimulaciju()` sa neispravnim unosom mora
 ili koristiti isti obrazac test-podrazreda, ili očekivati identično zamrzavanje.
+
+## Riješeno 16. avgusta: zastarjelo admin-ovo stanje uzrokovalo apsurdnu ponovnu naplatu (F4)
+
+**Prijavljen bug, sa dokazom iz `takse.csv`:** isto plovilo naplaćeno dvaput za istu posjetu —
+oba reda sa IDENTIČNIM vremenom ulaska (do nanosekunde), različitim (rastućim) vremenom izlaska,
+i apsurdnim iznosima (92400 KM = 924 simulirana sata, na `FAKTOR_SKALIRANJA_VREMENA = 3600`).
+
+### Potvrđen uzrok (čitanjem koda, prije bilo kakve izmjene)
+
+`AdminProzor.luka` se postavlja **tačno jednom**, u `ucitajStanje()` (pozvano iz konstruktora), i
+nikad poslije ne osvježava. `KlijentskiProzor` prima tu istu referencu kroz konstruktor, ali
+`pokreniSimulaciju()` **zamjenjuje sopstveno** polje `luka` rezultatom
+`PokretacSimulacije.pripremiPocetnoStanje()` — od tog trenutka admin i klijent gledaju **dva
+različita objekta** (potvrđeno čitanjem oba fajla, ne pretpostavljeno). Klijent na kraju
+simulacije (E2) ispravno serijalizuje **svoju** (ažurnu) kopiju — plovila koja su otišla nemaju
+više zapis u `evidencijaUlaska` (`obracunajIZabiljeziTaksu()` ga uklanja, ispravno, nedirano).
+
+Problem nastaje ako korisnik ponovo klikne "Pokreni klijentsku aplikaciju" na **istom, još
+otvorenom** admin prozoru: `pokreniKlijentskuAplikaciju()` serijalizuje `AdminProzor`-ovo polje
+`luka` — koje je ostalo zamrznuto na stanju **prije** pokretanja te (ili bilo koje ranije)
+simulacije — preko onoga što je E2 upisao. Otišla plovila (i njihov ORIGINALNI, sad davno
+prošli, `vrijemeUlaska`) se time vraćaju u `luka.ser`. Naredna simulacija ih učita kao "zatečenu
+flotu" (C3), moguće ih ponovo označi za odlazak (C7), i pri stvarnom odlasku `izracunajTaksuZaPlovilo()`
+računa `Duration.between(davnoVrijemeUlaska, sada)` — otud apsurdni iznos. Napomena: F6-ov
+mehanizam pauziranja (`primijeniPauzu()`) ovdje ne pomaže, jer `serijalizujStanjeLuke()` stampira
+`vrijemeZadnjegCuvanja` na **trenutak resurekcije**, ne na originalni (davno prošli) ulazak — pauza
+između resurekcije i sljedećeg učitavanja je tipično ispod `PRAG_PAUZE_MS`, pa se ne aktivira.
+
+`obracunajIZabiljeziTaksu()` je potvrđeno **ispravan i nedirnut** — briše zapis čim se taksa
+obračuna. Problem nije brisanje, nego što se obrisan zapis **vraća** kroz nezavisan, zastarjeli
+put serijalizacije koji ne zna da je zapis ikad obrisan.
+
+### Popravka
+
+`AdminProzor` sad osluškuje zatvaranje klijentskog prozora i ponovo učitava `luka.ser` sa diska
+čim se ono desi — novi `AdminProzor.napraviKlijentskiProzor()` gradi `KlijentskiProzor` i kači
+`WindowAdapter` čiji `windowClosed()` samo ponovo poziva postojeći `ucitajStanje()` (isti
+SwingWorker koji se već koristi pri pokretanju admin aplikacije — nema duplirane logike). Time
+admin-ovo polje `luka` više ne ostaje trajno zamrznuto na pretpokretačko stanje; sljedeći klik na
+"Pokreni klijentsku aplikaciju" serijalizuje ono što je klijent stvarno upisao, ne staru kopiju.
+
+`KlijentskiProzor` je morao dobiti `setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE)` — bez toga
+je podrazumijevani `HIDE_ON_CLOSE` (JFrame default) samo sakrivao prozor, nikad ne dižući
+`WINDOW_CLOSED` događaj, pa se `windowClosed()` nikad ne bi ni pozvao. Potvrđeno probnim programom
+prije pisanja testova (`WindowClosedProbe`, van repozitorija) da `dispose()` na nikad-prikazanom
+prozoru **takođe** tiho ne diže `WINDOW_CLOSED` — testovi zato moraju stvarno pozvati
+`setVisible(true)` prije `dispose()` da bi vjerodostojno provjerili ovu putanju, ne mogu je
+zaobići kao što su ostali GUI testovi izbjegavali prikazivanje pravog prozora.
+
+Testovi (`AdminProzorTest`, nov fajl): plovilo sa zapisom u evidenciji predstavlja admin-ovo
+zastarjelo stanje; "klijent" upiše ispravno (novije) stanje bez tog zapisa preko
+`SerializationUtil.serijalizujStanjeLuke()` direktno; `klijent.dispose()` (nakon `setVisible(true)`)
+triggeruje osvježavanje; provjereno da se zapis ne vraća, i da `AdminProzor`-ov broj terminala
+poslije odgovara onome što je stvarno na disku (ne staroj kopiji u memoriji).
+
+**Napomena o "Pun paket TRI puta zaredom":** prvi pokušaj punog paketa je javio `BUILD FAILURE`
+zbog `timeout 170` alata koji je presjekao proces usred `BrodThreadTest`-a (poznato spor, ~30s
+razred) — nije nestabilnost testova, nego preuska vremenska granica koju sam sâm postavio.
+Ponovljeno sa širom granicom (280s): tri puta zaredom, **303 ukupno, 0 padova**, bez varijacije.

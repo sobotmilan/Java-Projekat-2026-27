@@ -577,6 +577,41 @@ priveže, i zašto `pripremiPocetnoStanje()` odbacuje admin-ovu tačnu rasporedb
 padova** (277 + 24 nova: 18 `KlijentskaSimulacijaServiceTest`, 6 `KlijentskiProzorTest`),
 pokrenut tri puta zaredom bez varijacije — nijedna nestabilnost primijećena.
 
+**Status (16. avgust, drugi bug istog dana) — dvostruka/apsurdna naplata zbog zastarjelog
+admin-ovog stanja.** Prijavljeno sa konkretnim dokazom iz `takse.csv`: isto plovilo naplaćeno
+dvaput za istu posjetu, identično vrijeme ulaska, rastuće vrijeme izlaska, iznosi reda 20–90
+hiljada KM. Dijagnoza je stigla unaprijed formulisana ("AdminProzor drži zastarjeli objekat,
+klijent radi nad drugim") — potvrđena čitanjem oba fajla prije bilo kakve izmjene, kako je i
+traženo, ne pretpostavljena.
+
+Pravi mehanizam: `AdminProzor.luka` se postavlja jednom u konstruktoru i nikad više ne osvježava;
+`KlijentskiProzor.pokreniSimulaciju()` zamjenjuje **sopstveno** polje istoimenom, ali drugom
+instancom (`pripremiPocetnoStanje()`) — admin i klijent od tog trenutka rade nad dva različita
+objekta u memoriji. Klijentov E2 upisuje ispravno stanje (otišla plovila bez zapisa u evidenciji —
+`obracunajIZabiljeziTaksu()` to već ispravno radi, nedirano ovim popravkom). Ali ako se admin
+prozor ne zatvori i korisnik ponovo klikne "Pokreni klijentsku aplikaciju", admin serijalizuje
+**svoju** zamrznutu, pretpokretačku kopiju preko onoga što je klijent upisao — vraćajući otišla
+plovila i njihova ORIGINALNA (davno prošla) vremena ulaska. Naredna simulacija ih ponovo naplati
+od tog davnog trenutka — otud apsurdni iznosi. F6-ov mehanizam pauziranja ne štiti od ovoga jer
+gleda pauzu između zatvaranja i otvaranja aplikacije, ne "starost" pojedinačnog zapisa unutar
+jednog te istog, kontinuirano otvorenog admin prozora.
+
+Popravka: `AdminProzor.napraviKlijentskiProzor()` kači `WindowAdapter` na klijentski prozor koji u
+`windowClosed()` ponovo poziva postojeći `ucitajStanje()` — nula duplirane logike, isti
+SwingWorker koji admin već koristi pri sopstvenom pokretanju. Usput otkriven (probnim programom,
+prije pisanja testova) sitan ali bitan AWT detalj: `KlijentskiProzor` nije imao eksplicitan
+`setDefaultCloseOperation`, pa je pod podrazumijevanim `HIDE_ON_CLOSE`-om `windowClosed` **nikad**
+ne bi ni bio dignut (samo se prozor sakriva) — ispravljeno na `DISPOSE_ON_CLOSE`. Isti probni
+program je otkrio i da `dispose()` na prozoru koji nikad nije bio `setVisible(true)` takođe tiho
+ne diže taj događaj — testovi su morali stvarno prikazati prozor (kratak bljesak tokom `mvn test`)
+da bi vjerodostojno provjerili ovu putanju, za razliku od ostalih GUI testova u projektu koji
+uspješno izbjegavaju prikazivanje pravog prozora.
+
+Test paket: **303 ukupno, 0 padova** (301 + 2 nova `AdminProzorTest`), tri puta zaredom. Prvi
+pokušaj trostrukog pokretanja je javio `BUILD FAILURE` — istraženo i potvrđeno da je uzrok
+prekratka `timeout` granica koju sam sâm postavio (presjekla proces usred inače zdravog,
+sporog `BrodThreadTest`-a), ne stvarna nestabilnost; ponovljeno sa širom granicom, bez varijacije.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje

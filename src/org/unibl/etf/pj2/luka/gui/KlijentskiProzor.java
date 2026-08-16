@@ -52,6 +52,10 @@ public class KlijentskiProzor extends JFrame {
     public KlijentskiProzor(Luka luka) {
         super("Klijentska aplikacija");
         this.luka = luka;
+        // DISPOSE_ON_CLOSE (ne podrazumijevani HIDE_ON_CLOSE) — AdminProzor osluškuje windowClosed
+        // da ponovo učita luka.ser čim se klijent zatvori; taj događaj se ne diže na HIDE_ON_CLOSE
+        // (samo sakriva prozor, ne diže WINDOW_CLOSED).
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(800, 550);
         setLocationRelativeTo(null);
 

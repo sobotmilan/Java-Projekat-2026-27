@@ -43,7 +43,7 @@ public final class PokretacSimulacije {
      * Namjerno veći od {@link #INTERVAL_TIKA_MS}, jer GUI ne mora nužno pratiti svaki pomjeraj
      * da bi simulacija djelovala glatko, a i rjeđe osvježavanje manje opterećuje slabiju mašinu.
      */
-    public static final long INTERVAL_RENDEROVANJA_MS = 500L;
+    public static final long INTERVAL_RENDEROVANJA_MS = 150L;
 
     private PokretacSimulacije() {
     }

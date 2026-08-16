@@ -272,9 +272,33 @@ public class AdminProzor extends JFrame {
 
             @Override
             protected void done() {
-                new KlijentskiProzor(luka).setVisible(true);
+                napraviKlijentskiProzor().setVisible(true);
             }
         }.execute();
+    }
+
+    // Klijent radi nad SOPSTVENOM kopijom luke (KlijentskiProzor.pokreniSimulaciju() zamjenjuje
+    // svoje polje luka rezultatom PokretacSimulacije.pripremiPocetnoStanje() — admin i klijent od
+    // tog trenutka gledaju DVA RAZLIČITA objekta). Admin-ovo polje luka bi bez ovog listenera
+    // ostalo zauvijek zastarjelo (postavljeno samo jednom, u ucitajStanje()) — sljedeći klik na
+    // "Pokreni klijentsku aplikaciju" bi tim zastarjelim objektom prepisao ono što je klijent na
+    // kraju simulacije (E2) upisao, vraćajući otišla plovila i njihove STARE zapise u
+    // evidencijaUlaska (otud apsurdne takse pri sljedećoj naplati — vidi ZAHTJEVI.md). Zato admin
+    // ponovo učitava luka.ser sa diska čim se klijentski prozor zatvori, umjesto da nastavi da
+    // vjeruje sopstvenom, potencijalno zastarjelom stanju u memoriji.
+    KlijentskiProzor napraviKlijentskiProzor() {
+        KlijentskiProzor klijent = new KlijentskiProzor(luka);
+        klijent.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                ucitajStanje();
+            }
+        });
+        return klijent;
+    }
+
+    Luka getLukaZaTest() {
+        return luka;
     }
 
     public static void main(String[] args) {
