@@ -24,14 +24,11 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class KlijentskiProzor extends JFrame {
+
+    private static final int RAZMAK_ODLAZAKA_MS = 3000;
 
     private Luka luka;
 
@@ -50,6 +47,7 @@ public class KlijentskiProzor extends JFrame {
 
     private Timer timer;
     private boolean simulacijaZavrsena = false;
+    private boolean odlasciOznaceni = false;
 
     public KlijentskiProzor(Luka luka) {
         super("Klijentska aplikacija");
@@ -186,12 +184,26 @@ public class KlijentskiProzor extends JFrame {
         for (BrodThread bt : sveNiti) {
             poTerminalu.computeIfAbsent(bt.getTrenutniTerminal(), k -> new ArrayList<>()).add(bt);
         }
+
+        List<BrodThread> zaOdlazak = new ArrayList<>();
         for (List<BrodThread> naTerminalu : poTerminalu.values()) {
             for (BrodThread bt : KlijentskaSimulacijaService.odaberiZaOdlazak(naTerminalu)) {
                 imoZaOdlazak.add(bt.getPlovilo().getImoBroj());
-                bt.zatraziNapustanje();
+                zaOdlazak.add(bt);
             }
         }
+        odlasciOznaceni = true;
+
+        Iterator<BrodThread> it = zaOdlazak.iterator();
+        Timer raspored = new Timer(RAZMAK_ODLAZAKA_MS, null);
+        raspored.addActionListener(e -> {
+            if (it.hasNext()) {
+                it.next().zatraziNapustanje();
+            } else {
+                raspored.stop();
+            }
+        });
+        raspored.start();
     }
 
     // ------------------------------------------------------------------
@@ -205,7 +217,7 @@ public class KlijentskiProzor extends JFrame {
 
     private void tik() {
         osvjeziPrikaz();
-        if (!simulacijaZavrsena
+        if (odlasciOznaceni && !simulacijaZavrsena
                 && KlijentskaSimulacijaService.jeSimulacijaZavrsena(luka, imoZaOdlazak, imoDodataTokomSimulacije)) {
             simulacijaZavrsena = true;
             zavrsiSimulaciju();
