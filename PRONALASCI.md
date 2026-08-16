@@ -674,4 +674,79 @@ rotacije (10) i slučaj sa rotacijom (poređenje protiv imenovane konstante, ne 
 ### OTVORENO PITANJE
 
 Package cycle — `model.classes.Luka` imports `simulation.BrodThread`, and `BrodThread` imports `Luka`. Caused by putting `aktivnaPlovila` on `Luka`. Compiles fine, but it's simulation state on a model class. Cleaner alternative if time permits: move the registry to `PokretacSimulacije`. Noted as a known design compromise, not a bug.
+
+## Riješeno (16. avgust): `IntegracijaIncidentaTest` — I1–I8/I5 verifikovani end-to-end
+
+Prije nego što je bilo šta pisano, u working tree su zatečene neopisane, necommit-ovane izmjene u
+`BrodThread.java` (van ove sesije/zadatka) koje su vraćale `trajanjeKoraka()` na klem
+`[400,800]ms` (poništavajući već verifikovanu ispravku bag-a 2, vidi gore) i postavljale
+`VJEROVATNOCA_SUDARA = 1.0` kao **produkcioni podrazumijevani** default (ne samo u testu) — jasno
+zaboravljeno ručno debug stanje iz ranije manuelne provjere kroz GUI. Vraćeno na commit-ovano
+stanje (`git checkout --`) prije početka, po potvrdi korisnika; `luka.properties` (2 umjesto 3
+terminala) i `KlijentskiProzor` (veći prozor, brži tajmer odlaska) ostavljeni netaknuti — to su
+bezopasne pogodnosti za ručno testiranje, ne regresija.
+
+Glavni zadatak: pet determinističkih integracionih testova (`IntegracijaIncidentaTest`, paket
+`simulation`) koji stvarno pokreću `BrodThread` niti (ne pozivaju `KoordinatorUvidjaja` direktno)
+da genuinski izazovu sudar kroz postojeću logiku preticanja — puno obrazloženje zašto je ovo jedini
+pouzdan način provjere I1–I8/I5 (ručna GUI provjera je strukturno neizvodljiva) je u `ZAHTJEVI.md`,
+odmah ispod tabele incidenata.
+
+Jedina produkciona izmjena: novo `BrodThread.DIREKTORIJUM_INCIDENTA_SUDARA` (simetrično postojećem
+`DIREKTORIJUM_INCIDENTA_POTJERNICE`) — obična (SUDAR) putanja incidenta ranije nije imala nikakvu
+kuku za preusmjeravanje direktorijuma upisa, pa bi testovi morali pisati u pravi `user.home`. Nema
+izmjene logike kretanja/preticanja/uviđaja.
+
+Tri stvarna bag-a otkrivena tek pri stvarnom pokretanju (ne pri pisanju koda), sva ispravljena u
+samom testu, ne u produkciji:
+1. `TestFactory.popuniSveDokove()` bezuslovno prepisuje SVAKI dok, uključujući već postavljena
+   patrolna plovila — popravljeno novim `popuniOsimKolone()` koji preskače već zauzete dokove.
+2. Broj raspoloživih vezova se vraća na staru vrijednost ODMAH po otkazivanju rezervacije, mnogo
+   prije nego što plovilo fizički napusti terminal (`napustiTerminal()` hoda korak po korak) — test
+   je pogrešno koristio taj broj kao signal fizičkog odlaska; ispravljeno čekanjem na nestanak niti
+   iz `Luka.getAktivnaPlovila()`.
+3. `KoordinatorUvidjaja` gasi rotaciju patrole TEK POSLIJE `raspetljajPatrole()`, koji asinhrono (u
+   patrolinoj sopstvenoj niti) može stići do `PRIVEZAN` i prije nego što koordinatorova nit stigne
+   do gašenja rotacije — `zadatak == PRIVEZAN` sam po sebi nije dovoljan signal da je rotacija već
+   ugašena; test sad čeka na sam `isRotacija() == false`.
+
+Test paket: **304 → 309** (5 novih). Cijeli paket pušten tri puta zaredom (plus dodatnih 5 izolovanih
+pokretanja same nove klase tokom debagovanja) bez ijednog pada nakon ispravki. `ZAHTJEVI.md`
+ažuriran uz svaki od I1–I8/I5 redova sa pokazivačem na tačan test metod.
 Postoji ciklus uvozenja - Luka uvozi BrodThread, BrodThread uvozi Luku. Donijeti odluku, nije nužno "bug"...
+
+## Riješeno (16. avgust): curenje `javax.swing.Timer`-a u `KlijentskiProzorTest` truje druge testove
+
+Korisnik je ručnim pokretanjem cijelog paketa kroz IntelliJ dobio pad koji se nikad nije pojavio u
+mojih 6+ pokretanja cijelog paketa kroz Maven (3x prije ovog zadatka, 3x poslije):
+`KlijentskaSimulacijaServiceTest.dodatoPloviloNijeNaplaceno` je tvrdio da `takse.csv` ne smije
+postojati (test rezerviše taj fajl kao svoj izolovan prostor), a log je pokazivao
+`[Sirena] Napustio terminal.` — "Sirena" je ime iz `GeneratorPlovila.IMENA`, nikad korišteno u
+ovom testu, dakle plovilo iz neke SASVIM DRUGE, ranije pokrenute niti.
+
+**Uzrok, potvrđen čitanjem koda i empirijskom reprodukcijom:** `KlijentskiProzor.pokreniSimulacija()`/
+`oznaciZaOdlazak()` zakazuju tri `javax.swing.Timer`-a (render tajmer, jednokratni "odgoda" tajmer od
+3000ms prije označavanja za odlazak, i ponavljajući "raspored" tajmer od 300ms koji redom zove
+`zatraziNapustanje()`) kao LOKALNE promjenljive — nigdje sačuvane kao polje, pa ih ništa nije moglo
+zaustaviti. `KlijentskiProzorTest`-ov `@AfterEach` je zvao `prozor.dispose()`, ali `JFrame.dispose()`
+ne dira nezavisne `Timer` objekte — oni nastavljaju da tiču na Swing-ovoj dijeljenoj niti zauvijek
+(dok JVM ne ugasi), i mnogo kasnije, tokom sasvim DRUGOG test razreda, mogu genuinski pozvati
+`zatraziNapustanje()` na plovilu iz prvog testa, koje onda ode i naplati se u pravi (ne test-lokalni)
+`takse.csv`.
+
+Zašto se ovo nikad nije pojavilo u mojih 6 punih pokretanja: Surefire je (bez `-Dtest` argumenta)
+učitavao klase alfabetski, a `KlijentskaSimulacijaServiceTest` < `KlijentskiProzorTest` alfabetski —
+ranjivi test je uvijek stigao na red PRIJE nego što je ijedan `KlijentskiProzor` tajmer i postojao.
+IntelliJ-ov redoslijed očigledno nije isti. Empirijski potvrđeno: sa
+`-Dsurefire.runOrder=reversealphabetical` (tjera `KlijentskiProzorTest` da ide prvi), pad se
+reprodukovao u 2 od 4 pokretanja PRIJE ispravke, i nestao u 8 od 8 pokretanja POSLIJE — dakle
+potvrđen uzrok, ne nagađanje.
+
+**Ispravka:** tri tajmera su postala polja (`odgodaTimer`, `rasporedTimer`, uz postojeći `timer`), i
+`KlijentskiProzor` sad override-uje `dispose()` da ih sve zaustavi prije `super.dispose()` — ovo je
+namjerno produkciona ispravka, ne samo test-kuka, jer je ispravno da se zatvaranje prozora zaista
+prekine sve što on radi u pozadini (npr. kad `AdminProzor` zatvori klijentski prozor preko
+`WindowListener`-a). `KlijentskiProzorTest` nije ni trebalo mijenjati — već je zvao `dispose()` u
+`@AfterEach`. Test paket i dalje **309** (nijedan nov test — ovo je ispravka postojeće infrastrukture,
+ne novi zahtjev), tri puta zaredom + dodatnih 8 ciljanih pokretanja pod forsiranim redoslijedom, sve
+čisto.

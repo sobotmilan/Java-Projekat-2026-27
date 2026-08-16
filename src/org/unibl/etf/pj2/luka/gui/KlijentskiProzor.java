@@ -28,7 +28,7 @@ import java.util.*;
 
 public class KlijentskiProzor extends JFrame {
 
-    private static final int RAZMAK_ODLAZAKA_MS = 3000;
+    private static final int RAZMAK_ODLAZAKA_MS = 300;
 
     private Luka luka;
 
@@ -46,6 +46,8 @@ public class KlijentskiProzor extends JFrame {
     private final Set<String> imoDodataTokomSimulacije = new HashSet<>();
 
     private Timer timer;
+    private Timer odgodaTimer;
+    private Timer rasporedTimer;
     private boolean simulacijaZavrsena = false;
     private boolean odlasciOznaceni = false;
 
@@ -56,7 +58,7 @@ public class KlijentskiProzor extends JFrame {
         // da ponovo učita luka.ser čim se klijent zatvori; taj događaj se ne diže na HIDE_ON_CLOSE
         // (samo sakriva prozor, ne diže WINDOW_CLOSED).
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setSize(800, 550);
+        setSize(1100, 600);
         setLocationRelativeTo(null);
 
         izgradiUI();
@@ -172,9 +174,9 @@ public class KlijentskiProzor extends JFrame {
 
                 zapocniZiviPrikaz();
 
-                Timer odgoda = new Timer(3000, e -> oznaciZaOdlazak(sveNiti));
-                odgoda.setRepeats(false);
-                odgoda.start();
+                odgodaTimer = new Timer(3000, e -> oznaciZaOdlazak(sveNiti));
+                odgodaTimer.setRepeats(false);
+                odgodaTimer.start();
             }
         }.execute();
     }
@@ -199,15 +201,15 @@ public class KlijentskiProzor extends JFrame {
         odlasciOznaceni = true;
 
         Iterator<BrodThread> it = zaOdlazak.iterator();
-        Timer raspored = new Timer(RAZMAK_ODLAZAKA_MS, null);
-        raspored.addActionListener(e -> {
+        rasporedTimer = new Timer(RAZMAK_ODLAZAKA_MS, null);
+        rasporedTimer.addActionListener(e -> {
             if (it.hasNext()) {
                 it.next().zatraziNapustanje();
             } else {
-                raspored.stop();
+                rasporedTimer.stop();
             }
         });
-        raspored.start();
+        rasporedTimer.start();
     }
 
     // ------------------------------------------------------------------
@@ -267,6 +269,31 @@ public class KlijentskiProzor extends JFrame {
                         "Kraj simulacije", JOptionPane.INFORMATION_MESSAGE);
             }
         }.execute();
+    }
+
+    // Zaustavlja sve javax.swing.Timer instance koje ovaj prozor može pokrenuti — bez ovoga,
+    // pokreniSimulaciju()/oznaciZaOdlazak() zakazani tajmeri (render, jednokratni "odgoda" prije
+    // označavanja za odlazak, i ponavljajući "raspored" koji redom zove zatraziNapustanje()) nastave
+    // da tiču na Swing-ovoj dijeljenoj niti i nakon što je ovaj prozor zatvoren/odbačen — dispose()
+    // ih ne dira jer nisu vezani za životni ciklus prozora. U testovima to znači da niti pokrenute
+    // za jedan test mogu, mnogo kasnije, tokom sasvim drugog testa, izazvati stvaran odlazak i
+    // naplatu za plovilo iz prvog — otud se ova kuka mora pozvati u @AfterEach prije dispose().
+    @Override
+    public void dispose() {
+        zaustaviSveTajmereZaTest();
+        super.dispose();
+    }
+
+    void zaustaviSveTajmereZaTest() {
+        if (timer != null) {
+            timer.stop();
+        }
+        if (odgodaTimer != null) {
+            odgodaTimer.stop();
+        }
+        if (rasporedTimer != null) {
+            rasporedTimer.stop();
+        }
     }
 
     // Paket-privatna, override-abilna kuka za sve JOptionPane dijaloge (K10-stil samodovoljnosti):

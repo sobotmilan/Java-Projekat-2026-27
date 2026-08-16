@@ -76,14 +76,57 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 
 | # | Zahtjev | Status |
 |---|---|---|
-| I1 | 2% sudara pri mimoilaženju | DONE — `BrodThread.SUDARI_OMOGUCENI = true` (podrazumijevano), `provjeriSudar()` detektuje oba učesnika u grani preticanja (Korak 1) |
-| I2 | Najbliža obalska straža, carina i vatrogasci pod rotacijom | DONE — `PretragaPatrole.najblizaPatrola(..., Class)` (Korak 2), poziva ga `KoordinatorUvidjaja.pozoviPatrole()` za svaku od tri službe pojedinačno |
-| I3 | Blokada saobraćaja na terminalu, uviđaj 3–10s | DONE — `KoordinatorUvidjaja` (Korak 3) zove `blokirajSaobracaj()`/`odblokirajSaobracaj()` i uspavljuje se na slučajno trajanje iz `MIN/MAX_TRAJANJE_UVIDJAJA_MS` |
-| I4 | Ostali terminali rade normalno | DONE — blokada je po instanci `Terminal`-a, demonstrirano testom (`KoordinatorUvidjajaTest`) da susjedni terminal ostaje neblokiran |
-| I5 | Potjernica: pratnja ka izlazu, uviđaj 3–5s, saobraćaj radi | DONE — `BrodThread.provjeriPotjernicu()`/`pokreniPotjernicu()` (vidi "Riješeno 13. avgusta" i "Ispravke 13. avgusta (code review)" ispod); terminal se nikad ne blokira, za razliku od I3. **Svjesna odluka o "pratnji":** oba plovila (obalska straža i traženo) napuštaju terminal nezavisno, svako svojom putanjom kroz postojeći `napustiTerminal()` — traženo plovilo ne prati obalsku stražu ćeliju po ćeliju. Specifikacija doslovno traži da meta "prati brod obalske straže ka izlazu", ali doslovno praćenje pozicije druge, nezavisne niti korak-po-korak je netrivijalno (zahtijevalo bi novu rutu kretanja koja prati poziciju druge niti u realnom vremenu) i ne mijenja nijedan mjerljiv ishod — oba plovila i dalje napuštaju terminal, obalska straža je pod rotacijom cijelo vrijeme, evidencija sadrži oba. Odluka je da se to ne implementira sada; vrijeme je bolje uloženo u preostale GUI zahtjeve (A*/C5/C7/C8). |
-| I6 | Evidencija: učesnici, vrijeme, fotografije | DONE — `KoordinatorUvidjaja` konstruiše `Incident` sa stvarnim učesnicima sudara i odazvanim patrolama nakon svakog uviđaja |
-| I7 | Binarni fajl po slučaju, u `user.home` | DONE — `KoordinatorUvidjaja` poziva `incident.sacuvaj()` na kraju uviđaja; integracioni test provjerava stvaran fajl u `user.home` |
-| I8 | Učesnici napuštaju terminal poslije uviđaja | DONE — Korak 5: `BrodThread.udjiULuku()` presreće učesnike sudara na tačci uspješnog privezivanja i preusmjerava ih na `napustiTerminal()` umjesto privezivanja |
+| I1 | 2% sudara pri mimoilaženju | DONE — `BrodThread.SUDARI_OMOGUCENI = true` (podrazumijevano), `provjeriSudar()` detektuje oba učesnika u grani preticanja (Korak 1). Verifikovano end-to-end preko `IntegracijaIncidentaTest.sudarTokomPreticanjaStvaraIncidentSaTacnoDvaUcesnika()` — vidi "Integracioni testovi za I1–I8/I5" ispod. |
+| I2 | Najbliža obalska straža, carina i vatrogasci pod rotacijom | DONE — `PretragaPatrole.najblizaPatrola(..., Class)` (Korak 2), poziva ga `KoordinatorUvidjaja.pozoviPatrole()` za svaku od tri službe pojedinačno. Verifikovano end-to-end preko `IntegracijaIncidentaTest.sudarBlokiraSamoSvojTerminalIDispecujeSluzbe()`. |
+| I3 | Blokada saobraćaja na terminalu, uviđaj 3–10s | DONE — `KoordinatorUvidjaja` (Korak 3) zove `blokirajSaobracaj()`/`odblokirajSaobracaj()` i uspavljuje se na slučajno trajanje iz `MIN/MAX_TRAJANJE_UVIDJAJA_MS`. Verifikovano end-to-end preko `IntegracijaIncidentaTest.sudarBlokiraSamoSvojTerminalIDispecujeSluzbe()`. |
+| I4 | Ostali terminali rade normalno | DONE — blokada je po instanci `Terminal`-a, demonstrirano testom (`KoordinatorUvidjajaTest`) da susjedni terminal ostaje neblokiran. Verifikovano i end-to-end (stvarna nit u susjednom terminalu nastavlja kretanje) preko `IntegracijaIncidentaTest.sudarBlokiraSamoSvojTerminalIDispecujeSluzbe()`. |
+| I5 | Potjernica: pratnja ka izlazu, uviđaj 3–5s, saobraćaj radi | DONE — `BrodThread.provjeriPotjernicu()`/`pokreniPotjernicu()` (vidi "Riješeno 13. avgusta" i "Ispravke 13. avgusta (code review)" ispod); terminal se nikad ne blokira, za razliku od I3. **Svjesna odluka o "pratnji":** oba plovila (obalska straža i traženo) napuštaju terminal nezavisno, svako svojom putanjom kroz postojeći `napustiTerminal()` — traženo plovilo ne prati obalsku stražu ćeliju po ćeliju. Specifikacija doslovno traži da meta "prati brod obalske straže ka izlazu", ali doslovno praćenje pozicije druge, nezavisne niti korak-po-korak je netrivijalno (zahtijevalo bi novu rutu kretanja koja prati poziciju druge niti u realnom vremenu) i ne mijenja nijedan mjerljiv ishod — oba plovila i dalje napuštaju terminal, obalska straža je pod rotacijom cijelo vrijeme, evidencija sadrži oba. Odluka je da se to ne implementira sada; vrijeme je bolje uloženo u preostale GUI zahtjeve (A*/C5/C7/C8). Verifikovano end-to-end preko `IntegracijaIncidentaTest.potjernicaNikadNeBlokiraTerminal()`, uključujući ključnu razliku od I3 (terminal se nikad ne blokira). |
+| I6 | Evidencija: učesnici, vrijeme, fotografije | DONE — `KoordinatorUvidjaja` konstruiše `Incident` sa stvarnim učesnicima sudara i odazvanim patrolama nakon svakog uviđaja. Verifikovano end-to-end preko `IntegracijaIncidentaTest.sudarUpisujeBinarniFajlSaIstimPodacima()`. |
+| I7 | Binarni fajl po slučaju, u `user.home` | DONE — `KoordinatorUvidjaja` poziva `incident.sacuvaj()` na kraju uviđaja; integracioni test provjerava stvaran fajl u `user.home` (odnosno u izolovanom test-direktorijumu preko novog `BrodThread.DIREKTORIJUM_INCIDENTA_SUDARA`, vidi ispod). Verifikovano end-to-end preko `IntegracijaIncidentaTest.sudarUpisujeBinarniFajlSaIstimPodacima()`. |
+| I8 | Učesnici napuštaju terminal poslije uviđaja | DONE — Korak 5: `BrodThread.udjiULuku()` presreće učesnike sudara na tačci uspješnog privezivanja i preusmjerava ih na `napustiTerminal()` umjesto privezivanja. Verifikovano end-to-end preko `IntegracijaIncidentaTest.raspetljavanjeNakonUvidjajaVracaStanjeTerminala()` (učesnici napuštaju, patrola se raspetljava, broj raspoloživih vezova se vraća na prvobitnu vrijednost). |
+
+### Integracioni testovi za I1–I8/I5 — zašto ručna GUI provjera nije izvodljiva
+
+Ručno testiranje I1–I8 (sudar) i I5 (potjernica) kroz `KlijentskiProzor` je strukturno neizvodljivo,
+ne zbog greške u kodu:
+
+1. `provjeriSudar()` se poziva samo u grani preticanja (`preticanje == true`) — sudar se nikad ne
+   provjerava van stvarnog mimoilaženja.
+2. `ploviIstocno()` (jedino mjesto koje poziva `provjeriSudar()`) se poziva samo iz
+   `doploviDoDoka()`, tj. samo pri dolasku ka doku — `napustiTerminal()` ga nikad ne poziva, pa
+   plovilo koje odlazi ne može izazvati sudar.
+3. Početna flota se postavlja direktno na dokove (pojašnjenje 3 u `dodatna_pojasnjenja.txt`), pa
+   jedina plovila koja ikad prođu kroz `ploviIstocno()` su ona dodata tokom simulacije (C8).
+
+Posljedica: sudar zahtijeva bar dva plovila dodata tokom simulacije, u istom terminalu, tempirana
+tako da drugo stigne prvo u redu 2 (KANAL_ULAZ), bude blokirano `PRAG_PRETICANJA` (3) puta i pretekne
+u red 1. Kroz modalni dijalog za dodavanje plovila, dok simulacija živi, ovo je praktično neizvodljivo
+— empirijski potvrđeno: prvo ručno dodato plovilo je pristalo na (0,2), dvije kolone od ulaza, nikad
+ni ne stigavši do reda 2.
+
+Zato je jedini pouzdan način provjere I1–I8/I5 nova klasa `IntegracijaIncidentaTest`
+(`test/.../simulation/`) — pet determinističkih testova koji pokreću **stvarne** `BrodThread` niti
+(konstruktor za dodavanje tokom simulacije, ne predokovani) i puštaju ih da genuinski izazovu sudar
+kroz postojeću logiku preticanja, umjesto da direktno pozivaju `KoordinatorUvidjaja`. Ovo je glavni
+dokaz da I1–I8/I5 rade — vidjeti test klasu za tačne scenarije (dva plovila različitih brzina,
+terminal vještački popunjen tako da je slobodna samo jedna udaljena kolona, itd.).
+
+**Jedna produkciona izmjena bila je neophodna** da bi ovi testovi mogli biti pouzdani bez pisanja u
+`user.home`: `BrodThread.pokreniUvidjaj()` (putanja običnog/SUDAR incidenta) nije imala nikakvu kuku
+za preusmjeravanje direktorijuma u koji se upisuje binarni fajl incidenta — za razliku od potjernice,
+koja je već imala `DIREKTORIJUM_INCIDENTA_POTJERNICE`. Dodato je simetrično
+`BrodThread.DIREKTORIJUM_INCIDENTA_SUDARA` (podrazumijevano `null`, isto ponašanje kao ranije —
+`user.home`), i `pokreniUvidjaj()` ga sad prosljeđuje `KoordinatorUvidjaja`-inom postojećem 6-arg
+konstruktoru. Nikakva logika kretanja, preticanja ili uviđaja nije dirana — samo dodata mogućnost
+ubrizgavanja putanje, po istom obrascu koji je već postojao za potjernicu.
+
+Testovi upravljaju sa nekoliko `static volatile` polja (`BrodThread.SUDARI_OMOGUCENI`,
+`VJEROVATNOCA_SUDARA`, `MIN/MAX_TRAJANJE_UVIDJAJA_MS`, `MIN/MAX_TRAJANJE_UVIDJAJA_POTJERNICE_MS`,
+`DIREKTORIJUM_INCIDENTA_SUDARA`/`_POTJERNICE`, `KoordinatorUvidjaja.MAX_CEKANJE_DOLASKA_MS`/
+`INTERVAL_PROVJERE_DOLASKA_MS`) — sva se čuvaju/vraćaju u `@BeforeEach`/`@AfterEach`, po istom
+obrascu kao `KoordinatorUvidjajaTest`/`BrodThreadIncidentTest`, da ne bi procurila u ostale testove.
+Cijeli paket testova (uključujući `IntegracijaIncidentaTest`) pušten je tri puta zaredom bez
+nestabilnosti prije zaključivanja ovog zadatka.
 
 ## Takse i završetak
 

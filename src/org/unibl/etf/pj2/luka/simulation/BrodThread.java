@@ -73,6 +73,9 @@ public class BrodThread implements Runnable {
     /** Direktorijum u koji se upisuje evidencija potjernice — {@code null} znači podrazumijevani (user.home), testovi ga postavljaju radi izolacije. */
     public static volatile File DIREKTORIJUM_INCIDENTA_POTJERNICE = null;
 
+    /** Direktorijum u koji se upisuje binarni fajl obicnog (SUDAR) incidenta — {@code null} znači podrazumijevani (user.home), testovi ga postavljaju radi izolacije. */
+    public static volatile File DIREKTORIJUM_INCIDENTA_SUDARA = null;
+
     /** Plovilo kojim ova nit upravlja. */
     private final Plovilo plovilo;
 
@@ -1008,7 +1011,8 @@ public class BrodThread implements Runnable {
 
     private void pokreniUvidjaj(Plovilo[] ucesnici) {
         KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
-                luka, this.trenutniTerminal, List.of(ucesnici[0], ucesnici[1]), this.x, this.y);
+                luka, this.trenutniTerminal, List.of(ucesnici[0], ucesnici[1]), this.x, this.y,
+                DIREKTORIJUM_INCIDENTA_SUDARA);
         Thread nit = new Thread(koordinator, "koordinator-uvidjaja-" + plovilo.getImoBroj());
         nit.setDaemon(true);
         nit.start();
