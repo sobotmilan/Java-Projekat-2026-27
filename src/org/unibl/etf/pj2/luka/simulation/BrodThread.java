@@ -980,7 +980,7 @@ public class BrodThread implements Runnable {
      */
     private long trajanjeKoraka() {
         long korak = (long) (1000.0 / plovilo.getBrzina());
-        return Math.max(400L, Math.min(korak, 800L));
+        return Math.max(20L, Math.min(korak, 400L));
     }
 
     Plovilo[] provjeriSudar() {

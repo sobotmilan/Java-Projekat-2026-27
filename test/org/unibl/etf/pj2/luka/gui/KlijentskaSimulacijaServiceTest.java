@@ -170,6 +170,50 @@ class KlijentskaSimulacijaServiceTest {
         assertTrue(bt.isPrivezan(), "Novododato plovilo se mora na kraju privezati.");
     }
 
+    @Test
+    @DisplayName("Plovilo dodato tokom simulacije nije naplaćeno dok ne dobije zahtjev za odlazak")
+    void dodatoPloviloNijeNaplaceno() throws Exception {
+        java.nio.file.Path csv = java.nio.file.Path.of("takse.csv");
+        java.nio.file.Path backup = java.nio.file.Path.of("takse.csv.kljssbackup");
+        boolean postojaoPrijeTesta = java.nio.file.Files.exists(csv);
+        if (postojaoPrijeTesta) {
+            java.nio.file.Files.move(csv, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        try {
+            List<String> greske = KlijentskaSimulacijaService.dodajTokomSimulacije(luka, TestFactory.kontejnerski("NENAPLACENO-1"));
+            assertTrue(greske.isEmpty());
+
+            BrodThread bt = null;
+            long krajnjeVrijeme = System.currentTimeMillis() + 10_000;
+            while (System.currentTimeMillis() < krajnjeVrijeme) {
+                bt = KlijentskaSimulacijaService.pronadjiAktivnuNit(luka, "NENAPLACENO-1");
+                if (bt != null && bt.isPrivezan()) {
+                    break;
+                }
+                TimeUnit.MILLISECONDS.sleep(20);
+            }
+            assertNotNull(bt);
+            assertTrue(bt.isPrivezan());
+
+            // Plovilo NIKAD nije zatražilo napuštanje -- ostaje privezano, nikad ne stiže do
+            // obracunajIZabiljeziTaksu(). Kratka pauza da se isključi mogućnost da je nešto ipak
+            // (pogrešno) pokrenulo odlazak u međuvremenu.
+            TimeUnit.MILLISECONDS.sleep(300);
+
+            assertTrue(bt.isPrivezan(), "Plovilo mora ostati privezano -- niko ga nije pozvao da ode.");
+            assertTrue(luka.getEvidencijaUlaska().containsKey("NENAPLACENO-1"),
+                    "Zapis o ulasku mora ostati dok plovilo ne ode -- obracunajIZabiljeziTaksu() ga uklanja "
+                            + "samo pri stvarnom izlasku.");
+            assertFalse(java.nio.file.Files.exists(csv),
+                    "takse.csv ne smije ni postojati -- nijedno plovilo u ovom testu nije napustilo luku.");
+        } finally {
+            java.nio.file.Files.deleteIfExists(csv);
+            if (postojaoPrijeTesta) {
+                java.nio.file.Files.move(backup, csv, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------
     // Korak 5 — kraj simulacije (E1)
     // ------------------------------------------------------------------

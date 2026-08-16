@@ -90,6 +90,12 @@ public final class KlijentskaSimulacijaService {
             greske.add("U luci trenutno nema slobodnog veza — plovilo se ne može dodati.");
             return greske;
         }
+        // Isti format kao BrodThread.log() ("[naziv] poruka") — namjerno, da se u konzoli vidi
+        // da je BAŠ OVAJ zapis pokrenuo ulazak kroz udjiULuku() (C8), za razliku od plovila koje je
+        // već bilo dokovano kad je nit napravljena (npr. dodato preko AdminProzor-a prije pokretanja
+        // klijenta) — takvo plovilo NIKAD ne loguje "Ušao u terminal"/"Usidren na vezu", jer
+        // predokovani konstruktor uopšte ne prolazi kroz udjiULuku().
+        System.out.println("[" + kandidat.getNaziv() + "] Dodato tokom simulacije (C8), pokušava ući u luku.");
         BrodThread bt = new BrodThread(kandidat, luka);
         Thread nit = new Thread(bt, "Brod-" + kandidat.getImoBroj());
         nit.setDaemon(true);

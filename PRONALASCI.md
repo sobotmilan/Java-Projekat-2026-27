@@ -612,6 +612,42 @@ pokušaj trostrukog pokretanja je javio `BUILD FAILURE` — istraženo i potvrđ
 prekratka `timeout` granica koju sam sâm postavio (presjekla proces usred inače zdravog,
 sporog `BrodThreadTest`-a), ne stvarna nestabilnost; ponovljeno sa širom granicom, bez varijacije.
 
+**Status (16. avgust, treći bug istog dana) — istraga prijavljenog "C8 plovilo napusti umjesto da
+se priveže", NIJE reprodukovano kroz stvarnu C8 putanju.** Vrijedan slučaj gdje je predložena
+dijagnoza (istek nekog vremenskog budžeta) provjerena i pokazala se neusklađenom sa sopstvenim
+simptomom pri čitanju koda: "Napustio terminal." log zahtijeva `trenutniTerminal != null`, a to
+polje se za plovilo koje ulazi kroz `udjiULuku()` postavlja isključivo tik uz "Ušao u terminal"
+log — nema logičkog puta da se jedno desi bez drugog za genuinski C8-dodato plovilo.
+
+Umjesto da se stane na "ne mogu naći uzrok pukom analizom", napravljena su tri probna Java
+programa (van repozitorija, obrisani nakon istrage) koja direktno pozivaju
+`KlijentskaSimulacijaService.dodajTokomSimulacije()` pod stvarnim konkurentnim opterećenjem — 33
+pokušaja ukupno (maksimalan iznenadni saobraćaj, i realistično postupno oslobađanje vezova koje
+imitira `RAZMAK_ODLAZAKA_MS`), preko više terminala i semenova. **Nijedan nije uspio reprodukovati
+kvar** — svako plovilo je ušlo, logovalo se, i privezalo za par sekundi, čak i pod tadašnjim
+pogrešnim klemom brzine.
+
+Naplaćeni iznos iz prijavljenog reda (1900 KM) je matematički TAČAN za svjež 18-sekundni boravak
+pod F6 skaliranjem — ne apsurdan kao kod bag-a 1, što isključuje bag-1-stil objašnjenje. Kombinacija
+"nema log ulaska" + "normalan iznos" umjesto toga tačno odgovara plovilu ušlom preko **predokovanog**
+konstruktora (početna flota, `pokreniPrivezanaPlovila`), koji nikad ne prolazi kroz `udjiULuku()` —
+najvjerovatnije je IMO 999 dodat preko `AdminProzor`-ovog "Dodaj plovilo" (isti dijalog, lako
+pobrkati sa klijentskim dugmetom istog imena), ne kroz klijentski C8 tok.
+
+Nezavisno od te dijagnoze, **potvrđen je stvaran, opipljiv nalaz** čitanjem koda:
+`BrodThread.trajanjeKoraka()` je klemovao na `[400,800]ms` dok mu JavaDoc (i T11 iz specifikacije)
+kaže `[20,400]ms` — brojevi se tačno poklapaju sa "privremenim usporenjem" koje zahtjev pominje kao
+korišteno pri testiranju, jak znak zaboravljenog ručnog debug-podešavanja. Ispravljeno.
+
+Predstavljena je puna dijagnoza korisniku PRIJE bilo kakve izmjene (kako je i eksplicitno traženo),
+sa tri ponuđene opcije za nastavak; potvrđen izbor: ispraviti klem, dodati logovanje na C8 tok
+(`"[naziv] Dodato tokom simulacije (C8), pokušava ući u luku."`, isti format kao postojeći
+`BrodThread.log()`, da se ubuduće u konzoli odmah vidi da li je plovilo GENUINO ušlo preko C8), i
+dodati tražene testove — bez uvođenja odbrambenog re-provjeravanja u `simulation` paketu, jer nema
+potvrđenog uzroka koji bi to opravdao. Puna dijagnoza u `ZAHTJEVI.md`, "Riješeno 16. avgusta:
+istraga bag-a 2". Test paket: **304 ukupno, 0 padova** (303 + 1 nov test), tri puta zaredom bez
+varijacije.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje

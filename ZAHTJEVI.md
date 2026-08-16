@@ -1,8 +1,8 @@
 # Matrica zahtjeva — specifikacija → implementacija
 
 Izvor: `PJ2 - projektni zadatak - maj 2026.pdf` + `dodatna_pojasnjenja.txt`
-Stanje: 16. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica) + administratorski GUI (A1–A14, `GUI_KORAK1_PREGLED.md` ispravke) + F4/F5/F6 (naplata pri izlasku, preuzimanje CSV-a, skaliranje vremena — vidi "Riješeno 15. avgusta" ispod, uzrokovano nalazima N1/N2 iz `PROPUSTENI_ZAHTJEVI_V2.md`) + checkbox rotacije u formi (C6 demonstrabilnost) + živa klijentska simulacija (C5/C7/C8/C9/E1/E2) + ispravka dvostruke/apsurdne naplate zbog zastarjelog admin-ovog stanja (vidi "Riješeno 16. avgusta" ispod).
-Test paket: 303 ukupno, 0 pada, 0 ignorisano.
+Stanje: 16. avgust 2026, poslije R0 + R2 + R1 + R5 + čišćenja S1–S4/S6 + C6 (`PrikazTerminala`) + C2 (`GeneratorPlovila`) + code review ispravke na C2 + T1/C1/C3/C4 (`PokretacSimulacije`) + `Zadatak`/parkiranje + O1 + D5 (determinizam sudara, priprema za R4) + R4a (infrastruktura za sistem incidenata — `Incident`, blokada saobraćaja na terminalu, `PretragaPatrole`) + R4b (logika incidenta — detekcija sudara, dispečovanje, prelasci `Zadatak`-a, raspetljavanje; I1–I8 zatvoreni) + naknadne ispravke iz code review-a (`R4B_GRESKE.md`, G1–G8, vidi `PRONALASCI.md`) + I5/M6 (potjernica) + administratorski GUI (A1–A14, `GUI_KORAK1_PREGLED.md` ispravke) + F4/F5/F6 (naplata pri izlasku, preuzimanje CSV-a, skaliranje vremena — vidi "Riješeno 15. avgusta" ispod, uzrokovano nalazima N1/N2 iz `PROPUSTENI_ZAHTJEVI_V2.md`) + checkbox rotacije u formi (C6 demonstrabilnost) + živa klijentska simulacija (C5/C7/C8/C9/E1/E2) + ispravka dvostruke/apsurdne naplate zbog zastarjelog admin-ovog stanja + istraga prijavljenog "C8 ne pristaje" bag-a i ispravka `trajanjeKoraka()` klema (vidi "Riješeno 16. avgusta" ispod).
+Test paket: 304 ukupno, 0 pada, 0 ignorisano.
 Poznata povremena nestabilnost (nevezano za današnji rad): `BrodThreadTest.ploviloPodRotacijomZavrsavaSimulaciju`
 je vremenski osjetljiv integracioni test (pravе niti + `Thread.sleep`) i rijetko (~1 od 5 pokretanja
 u lokalnom mjerenju) ne stigne da priveže svih 6 plovila u 40s. Nije popravljeno danas — van obima.
@@ -37,7 +37,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | T8 | Pun terminal — plovilo ide pravo na naredni | DONE | `Terminal.rezervisiSlobodanDok()` vraća `null` kad terminal nema slobodnog nerezervisanog veza — plovilo **uopšte ne ulazi** u taj terminal (vidi `udjiULuku()`), umjesto da uđe pa se probije "pravo" kroz njega kao doslovan čitanje sugeriše. Ishod je isti (plovilo završi na narednom terminalu), a način je bolji (nema nepotrebnog ulaska u terminal koji se odmah napušta) — vidi napomenu u N6 pregledu (`PROPUSTENI_ZAHTJEVI_V2.md`). |
 | T9 | Slobodan dok — ulazak i kružni prolazak | DONE | Doslovno "kružni prolazak po terminalu ka narednom terminalu ili izlazu" **nije implementiran bukvalno** — plovilo rezerviše konkretan slobodan vez preko `rezervisiSlobodanDok()` **prije** ulaska (R2/K5, sprečava trku), uđe, i ide direktno kanalom do tog veza (`doploviDoDoka()`), bez obilaska cijelog terminala. Odbranjivo iz dva razloga: (1) profesorovo pojašnjenje pomjera značenje — *"Ako terminal ima slobodnih mjesta, onda se ulazi u terminal"* — dakle ulazak je uslovljen postojanjem veza, ne obilaskom radi obilaska; (2) rezervacija-prije-ulaska je upravo mehanizam koji je uklonio originalni livelock (K5). Ono što specifikacija suštinski traži — plovilo koje ne nađe vez ne staje, nego nastavlja na naredni terminal — jeste implementirano (vidi T8). Nalaz N6 (`PROPUSTENI_ZAHTJEVI_V2.md`). |
 | T10 | Svaki brod je nit | DONE | `BrodThread implements Runnable` |
-| T11 | Simulacija ni prebrza ni prespora | DONE | `trajanjeKoraka()` 20–400ms |
+| T11 | Simulacija ni prebrza ni prespora | DONE | `trajanjeKoraka()` 20–400ms. **Bio pogrešno klemovan na 400–800ms** (leftover ručno debug-podešavanje, kod se razmimoilazio sa sopstvenim JavaDoc-om) — ispravljeno 16. avgusta, vidi "Riješeno 16. avgusta: istraga bag-a 2". |
 
 ## Administratorska aplikacija
 
@@ -69,7 +69,7 @@ Legenda: **DONE** gotovo i pokriveno testom · **PART** djelimično · **TODO** 
 | C5 | Prikaz terminala, izbor kombo boksom                                                                                                            | DONE — `gui.KlijentskiProzor`, `javax.swing.Timer` (ne Thread) na `PokretacSimulacije.INTERVAL_RENDEROVANJA_MS`, vidi "Riješeno 16. avgusta: živa klijentska simulacija" |
 | C6 | Prazan dok `*`, slovo po tipu, `R` za rotaciju                                                                                                  | DONE — `view.PrikazTerminala.render()`/`renderAsText()`, testovi. Rotacija se do sada palila isključivo iz simulacije (`KoordinatorUvidjaja`, potjernica), pa se taj dio prikaza nije mogao demonstrirati/ručno provjeriti prije pokretanja simulacije — `PlovilaFormaDijalog` sad ima checkbox "Rotacija" (samo za službena plovila) da se stanje može direktno postaviti kroz admin GUI, vidi "Riješeno 15. avgusta: checkbox rotacije". |
 | C7 | 15% plovila po terminalu odlazi iz luke                                                                                                         | DONE — `gui.KlijentskaSimulacijaService.odaberiZaOdlazak()`, pozvano odmah nakon `pokreniPrivezanaPlovila()`, testovi |
-| C8 | Dodavanje plovila tokom simulacije ako luka nije puna, MORA KORISTITI TERMINAL.REZERVISISLOBODANDOK() I DRZATI TERMINAL LOCK, NE SETUP HELPERE! | DONE — `gui.KlijentskaSimulacijaService.dodajTokomSimulacije()` pokreće pravu `BrodThread` nit (koja sama poziva `Terminal.rezervisiSlobodanDok()` unutar `udjiULuku()`), nikad `UredjivanjePlovilaService.dodajPlovilo()` |
+| C8 | Dodavanje plovila tokom simulacije ako luka nije puna, MORA KORISTITI TERMINAL.REZERVISISLOBODANDOK() I DRZATI TERMINAL LOCK, NE SETUP HELPERE! | DONE — `gui.KlijentskaSimulacijaService.dodajTokomSimulacije()` pokreće pravu `BrodThread` nit (koja sama poziva `Terminal.rezervisiSlobodanDok()` unutar `udjiULuku()`), nikad `UredjivanjePlovilaService.dodajPlovilo()`. Prijavljen bug ("plovilo dodato preko C8 napusti umjesto da se priveže") istražen 16. avgusta — nije reprodukovan kroz stvarnu C8 putanju uprkos opsežnom stres-testiranju; vidi "Riješeno 16. avgusta: istraga bag-a 2" za punu dijagnozu. |
 | C9 | Novo plovilo kreće od ulaza ka prvom slobodnom doku                                                                                             | DONE — `new BrodThread(kandidat, luka).start()` ide kroz identičnu `udjiULuku()` navigaciju kao svako drugo ulazeće plovilo, ništa novo napisano |
 
 ## Incidenti
@@ -1284,3 +1284,71 @@ poslije odgovara onome što je stvarno na disku (ne staroj kopiji u memoriji).
 zbog `timeout 170` alata koji je presjekao proces usred `BrodThreadTest`-a (poznato spor, ~30s
 razred) — nije nestabilnost testova, nego preuska vremenska granica koju sam sâm postavio.
 Ponovljeno sa širom granicom (280s): tri puta zaredom, **303 ukupno, 0 padova**, bez varijacije.
+
+## Riješeno 16. avgusta: istraga bag-a 2 ("C8 plovilo napusti umjesto da se priveže")
+
+**Prijavljen bug, sa dijagnozom već predloženom u samom zahtjevu**, potkrijepljenom konkretnim
+redom iz `takse.csv` (IMO 999, ulazak i izlazak 18 sekundi razdvojeni, samo "[999] Napustio
+terminal." u konzoli — nijedan "Ušao u terminal" ni "Usidren na vezu").
+
+### Istraga (prije bilo kakve izmjene, kako je i traženo)
+
+**Čitanje koda** pokazuje da je predložena dijagnoza (istek nekog vremenskog budžeta u
+`ploviIstocno()`/`pomjeriSaCekanjem()`) logički neusklađena sa samim simptomom: `napustiTerminal()`
+loguje "Napustio terminal." samo ako je `trenutniTerminal != null`, a to polje se za plovilo koje
+ulazi kroz `udjiULuku()` (ne predokovani konstruktor) postavlja **isključivo** unutar
+`pokusajUciUTerminal()`, čiji uspjeh se bezuslovno nastavlja pravo na `log("Ušao u terminal " +
+...)` dva reda niže u `udjiULuku()` — nema koda koji bi mogao postaviti `trenutniTerminal` a
+preskočiti taj log, za plain (ne-predokovanu) nit.
+
+**Empirijska provjera** (probni programi, van repozitorija, obrisani nakon istrage): 33 pokušaja
+reprodukcije direktno kroz `KlijentskaSimulacijaService.dodajTokomSimulacije()` →
+`new BrodThread(kandidat, luka)` → `udjiULuku()`, uz:
+- 8 pokušaja sa svih 30 vezova odjednom oslobođenih u jedan terminal (maksimalan iznenadni
+  saobraćaj),
+- 25 pokušaja sa realističnim postupnim oslobađanjem (imitira `RAZMAK_ODLAZAKA_MS` obrazac iz
+  `KlijentskiProzor.oznaciZaOdlazak()`) kroz 3 terminala, 45 plovila, različiti semenovi.
+
+**0 od 33 pokušaja nije uspjelo** — svako dodato plovilo je logovalo i "Ušao u terminal" i
+"Usidren na vezu", i privezalo se za 1.6–3.2 sekunde, čak i pod tadašnjim (pogrešnim, vidi ispod)
+klemom od 400–800ms po koraku.
+
+**Alternativno objašnjenje, bolje usklađeno sa dokazima:** naplaćen iznos (1900 KM) je matematički
+tačno ono što F6-ovo skaliranje (`FAKTOR_SKALIRANJA_VREMENA=3600`) daje za genuinski svjež,
+18-sekundni boravak (18s × 3600 = 18h simulirano → zaokruženo na 19h → 19×100=1900 KM) — **nije**
+znak zastarjelog/drevnog vremena ulaska (bag 1 bi ovdje proizveo iznos reda desetina hiljada KM,
+ne 1900). Kombinacija "nema log ulaska" + "normalan, ne apsurdan iznos" je tačno potpis plovila
+koje je ušlo preko **predokovanog** konstruktora (`PokretacSimulacije.pokreniPrivezanaPlovila`,
+korišten za početnu flotu) — ta putanja nikad ne prolazi kroz `udjiULuku()`, pa nikad ne loguje
+"Ušao u terminal"/"Usidren na vezu", a ipak je normalno naplativa preko obične C7 selekcije.
+Najvjerovatnije objašnjenje: IMO 999 je dodat preko **AdminProzor**-ovog "Dodaj plovilo" (isti
+dijalog, lako pobrkati sa klijentskim dugmetom istog imena) prije/tokom pokretanja klijenta, ne
+preko klijentskog C8 dugmeta tokom već žive simulacije — ne defekt u C8 putanji.
+
+### Stvaran, potvrđen nalaz (nezavisan od gornje dijagnoze)
+
+`BrodThread.trajanjeKoraka()`-ov JavaDoc kaže "[20ms, 400ms] (T11: simulacija ni prebrza ni
+prespora)", ali je kod klemovao na **[400L, 800L]** — tačno onaj opseg koji zahtjev pominje kao
+"privremeno usporenje" korišteno pri testiranju. Sudeći po tačnom poklapanju sa brojevima iz
+zahtjeva, ovo je najvjerovatnije ostatak ručnog debug-podešavanja koje nikad nije vraćeno.
+Ispravljeno na `[20L, 400L]`, u skladu sa sopstvenim JavaDoc-om i T11.
+
+### Šta je urađeno, i zašto ne više od toga
+
+Korisniku je prezentovana ova dijagnoza (uz mogućnost da traži dalju istragu kroz stvaran
+Admin/Klijent GUI tok) prije bilo kakve izmjene — potvrđen izbor: ispraviti klem, dodati
+nedostajuće logovanje, i dodati tražene testove kao regresionu zaštitu, bez uvođenja odbrambenog
+re-provjeravanja u `udjiULuku()` (odbačena opcija — dodatan zahvat u `simulation` paket bez
+potvrđenog uzroka koji bi to opravdao).
+
+**Dodato logovanje** (zahtjev #2 iz "ŠTA URADITI"): `KlijentskaSimulacijaService.dodajTokomSimulacije()`
+sada loguje `"[naziv] Dodato tokom simulacije (C8), pokušava ući u luku."` u istom formatu kao
+`BrodThread.log()`, neposredno prije pokretanja niti — ubuduće, prisustvo (ili odsustvo) baš ovog
+reda u konzoli odmah razlikuje "stvarno dodato preko C8" od "ušlo preko predokovanog puta", tačno
+razlika koja je ovu istragu učinila nejasnom.
+
+**Testovi** (zahtjev #3, sva tri u `KlijentskaSimulacijaServiceTest`): `dodajTokomSimulacijePokrecuNit`
+(pristaje u razumnom roku, završi `PRIVEZAN` — već postojao od ranije, potvrđuje da mehanizam
+radi), `dodajTokomSimulacijeOdbijaKadJePuno` (odbijeno kad je puno, bez registrovane niti — već
+postojao), i nov `dodatoPloviloNijeNaplaceno` (plovilo koje nikad ne dobije `zatraziNapustanje()`
+ostaje privezano, zadržava zapis u evidenciji, i `takse.csv` uopšte ne nastaje).
