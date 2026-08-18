@@ -20,7 +20,7 @@ import java.util.Locale;
  * @version 1.0
  */
 public class PokretacIzvjestaja {
-    /** Putanja do CSV datoteke u koju se evidentiraju obračunate takse, relativno na radni direktorijum. */
+    /** Putanja do CSV datoteke u koju se evidentiraju obračunate takse, relativno na radni direktorijum. Podrazumijevano 'takse.csv'. */
     private static final String DEFAULT_PATH;
 
     static{
@@ -28,18 +28,17 @@ public class PokretacIzvjestaja {
     }
 
     /**
-     * Faktor skaliranja stvarnog proteklog vremena u simulirano, za potrebe obračuna takse (F6):
+     * Faktor skaliranja stvarnog proteklog vremena u simulirano, za potrebe obračuna takse:
      * koliko simuliranih sati odgovara jednoj stvarnoj sekundi proteklog vremena. Podrazumijevano
      * {@code 3600} (1 stvarna sekunda = 1 simulacioni sat). Stvaran boravak plovila u luci tokom
-     * jedne žive simulacije je reda sekundi do minuta (T11: `trajanjeKoraka()` 20–400ms po polju,
-     * ruta kroz terminal ~20 polja) — manji faktor (npr. raniji `60`, 1 stvarni minut = 1
+     * jedne žive simulacije je reda sekundi do minuta, manji faktor (npr. 1 stvarni minut = 1
      * simulacioni sat) bi zahtijevao 12+ stvarnih minuta boravka da bi se dostigao i prvi prag
      * tarifne ljestvice (12h), pa bi svako plovilo u praksi plaćalo samo minimalnih 100 KM i
-     * cijela ljestvica (1000/2000 KM plafoni, tarifa preko 24h) se nikad ne bi aktivirala na
-     * demonstraciji (F1 nalaz, `F5_F6_PREGLED.md`). Primjenjuje se isključivo na vrijeme koje je
+     * cijela ljestvica (1000/2000 KM plafoni, tarifa preko 24h) se nikad ne bi aktivirala u vremenski kratkotrajnim testovima.
+     * Primjenjuje se isključivo na vrijeme koje je
      * već isključilo eventualnu pauzu rada aplikacije ({@link org.unibl.etf.pj2.luka.model.classes.Luka#pomjeriEvidencijuZaPauzu(Duration)}),
-     * pa ne uvećava efekat prekida rada — samo tempo unutar aktivne sesije. {@code public static
-     * volatile} (ne {@code final}) po D5 obrascu, radi determinizma testova tarifne ljestvice.
+     * pa ne uvećava efekat prekida rada, samo tempo unutar aktivne sesije. {@code public static
+     * volatile} (ne {@code final}) radi determinizma testova tarifne ljestvice.
      */
     public static volatile long FAKTOR_SKALIRANJA_VREMENA = 3600L;
 
@@ -47,10 +46,10 @@ public class PokretacIzvjestaja {
      * Obračunava taksu za dato plovilo prema proteklom vremenu boravka prema sljedećem principu:
      * -do 12h po principu "plafona" od 100 KM po započetom satu (najviše 1000 KM),
      * -do 24h analogno (najviše 2000 KM)
-     * -preko 24h 2000 KM plus 100 KM po svakom narednom započetom satu
-     * Vrijeme se zaokružuje naviše ({@link Math#ceil}) na cijele sate, tj. započeti sat se naplaćuje kao pun (35 min == 1h cjenovno, 1h 1 min == 2h cjenovno).
-     * Prije zaokruživanja, stvarno proteklo vrijeme se skalira faktorom {@link #FAKTOR_SKALIRANJA_VREMENA} (F6).
-     * Državna plovila (obalska straža, carina, vatrogasci) ne plaćaju taksu.
+     * -preko 24h 2000 KM plus 100 KM po svakom narednom ZAPOČETOM satu
+     * Vrijeme se zaokružuje naviše (koristeći {@link Math#ceil}) na cijele sate, tj. započeti sat se naplaćuje kao pun (35 min == 1h cjenovno, 1h 1 min == 2h cjenovno itd).
+     * Prije zaokruživanja, stvarno proteklo vrijeme se skalira faktorom {@link #FAKTOR_SKALIRANJA_VREMENA}.
+     * Državna plovila (obalska straža, carina, vatrogasci) ne plaćaju taksu, prema specifikaciji.
      *
      * @param plovilo Plovilo za koje se obračunava taksa.
      * @param vrijemeUlaska Vrijeme ulaska plovila u luku.
@@ -88,8 +87,7 @@ public class PokretacIzvjestaja {
     }
 
     /**
-     * Omogućava dobijanje putanje do CSV datoteke u koju se evidentiraju obračunate takse (F5:
-     * administrator je preuzima preko admin GUI-ja).
+     * Omogućava dobijanje putanje do CSV datoteke u koju se evidentiraju obračunate takse.
      *
      * @return Putanja do CSV datoteke sa evidencijom taksi.
      */
@@ -107,7 +105,7 @@ public class PokretacIzvjestaja {
      * @param plovilo Plovilo za koje se evidentira taksa.
      * @param vrijemeUlaska Vrijeme ulaska plovila u luku.
      * @param vrijemeIzlaska Vrijeme izlaska plovila iz luke.
-     * @param iznos Obračunati iznos takse.
+     * @param iznos Obracunati iznos takse.
      */
     public static synchronized void evidentirajUCSV(Plovilo plovilo, LocalDateTime vrijemeUlaska, LocalDateTime vrijemeIzlaska, double iznos) {
         File file = new File(DEFAULT_PATH);
@@ -132,7 +130,7 @@ public class PokretacIzvjestaja {
 
     /**
      * Priprema jednu vrijednost za upis u CSV: polje se navodi pod navodnicima
-     * ako sadrži zarez, navodnik ili novi red, a unutrašnji navodnici se udvajaju.
+     * ako sadrzi zarez, navodnik ili novi red, a unutrašnji navodnici se udvajaju.
      *
      * @param vrijednost Vrijednost polja.
      * @return Vrijednost bezbjedna za upis u CSV kao jedna kolona.

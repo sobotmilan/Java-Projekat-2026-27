@@ -750,3 +750,25 @@ prekine sve što on radi u pozadini (npr. kad `AdminProzor` zatvori klijentski p
 `@AfterEach`. Test paket i dalje **309** (nijedan nov test — ovo je ispravka postojeće infrastrukture,
 ne novi zahtjev), tri puta zaredom + dodatnih 8 ciljanih pokretanja pod forsiranim redoslijedom, sve
 čisto.
+
+## Riješeno (16. avgust): `GeneratorPlovila` — brojčani sufiks naziva
+
+Sitan, svjesno kozmetički refaktor (nije ispravka bag-a niti zahtjeva iz specifikacije — `naziv` ne
+mora biti jedinstven po specifikaciji, `imoBroj` je već jedini garantovano jedinstveni ključ).
+Povod: pri generisanju 25 plovila punjenja, isto ime iz `IMENA` (12 stavki) se ponavljalo i po
+7 puta — rođendanski paradoks, nezavisno slučajno biranje iz malog spiska.
+
+Umjesto potpune zamjene imena čisto brojčanim identifikatorom (npr. `PLOVILO_7`, razmatrano i
+odbačeno — gore izgleda na demonstraciji/odbrani, čita se kao placeholder, ne kao flota), usvojen
+hibrid: `sledeciNaziv()` i dalje bira slučajno ime iz `IMENA`, ali mu dodaje sufiks iz novog
+dijeljenog `AtomicInteger SLEDECI_NAZIV` broja (npr. `"Aurora-14"`) — isti obrazac kao već postojeći
+`SLEDECI_IMO`. Garantovano jedinstveno bez obzira na veličinu flote, bez potrebe da se `IMENA`
+ikad širi.
+
+Dodat paket-privatni `resetujNazivBrojacZaTest(int)`, mirror `resetujImoBrojacZaTest(int)`;
+`GeneratorPlovilaTest.istiSeedDajeIdenticnuFlotu()` sad resetuje oba brojača prije oba pokretanja
+(prije je samo IMO brojač trebalo resetovati jer je naziv u cjelosti dolazio iz seed-ovanog
+`Random`-a — sad dio naziva dolazi iz dijeljenog stanja, isto kao IMO). Nijedan drugi test u paketu
+nije bio vezan za `GeneratorPlovila.IMENA` (provjereno pretragom — pojave "Aurora"/"Neptun"/itd. u
+ostalim test fajlovima su nezavisni literali u ručno konstruisanim fikstura, ne iz generatora).
+Test paket i dalje 309, tri puta zaredom čisto poslije izmjene.

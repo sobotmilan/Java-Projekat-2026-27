@@ -12,15 +12,17 @@ import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 
 /**
- * Pretvara stanje {@link Terminal}-a u tekstualni prikaz (C6) — prazan dok {@code *}, slovo po
- * tipu plovila ({@code K}/{@code P}/{@code T}), {@code R} dodano za plovila pod rotacijom.
+ * Pretvara stanje {@link Terminal}-a u tekstualni prikaz
  *
- * <p>Identitet službe pobjeđuje tip trupa: provjera ide {@code Vatrogasci} → {@code ObalskaStraza}
- * → {@code Carina} (kroz {@link SluzbenoPlovilo}/markerske interfejse) prije pada na tip trupa,
- * pa npr. {@code TankerVatrogasci} pod rotacijom ispisuje {@code VR}, ne {@code T}.</p>
+ * <p>prazan dok je označen sa {@code *},
+ * plovila sa slovom koje označava tip plovila ({@code K}/{@code P}/{@code T}) (NAPOMENA: ovakva reprezentacija NE UZIMA u obzir da li se radi o plovilu javnih službi),
+ * a {@code R} se koristi za plovila sa upaljenom rotacijom.</p>
  *
- * <p>Ovaj paket je namjerno odvojen od {@code simulation} — nema ulogu u nitima, samo transformiše
- * model u tekst/matricu za prikaz u GUI-ju (C5, još TODO).</p>
+ * <p>Identitet službe pobjeđuje tip plovila:
+ * npr. {@code TankerVatrogasci} pod rotacijom ispisuje {@code VR}, ne {@code T}.</p>
+ *
+ * <p>Ovaj paket je namjerno odvojen od {@code simulation} jer nema nikakvu funkcionalnu ulogu u nitima i konkurentnim elementima programa,
+ * samo transformiše trenutno stanje {@link Terminal}-a u tekst za prikaz u GUI-ju.</p>
  *
  * @author Milan Šobot
  * @version 1.0
@@ -28,18 +30,17 @@ import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
  */
 public final class PrikazTerminala {
 
+    /**
+     * Klasa je sadrzana striktno od metoda klase, ne posjeduje nijednu metodu/atribut instance,
+     * premda je konstruktor deklarisan kao privatan i ostavljen praznog tijela.
+     */
     private PrikazTerminala() {
     }
 
     /**
-     * Pravi snimak matrice terminala kao matricu tekstualnih oznaka, po jedno polje matrice po
-     * ćeliji. Zaključan sa {@code synchronized (terminal)} — isti ključ koji koriste niti brodova
-     * pri pomjeranju — kako render ne bi uhvatio polovičan potez (pola ažurirane matrice).
-     *
-     * <p><b>Napomena o životnom ciklusu:</b> ovo je jedini razlog zašto parkirano čekanje
-     * ({@code BrodThread} u stanju {@code PRIVEZAN}) mora koristiti poseban lock objekat umjesto
-     * {@code synchronized (terminal)} — inače bi {@code wait()} unutar te sinhronizacije zamrzao
-     * ovu metodu (a time i GUI) za trajanje čekanja privezanog plovila (D4).</p>
+     * Kreira (renderuje) snimak matrice terminala kao matricu tekstualnih oznaka, jedno polje matrice za svaku
+     * ćeliju. Zaključan sa {@code synchronized (terminal)}, tj. isti ključ koji koriste niti brodova
+     * pri pomjeranju, kako render ne bi uhvatio polovičan potez broda/brodova (pola ažurirane matrice).
      *
      * @param terminal Terminal čiji se snimak pravi.
      * @return Matrica tekstualnih oznaka, istih dimenzija kao {@link Terminal#getMatrica()}.
@@ -48,19 +49,21 @@ public final class PrikazTerminala {
         synchronized (terminal) {
             Polje[][] matrica = terminal.getMatrica();
             String[][] prikaz = new String[matrica.length][matrica[0].length];
+
             for (int red = 0; red < matrica.length; red++) {
                 for (int kolona = 0; kolona < matrica[red].length; kolona++) {
                     prikaz[red][kolona] = oznakaZaPolje(matrica[red][kolona], red, kolona);
                 }
             }
+
             return prikaz;
         }
     }
 
+    
     /**
-     * Formatira {@link #render(Terminal)} rezultat kao jedan {@link String} pogodan za ispis na
-     * konzoli — svako polje poravnato u koloni širine 3 karaktera, redovi razdvojeni sistemskim
-     * prelomom reda.
+     * Formatira rezultat metode {@link #render(Terminal)} kao jedan {@link String} pogodan za ispis na
+     * konzoli, svako polje poravnato u koloni širine 3 karaktera, redovi razdvojeni sistemskim prelomom reda.
      *
      * @param terminal Terminal koji se prikazuje.
      * @return Tekstualni prikaz terminala.
@@ -68,18 +71,23 @@ public final class PrikazTerminala {
     public static String renderAsText(Terminal terminal) {
         String[][] prikaz = render(terminal);
         StringBuilder sb = new StringBuilder();
+
         for (String[] red : prikaz) {
+
             for (String polje : red) {
                 sb.append(String.format("%-3s", polje));
             }
+
             sb.append(System.lineSeparator());
         }
+
         return sb.toString();
     }
 
     /**
-     * Određuje oznaku za jedno polje matrice: ako je plovilo prisutno, njegova oznaka po tipu
-     * (i rotaciji); inače oznaka praznog polja.
+     * Određuje oznaku za jedno polje matrice: ako je plovilo prisutno na tom polju,
+     * stavlja se njegova oznaka po tipu (i stanju rotaciji, ako je ima naravno).
+     * Inače, oznaka praznog polja.
      *
      * @param polje Polje čija se oznaka određuje.
      * @param red Red polja u matrici.
@@ -87,16 +95,21 @@ public final class PrikazTerminala {
      * @return Tekstualna oznaka za prikaz polja.
      */
     private static String oznakaZaPolje(Polje polje, int red, int kolona) {
+
         Plovilo plovilo = polje.getTrenutnoPlovilo();
+
         if (plovilo != null) {
             return oznakaPlovila(plovilo);
         }
+
         return praznaOznaka(red, kolona);
     }
 
     /**
-     * Određuje oznaku praznog (nezauzetog) polja: ulazna/izlazna kolona zadržava svoje strelice
-     * ({@code v}/{@code ^}), prazan dok je {@code *}, a prazno polje kanala {@code .}.
+     * Određuje oznaku praznog polja:
+     * prazan dok je {@code *},
+     * ulazna/izlazna kolona je označena strelicama u zavisnosti od smjera ({@code v}/{@code ^}),
+     * a prazno polje kanala sa {@code .}.
      *
      * @param red Red polja u matrici.
      * @param kolona Kolona polja u matrici.
@@ -116,9 +129,10 @@ public final class PrikazTerminala {
     }
 
     /**
-     * Određuje oznaku plovila: identitet službe ({@code V}/{@code O}/{@code C}) ima prednost nad
-     * tipom trupa ({@code K}/{@code P}/{@code T}), a {@code R} se dodaje ako je plovilo trenutno
-     * pod rotacijom (C6).
+     * Određuje oznaku plovila:
+     * identitet službe ({@code V}atrogasci/{@code O}balska straža/{@code C}arina)
+     * ima prednost nad tipom plovila ({@code K}ontejnerski brod/{@code P}utnički kruzer/{@code T}anker),
+     * a {@code R} se dodaje ako je plovilo trenutno pod rotacijom (podrazumijeva se da ga posjeduje).
      *
      * @param plovilo Plovilo čija se oznaka određuje.
      * @return Tekstualna oznaka plovila (jedno ili dva slova).

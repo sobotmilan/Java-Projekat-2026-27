@@ -9,13 +9,38 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Pomoćna klasa namijenjena za učitavanje spiska IMO brojeva plovila za kojima je raspisana potjernica.
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ */
 public final class SpisakPotjeraUtil {
 
+    /**
+     * Mapa koja kao ključeve koristi apstraktne putanje do (tekstualnih) datoteka koje predstavljaju spiskove IMO brojeva plovila za kojima je raspisana potjernica,
+     * dok vrijednosti pridružene tim ključevima jesu Set objekti koji se sastoje od bar jednog String objekta koji predstavljaju IMO brojeve vozila za kojima je raspisana potjernica,
+     * a koji su učitani sa putanje predstavljene odgovarajućim ključem.
+     *
+     */
     private static final Map<String, Set<String>> kesirano = new HashMap<>();
 
+    /**
+     * Klasa sadrži striktno metode/atribute klase,
+     * premda konstruktor je deklarisan kao privatan
+     * kako bi se redefinisalo ponašanje JVM-a pri kreaciji implicitnog podrazumijevanog konstruktora.
+     */
     private SpisakPotjeraUtil() {
     }
 
+    /**
+     *
+     * Na osnovu proslijeđene reference na objekat klase File, metoda vrši učitavanje spiska potjera sa datoteke reprezentovane apstraktnom putanjom
+     * sadržanom u parametru metode. Nakon toga, vrši se upis novih IMO brojeva u mapu keširanih IMO brojeva.
+     *
+     * @param fajl Referenca na objekat klase File koji čuva apstraktnu putanju do (tekstualne) datoteke koja sadrži spisak IMO brojeva za kojima je raspisana potjernica.
+     * @return Set koji sadrži sve IMO brojeve pročitane iz zadate datoteke.
+     */
     public static synchronized Set<String> ucitaj(File fajl) {
         if (fajl == null) {
             return Set.of();
@@ -47,6 +72,9 @@ public final class SpisakPotjeraUtil {
         return rezultat;
     }
 
+    /**
+     * Čisti keširane IMO brojeve.
+     */
     public static synchronized void resetujKes() {
         kesirano.clear();
     }

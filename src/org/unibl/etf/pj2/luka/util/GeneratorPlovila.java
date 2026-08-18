@@ -20,32 +20,27 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Generiše slučajna plovila za dopunu flote do korisnički zadatog minimuma po terminalu (C1/C4).
+ * Generiše slučajna plovila za dopunu flote do korisnički zadatog minimuma po terminalu.
  *
- * <p><b>Redoslijed odlučivanja (C2):</b> komercijalno/državno se bira prvo i nezavisno, tako da
- * je omjer 90/10 tačan po konstrukciji ({@link #UDIO_KOMERCIJALNIH}). Tek unutar državne grane
- * bira se služba, a zatim dozvoljeni trup za tu službu (M3: vatrogasci isključivo tanker;
- * obalska straža kontejnerski/kruzer/tanker; carina kruzer/tanker). Obrnut redoslijeda bi mogao
- * proizvesti nepostojeću kombinaciju (npr. vatrogasni kruzer).</p>
+ * <p>Komercijalno/državno se bira prvo i nezavisno, tako da je omjer 90/10 tačan po konstrukciji ({@link #UDIO_KOMERCIJALNIH}).
+ * Tek unutar državne grane bira se služba,
+ * a zatim dozvoljeni tip plovila za tu službu
+ * (vatrogasci isključivo tanker, obalska straža kontejnerski/kruzer/tanker, carina kruzer/tanker).
+ * Obrnut redoslijeda bi mogao proizvesti nepostojeću kombinaciju
+ * (npr. vatrogasni kruzer).</p>
  *
- * <p><b>Raspodjela unutar državnih 10%</b> (specifikacija ne propisuje omjer): obalska straža
- * {@link #UDIO_OBALSKA_STRAZA} (50%), carina {@link #UDIO_CARINA} (25%), vatrogasci
- * {@link #UDIO_VATROGASCI} (25%) — namjerno naklonjeno obalskoj straži jer jedino ona nosi
- * spisak potjernica (M6), pa veći udio povećava šansu da se scenario potjere (I5) stvarno
- * pojavi tokom demonstracije.</p>
  *
- * <p><b>IMO brojevi</b> se dodjeljuju preko dijeljenog {@link AtomicInteger} brojača, nezavisno
- * od proslijeđenog {@link Random}-a — ponovljivost seed-a pokriva izbor tipa/naziva/brojčanih
- * atributa, ne i IMO, koji po prirodi mora biti jedinstven, ne reproduktivan. Pri deserijalizaciji
- * zatečene flote iz {@code luka.ser} obavezno prvo pozvati {@link #obezbijediJedinstvenostImoZa(Luka)}
- * (O1), inače prijeti kolizija IMO brojeva sa zatečenim plovilima.</p>
+ * <p>IMO brojevi i sufiks naziva se plovilima dodjeljuju preko dijeljenih {@link AtomicInteger}
+ * brojača, nezavisno od proslijeđenog {@link Random}-a — ponovljivost seed-a pokriva izbor
+ * tipa/službe/trupa i brojčanih atributa (i koje se ime iz {@link #IMENA} izvlači), ne i sami IMO
+ * broj ili brojčani sufiks naziva, koji po prirodi moraju biti jedinstveni, ne reproduktivni.
  *
  * @author Milan Šobot
  * @version 1.0
  */
 public final class GeneratorPlovila {
 
-    /** Udio komercijalnih plovila u ukupnoj generisanoj floti (C2). Ostatak su državna plovila. */
+    /** Udio komercijalnih plovila u ukupnoj generisanoj floti. Ostatak su državna plovila. */
     public static final double UDIO_KOMERCIJALNIH = 0.90;
 
     /** Udio obalske straže unutar državnih 10% plovila. */
@@ -54,7 +49,7 @@ public final class GeneratorPlovila {
     /** Udio carine unutar državnih 10% plovila. */
     public static final double UDIO_CARINA = 0.25;
 
-    /** Udio vatrogasaca unutar državnih 10% plovila — ostatak nakon obalske straže i carine. */
+    /** Udio vatrogasaca unutar državnih 10% plovila. */
     public static final double UDIO_VATROGASCI = 1.0 - UDIO_OBALSKA_STRAZA - UDIO_CARINA;
 
     private static final int KAPACITET_TEU_MIN = 500;
@@ -65,7 +60,16 @@ public final class GeneratorPlovila {
     private static final double ZAPREMINA_BAREL_RASPON = 490_000.0;
 
     /** Brojač za dodjelu jedinstvenih IMO brojeva (sedmocifrenih), zajednički za sve niti. */
-    private static final AtomicInteger SLEDECI_IMO = new AtomicInteger(1_000_000);
+    private static final AtomicInteger SLJEDECI_IMO = new AtomicInteger(1_000_000);
+
+    /**
+     * Brojač dodat nazivu svakog generisanog plovila kako bi nazivi plovila ostali jedinstveni bez obzira na
+     * veličinu flote, {@link #IMENA} je namjerno mali, fiksni spisak,
+     * pa bi biranje iz njega bez ikakvih sufiksa/prefiksa neizbježno ponavljalo imena već kod
+     * dvadesetak plovila (paradoks rođendana). Zajednički za sve niti, isti obrazac kao
+     * {@link #SLJEDECI_IMO}.
+     */
+    private static final AtomicInteger SLJEDECI_NAZIV = new AtomicInteger(1);
 
     private static final String[] IMENA = {
             "Aurora", "Neptun", "Posejdon", "Zora", "Sirena", "Nada",
@@ -73,31 +77,29 @@ public final class GeneratorPlovila {
     };
 
 
-    /** Podrazumijevana putanja do placeholder fotografije koju dobija svako generisano plovilo (M1). */
-    private static final File FOTOGRAFIJA_PLACEHOLDER = new File("resources/placeholder-fotografija.txt");
+    /** Podrazumijevana putanja do placeholder fotografije koju dobija svako generisano plovilo, budući da je fotografija obavezno polje. */
+    private static final File FOTOGRAFIJA_PLACEHOLDER = new File("resources/placeholder-photo.txt");
 
-    /** Podrazumijevana putanja do placeholder spiska potjera koju dobija svako plovilo obalske straže (M6). */
+    /** Podrazumijevana putanja do <i>placeholder</i> spiska potjera koju dobija svako plovilo obalske straže, budući da je spisak potjera obavezno polje. */
     private static final File SPISAK_POTJERA_PLACEHOLDER = new File("resources/spisak-potjera-default.txt");
 
     private GeneratorPlovila() {
     }
 
     /**
-     * Generiše jedno slučajno plovilo koristeći {@link ThreadLocalRandom#current()} kao izvor
-     * slučajnosti.
+     * Generiše jedno slučajno plovilo koristeći {@link ThreadLocalRandom#current()} kao izvor slučajnosti.
      *
-     * @return Novogenerisano plovilo slučajnog tipa.
+     * @return generisano plovilo slučajnog tipa.
      */
     public static Plovilo generisiSlucajno() {
         return generisiSlucajno(ThreadLocalRandom.current());
     }
 
     /**
-     * Generiše jedno slučajno plovilo koristeći zadati izvor slučajnosti — omogućava ponovljive
-     * (seed-ovane) testove.
+     * Generiše jedno slučajno plovilo koristeći zadati izvor slučajnosti.
      *
      * @param rnd Izvor slučajnosti.
-     * @return Novogenerisano plovilo slučajnog tipa (90% komercijalno, 10% državno — C2).
+     * @return Novogenerisano plovilo slučajnog tipa.
      */
     public static Plovilo generisiSlucajno(Random rnd) {
         if (rnd.nextDouble() < UDIO_KOMERCIJALNIH) {
@@ -107,7 +109,7 @@ public final class GeneratorPlovila {
     }
 
     /**
-     * Generiše komercijalno plovilo, sa jednakom vjerovatnoćom biraći trup između kontejnerskog
+     * Generiše komercijalno plovilo, sa jednakom vjerovatnoćom tipa kontejnerskog
      * broda, putničkog kruzera i tankera. IMO se čita jednom u lokalnu promjenljivu kako bi motor
      * i registarski broj referencirali isti (trenutni), a ne sljedeći, IMO broj.
      *
@@ -131,8 +133,7 @@ public final class GeneratorPlovila {
 
     /**
      * Bira državnu službu (obalska straža, carina ili vatrogasci) prema udjelima
-     * {@link #UDIO_OBALSKA_STRAZA}/{@link #UDIO_CARINA}/{@link #UDIO_VATROGASCI} i generiše
-     * odgovarajuće plovilo.
+     * definisanim kao atributi klase, i generiše odgovarajuće plovilo.
      *
      * @param rnd Izvor slučajnosti.
      * @return Novo državno plovilo.
@@ -149,8 +150,9 @@ public final class GeneratorPlovila {
     }
 
     /**
-     * Generiše plovilo obalske straže (M3: kontejnerski/kruzer/tanker su svi dozvoljeni trupovi),
-     * sa jednakom vjerovatnoćom biraći trup, i sa dodijeljenim spiskom potjera (M6).
+     * Generiše plovilo obalske straže,
+     * sa jednakom vjerovatnoćom biraći trup,
+     * i sa dodijeljenim spiskom potjera.
      *
      * @param rnd Izvor slučajnosti.
      * @return Novo plovilo obalske straže.
@@ -174,8 +176,8 @@ public final class GeneratorPlovila {
     }
 
     /**
-     * Generiše carinsko plovilo (M3: kruzer ili tanker, kontejnerski nije dozvoljen), sa jednakom
-     * vjerovatnoćom biraći trup.
+     * Generiše carinsko plovilo,
+     * sa jednakom vjerovatnoćom tipa plovila.
      *
      * @param rnd Izvor slučajnosti.
      * @return Novo carinsko plovilo.
@@ -191,7 +193,7 @@ public final class GeneratorPlovila {
     }
 
     /**
-     * Generiše vatrogasno plovilo (M3: isključivo tanker).
+     * Generiše vatrogasno plovilo (isključivo tanker).
      *
      * @param rnd Izvor slučajnosti.
      * @return Novo vatrogasno plovilo.
@@ -204,16 +206,15 @@ public final class GeneratorPlovila {
 
 
     /**
-     * Pomjera IMO brojač iznad najvišeg IMO broja pronađenog u zatečenoj luci — i u matricama
+     * Pomjera IMO brojač iznad najvišeg IMO broja pronađenog u zatečenoj luci i u matricama
      * terminala (privezana plovila i ona trenutno u kanalu), i u {@link Luka#getEvidencijaUlaska()}
      * (plovila koja su već napustila luku, ali čiji zapis o vremenu ulaska i dalje postoji radi
-     * obračuna taksi — O1). Deterministički pristup, ne probabilistički pečat vremena, jer je
-     * jedino determinizam garancija da kolizije neće biti.
+     * obračuna taksi).
      *
      * <p><b>Mora se pozvati odmah nakon deserijalizacije luke, prije prvog poziva
-     * {@link #generisiSlucajno()}/{@link #generisiSlucajno(Random)}</b> — sama metoda ne radi
+     * {@link #generisiSlucajno()}/{@link #generisiSlucajno(Random)}</b>, jer sama metoda ne radi
      * ništa dok se eksplicitno ne pozove, a bez ovog redoslijeda je kolizija IMO brojeva sa
-     * zatečenom flotom gotovo izvjesna (brojač uvijek kreće od {@code 1_000_000} pri pokretanju
+     * zatečenom flotom gotovo zagarantovana (brojač uvijek kreće od {@code 1_000_000} pri pokretanju
      * JVM-a).</p>
      *
      * @param luka Luka čije zatečeno stanje (terminali i evidencija ulaska) treba pregledati.
@@ -235,7 +236,7 @@ public final class GeneratorPlovila {
         }
         if (maxPostojeci > 0) {
             int minimalniSledeci = maxPostojeci + 1;
-            SLEDECI_IMO.updateAndGet(trenutni -> Math.max(trenutni, minimalniSledeci));
+            SLJEDECI_IMO.updateAndGet(trenutni -> Math.max(trenutni, minimalniSledeci));
         }
     }
 
@@ -244,7 +245,7 @@ public final class GeneratorPlovila {
      * ne odgovaraju numeričkom formatu koji ovaj generator koristi.
      *
      * @param imo IMO broj kao tekst.
-     * @return Numerička vrijednost IMO broja, ili 0 ako parsiranje nije moguće.
+     * @return Numerička vrijednost IMO broja, 0 ako parsiranje nije moguće.
      */
     private static int parsirajImoBezbjedno(String imo) {
         try {
@@ -255,22 +256,24 @@ public final class GeneratorPlovila {
     }
 
     /**
-     * Dodjeljuje sljedeći jedinstveni, sedmocifreni IMO broj iz dijeljenog brojača.
+     * Dodjeljuje sljedeći jedinstveni, sedmocifreni IMO broj iz dijeljenog atomičnog brojača.
      *
      * @return Sljedeći IMO broj.
      */
     private static String sledeciImo() {
-        return String.valueOf(SLEDECI_IMO.getAndIncrement());
+        return String.valueOf(SLJEDECI_IMO.getAndIncrement());
     }
 
     /**
-     * Bira slučajan naziv iz fiksnog spiska imena {@link #IMENA}.
+     * Bira slučajan naziv iz fiksnog spiska imena {@link #IMENA} i dodaje mu sufiks iz
+     * {@link #SLJEDECI_NAZIV} (npr. {@code "Aurora-14"}) da naziv ostane jedinstven bez obzira na
+     * to koliko se puta isto ime izvuče iz malog spiska.
      *
      * @param rnd Izvor slučajnosti.
-     * @return Slučajno odabran naziv.
+     * @return Slučajno odabran, garantovano jedinstven naziv.
      */
     private static String sledeciNaziv(Random rnd) {
-        return IMENA[rnd.nextInt(IMENA.length)];
+        return IMENA[rnd.nextInt(IMENA.length)] + "-" + SLJEDECI_NAZIV.getAndIncrement();
     }
 
     /**
@@ -280,7 +283,7 @@ public final class GeneratorPlovila {
      * @return Serijski broj motora.
      */
     private static String motorZa(String imo) {
-        return "MOT-" + imo;
+        return "M-" + imo;
     }
 
     /**
@@ -290,7 +293,7 @@ public final class GeneratorPlovila {
      * @return Registarska oznaka.
      */
     private static String registarskiZa(String imo) {
-        return "REG-" + imo;
+        return "BIH-" + imo;
     }
 
     /**
@@ -327,13 +330,20 @@ public final class GeneratorPlovila {
     }
 
     /**
-     * Vraća IMO brojač na zadatu početnu vrijednost. Paket-privatna vidljivost — postoji
-     * isključivo radi izolacije testova (koji dijele statički brojač preko cijelog test paketa)
-     * od uticaja jednih na druge, ne za produkcijsku upotrebu.
+     * Vraća IMO brojač na zadatu početnu vrijednost.
      *
      * @param pocetnaVrijednost Vrijednost na koju se brojač postavlja.
      */
     static void resetujImoBrojacZaTest(int pocetnaVrijednost) {
-        SLEDECI_IMO.set(pocetnaVrijednost);
+        SLJEDECI_IMO.set(pocetnaVrijednost);
+    }
+
+    /**
+     * Vraća brojač sufiksa naziva na zadatu početnu vrijednost.
+     *
+     * @param pocetnaVrijednost Vrijednost na koju se brojač postavlja.
+     */
+    static void resetujNazivBrojacZaTest(int pocetnaVrijednost) {
+        SLJEDECI_NAZIV.set(pocetnaVrijednost);
     }
 }

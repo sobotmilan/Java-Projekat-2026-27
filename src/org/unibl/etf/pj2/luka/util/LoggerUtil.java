@@ -7,10 +7,11 @@ import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 
 /**
- * Pomoćna klasa koja predstavlja centralizovan logging alat aplikacije preko standardnog {@link Logger}-a.
+ * Pomoćna klasa koja predstavlja centralizovan logging alat aplikacije preko {@link Logger}-a.
  *
- * <p>Svi izuzeci i upozorenja u sistemu prolaze kroz ovu klasu i završavaju u datoteci
- * {@value #DEFAULT_PATH}, umjesto da se ispisuju direktno na konzolu pri izvršavanju.</p>
+ * <p>Svi izuzeci kao i  upozorenja prolaze kroz ovu klasu i bivaju upisani u datoteku
+ * {@value #DEFAULT_PATH}, umjesto da se ispisuju direktno na konzolu pri izvršavanju. Nivo logovanja za {@link Logger} objekat korišten
+ * je {@code Level.ALL.}</p>
  *
  * @author Milan Šobot
  * @version 1.0
@@ -29,8 +30,10 @@ public class LoggerUtil {
 
             FileHandler fh = new FileHandler(DEFAULT_PATH, true);
             fh.setFormatter(new SimpleFormatter());
+
             logger.addHandler(fh);
             logger.setLevel(Level.ALL);
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -40,7 +43,7 @@ public class LoggerUtil {
     }
 
     /**
-     * Loguje grešku na nivou {@link Level#SEVERE} zajedno sa pratećim izuzetkom (odnosno njegovim stack-trace-om).
+     * Loguje grešku na nivou {@link Level#SEVERE} zajedno sa pratećim izuzetkom (odnosno njegovim stack trace-om).
      *
      * @param msg Poruka koja opisuje grešku.
      * @param t Izuzetak koji je uzrokovao grešku.
@@ -74,7 +77,7 @@ public class LoggerUtil {
     /**
      * Loguje informativnu poruku na nivou {@link Level#INFO}.
      *
-     * @param msg Informativna poruka.
+     * @param msg Informativna poruka koja se loguje.
      */
     public static void logInfo(String msg) {
         logger.log(Level.INFO, msg);

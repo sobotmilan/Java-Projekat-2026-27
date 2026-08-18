@@ -5,13 +5,12 @@ import java.io.IOException;
 import java.util.Properties;
 
 /**
- * Čita konfiguraciju aplikacije iz {@value #DEFAULT_PATH}.
- *
+ * Čita konfiguraciju aplikacije iz atributa {@value #DEFAULT_PATH}.
  *
  * <p>Rezultat čitanja se kešira u memoriji jer se properties fajl ne mijenja tokom izvršavanja simulacije.
  * Nedostajući fajl, nedostajući ključ ili neispravna/neočekivana vrijednost ne prekidaju aplikaciju,
  * samo se bilježi upozorenje preko {@link LoggerUtil} klase i koristi se
- * {@value #PODRAZUMIJEVANI_BROJ_TERMINALA}.</p>
+ * {@value #PODRAZUMIJEVANI_BROJ_TERMINALA} iz klase.</p>
  *
  * @author Milan Šobot
  * @version 1.0
@@ -19,13 +18,13 @@ import java.util.Properties;
  */
 public final class PropertiesUtil {
 
-    /** Putanja do konfiguracione datoteke, relativno na radni direktorijum. */
+    /** Putanja do konfiguracione datoteke, relativno na radni direktorijum. Podrazumijevano 'luka.properties'. */
     public static final String DEFAULT_PATH = "luka.properties";
 
-    /** Ključ pod kojim se u .properties fajlu čuva broj terminala. */
+    /** Ključ pod kojim se u .properties key/value fajlu čuva broj terminala. */
     public static final String KLJUC_BROJ_TERMINALA = "broj.terminala";
 
-    /** Broj terminala koji se koristi ako ključ nedostaje i/ili je neispravan. */
+    /** Broj terminala koji se koristi ako ključ nedostaje i/ili je neispravan (nedostaje fajl i/ili sadržaj). */
     public static final int PODRAZUMIJEVANI_BROJ_TERMINALA = 3;
 
     /** Donja granica dozvoljenog broja terminala. Moguće prilagođavati potrebama. */
@@ -34,7 +33,7 @@ public final class PropertiesUtil {
     /** Gornja granica dozvoljenog broja terminala. Moguće prilagođavati potrebama. */
     public static final int MAX_TERMINALA = 20;
 
-    /** Keširan rezultat posljednjeg čitanja fajla, sprječava ponovno čitanje sa diska pri svakom pozivu. */
+    /** Keširan rezultat posljednjeg čitanja fajla, eliminiše potrebu za ponovno čitanje sa diska pri svakom pozivu. */
     private static Properties kesirano;
 
     private PropertiesUtil() {
@@ -68,10 +67,11 @@ public final class PropertiesUtil {
     }
 
     /**
-     * Čita broj terminala iz konfiguracije, validirajući pročitanu vrijednost protiv
+     * Čita broj terminala iz konfiguracije, validirajući pročitanu vrijednost protiv opsega
      * [{@link #MIN_TERMINALA}, {@link #MAX_TERMINALA}]. Pri bilo kakvom odstupanju (ključ
      * nedostaje, nije broj, ili je van opsega) bilježi upozorenje i vraća
-     * {@link #PODRAZUMIJEVANI_BROJ_TERMINALA}, umjesto da baci izuzetak i time prekine izvršavanje aplikacije.
+     * {@link #PODRAZUMIJEVANI_BROJ_TERMINALA}, umjesto da baci izuzetak i time prekine izvršavanje aplikacije
+     * (jer ovo nije ozbiljna greška koja ugrožava funkcionalnost aplikacije).
      *
      * @return Validan broj terminala za izgradnju nove sesije simulacije, bez obzira na uspješnost učitavanja iz konfiguracije.
      */
@@ -104,9 +104,7 @@ public final class PropertiesUtil {
     }
 
     /**
-     * Briše keširan sadržaj, tako da sljedeći poziv {@link #ucitaj()} ponovo čita fajl sa diska.
-     * Prvenstveno korisno u testovima koji mijenjaju sadržaj {@value #DEFAULT_PATH} između
-     * pokretanja.
+     * Briše keširan sadržaj, tako da sljedeći poziv {@code ucitaj()} ponovo cita fajl sa diska.
      */
     public static synchronized void resetujKes() {
         kesirano = null;

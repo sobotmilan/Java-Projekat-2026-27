@@ -7,7 +7,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
- * Pomoćna klasa koja sadrži statičke metoda za serijalizaciju i deserijalizaciju stanja luke.
+ * Pomoćna klasa koja sadrži statičke metode za serijalizaciju i deserijalizaciju stanja luke.
  *
  * <p>omogućava da se cijela konfiguracija terminala i flote sačuva između sesija pokretanja i izvršavanja aplikacije.</p>
  *
@@ -16,22 +16,22 @@ import java.time.LocalDateTime;
  * @see Luka
  */
 public class SerializationUtil {
-    /** Putanja do datoteke u koju se serijalizuje stanje luke (i iz koje se deserijalizuje stanje luke), relativna u odnosu na radni direktorijum. Podrazumijevano je 'luka.ser'.*/
+    /** Putanja do datoteke u koju se serijalizuje stanje luke (i iz koje se deserijalizuje stanje luke),
+     *  relativna u odnosu na radni direktorijum. Podrazumijevano je 'luka.ser'.*/
     private static final String DEFAULT_PATH = "luka.ser";
 
     /**
-     * Donja granica pauze (F6) ispod koje se {@link Luka#pomjeriEvidencijuZaPauzu(Duration)} ne
-     * poziva — sprečava da beznačajna vremenska razlika između uzastopnih save/load poziva (npr.
-     * unutar iste test metode, svega par milisekundi) nepotrebno pomjeri evidenciju. Podešljivo
-     * (ne {@code final}) po istom obrascu kao ostale D5-stil konstante, radi determinizma testova.
+     * Donja granica pauze ispod koje se {@code pomjeriEvidencijuZaPauzu(Duration)} ne
+     * poziva, čime se sprječava da beznačajna vremenska razlika između uzastopnih save/load poziva nepotrebno pomjeri evidenciju.
+     * Podešljivo (ne {@code final}) po istom obrascu kao ostale konstante.
      */
     public static volatile long PRAG_PAUZE_MS = 60_000L;
 
     /**
      * Serijalizuje stanje luke u {@value #DEFAULT_PATH}, prethodno bilježeći trenutno vrijeme kao
-     * {@link Luka#setVrijemeZadnjegCuvanja(LocalDateTime)} (F6) — osnova za isključivanje perioda
+     * {@code setVrijemeZadnjegCuvanja(LocalDateTime)}, predstavlja osnovu za isključivanje perioda
      * dok je aplikacija ugašena iz narednog obračuna proteklog vremena boravka. Greška pri upisu
-     * se bilježi u log i ne prekida izvršavanje aplikacije.
+     * se bilježi u log i NE prekida izvršavanje aplikacije.
      *
      * @param luka Trenutno stanje luke koje treba sačuvati.
      */
@@ -45,8 +45,8 @@ public class SerializationUtil {
     }
 
     /**
-     * Učitava prethodno serijalizovano stanje luke iz {@value #DEFAULT_PATH}. Nepostojanje fajla se
-     * tretira kao prvo (svježe) pokretanje aplikacije, a ne kao greška (odnosno, gubitak podataka ne znači nužno nemogućnost pokretanja/izvršavanja aplikacije).
+     * Učitava prethodno serijalizovano stanje luke iz {@value #DEFAULT_PATH}.
+     * Nepostojanje fajla se prosto tretira kao prvo/inicijalno pokretanje aplikacije, a ne kao kritična greška (dakle, gubitak podataka ne znači nužno nemogućnost pokretanja i izvršavanja aplikacije).
      * U tom slučaju, vraća se {@code null} i aplikacija se pokreće sa potpuno novom konfiguracijom.
      *
      * @return Učitano stanje luke, ili {@code null} ako fajl ne postoji i/ili se ne može pročitati.
@@ -68,12 +68,11 @@ public class SerializationUtil {
     }
 
     /**
-     * Izračunava koliko je vremena prošlo od posljednjeg čuvanja luke (F6) i, ako je razlika bar
+     * Izračunava koliko je vremena prošlo od posljednjeg čuvanja luke, ako je razlika bar
      * {@link #PRAG_PAUZE_MS}, pomjera evidenciju ulaska za taj period preko
-     * {@link Luka#pomjeriEvidencijuZaPauzu(Duration)}. Bez efekta ako luka nikad nije sačuvana
-     * (npr. {@code luka.ser} nastao prije uvođenja ovog polja) — {@link Luka#getVrijemeZadnjegCuvanja()}
-     * tada vraća {@code null}. Paket-privatna vidljivost radi direktnog testiranja bez potrebe za
-     * stvarnim čekanjem od {@value #PRAG_PAUZE_MS} ms između save i load poziva.
+     * {@code pomjeriEvidencijuZaPauzu(Duration)}. Bez efekta ako luka nikad nije sačuvana
+     * (npr. {@code luka.ser} nastao prije uvođenja ovog polja), {@code getVrijemeZadnjegCuvanja()}
+     * tada vraća {@code null}.
      *
      * @param luka Upravo učitana luka čiju evidenciju treba eventualno pomjeriti.
      */

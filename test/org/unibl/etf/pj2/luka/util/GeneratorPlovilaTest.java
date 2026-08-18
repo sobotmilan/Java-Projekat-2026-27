@@ -98,8 +98,10 @@ class GeneratorPlovilaTest {
     @DisplayName("Isti seed daje identičnu flotu (tip, naziv, prioritet) pri dva odvojena poziva")
     void istiSeedDajeIdenticnuFlotu() {
         int pocetniImo = 5_000_000;
+        int pocetniNaziv = 1;
 
         GeneratorPlovila.resetujImoBrojacZaTest(pocetniImo);
+        GeneratorPlovila.resetujNazivBrojacZaTest(pocetniNaziv);
         Random prvi = new Random(42);
         Plovilo[] flotaA = new Plovilo[200];
         for (int i = 0; i < flotaA.length; i++) {
@@ -107,6 +109,7 @@ class GeneratorPlovilaTest {
         }
 
         GeneratorPlovila.resetujImoBrojacZaTest(pocetniImo);
+        GeneratorPlovila.resetujNazivBrojacZaTest(pocetniNaziv);
         Random drugi = new Random(42);
         Plovilo[] flotaB = new Plovilo[200];
         for (int i = 0; i < flotaB.length; i++) {
