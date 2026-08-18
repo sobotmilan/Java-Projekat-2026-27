@@ -25,15 +25,24 @@ class PokretacIzvjestajaTest {
     private static final Path CSV = Path.of("takse.csv");
     private static final Path BACKUP = Path.of("takse.csv.testbackup");
 
+    private long staviFaktorSkaliranja;
+
     @BeforeEach
     void sacuvajCsv() throws Exception {
         if (Files.exists(CSV)) {
             Files.move(CSV, BACKUP, StandardCopyOption.REPLACE_EXISTING);
         }
+        // F6: većina testova u ovoj klasi provjerava čistu tarifnu ljestvicu (sat -> KM), nezavisno
+        // od skaliranja stvarnog/simuliranog vremena — faktor se spušta na 1 da ULAZAK.plusHours(N)
+        // znači tačno N sati po tarifi, kao i prije uvođenja F6. Testovi koji provjeravaju sâmo
+        // skaliranje ga eksplicitno postavljaju na svoju vrijednost.
+        staviFaktorSkaliranja = PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA;
+        PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA = 1L;
     }
 
     @AfterEach
     void vratiCsv() throws Exception {
+        PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA = staviFaktorSkaliranja;
         Files.deleteIfExists(CSV);
         if (Files.exists(BACKUP)) {
             Files.move(BACKUP, CSV, StandardCopyOption.REPLACE_EXISTING);
@@ -212,5 +221,70 @@ class PokretacIzvjestajaTest {
                 "Naziv sa zarezom mora biti u navodnicima ili escape-ovan — inače CSV ima 7 kolona.");
         assertTrue(red.contains("\"Luka, Kraljica Mora\""),
                 "Naziv sa zarezom treba da bude pod navodnicima u CSV-u (RFC 4180).");
+    }
+
+    // ------------------------------------------------------------------
+    // F6 — skaliranje vremena: faktor skaliranja
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("F6: podrazumijevani faktor skaliranja je 3600 (1 stvarna sekunda = 1 simulacioni sat)")
+    void podrazumijevaniFaktorSkaliranja() {
+        assertEquals(3600L, staviFaktorSkaliranja);
+    }
+
+    @Test
+    @DisplayName("F6: sa faktorom 3600, jedna stvarna sekunda se naplaćuje kao jedan simulacioni sat")
+    void jednaStvarnaSekundaJeJedanSimulacioniSat() {
+        PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA = 3600L;
+        double t = PokretacIzvjestaja.izracunajTaksuZaPlovilo(
+                TestFactory.kontejnerski("1"), ULAZAK, ULAZAK.plusSeconds(1));
+        assertEquals(100.0, t, 0.001);
+    }
+
+    @Test
+    @DisplayName("F6: sa faktorom 3600, 10 stvarnih sekundi dostiže gornju granicu od 1000 KM")
+    void desetStvarnihSekundiDostizePlafon() {
+        PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA = 3600L;
+        double t = PokretacIzvjestaja.izracunajTaksuZaPlovilo(
+                TestFactory.kontejnerski("1"), ULAZAK, ULAZAK.plusSeconds(10));
+        assertEquals(1000.0, t, 0.001);
+    }
+
+    @Test
+    @DisplayName("F6: sa faktorom 3600, tarifa preko 24 simulacionih sati se dostiže za 25 stvarnih sekundi")
+    void dvadesetPetStvarnihSekundiPrelaziDvadesetCetiriSata() {
+        PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA = 3600L;
+        double t = PokretacIzvjestaja.izracunajTaksuZaPlovilo(
+                TestFactory.kontejnerski("1"), ULAZAK, ULAZAK.plusSeconds(25));
+        assertEquals(2100.0, t, 0.001);
+    }
+
+    @Test
+    @DisplayName("F1 (F5_F6_PREGLED.md): podrazumijevani faktor razlikuje boravke različite dužine "
+            + "tokom jedne žive demonstracije — cijela tarifna ljestvica mora biti dostižna")
+    void podrazumijevaniFaktorRazlikujeKratkeBoravke() {
+        // Ne postavljamo faktor eksplicitno — testiramo baš PODRAZUMIJEVANU vrijednost, vraćenu
+        // u staviFaktorSkaliranja (@BeforeEach je spustio aktivnu vrijednost na 1L za ostatak ove
+        // klase, pa se ovdje eksplicitno vraća prava podrazumijevana da bi test imao smisla).
+        PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA = staviFaktorSkaliranja;
+
+        double kratkoBoravlje = PokretacIzvjestaja.izracunajTaksuZaPlovilo(
+                TestFactory.kontejnerski("1"), ULAZAK, ULAZAK.plusSeconds(2));
+        double duzeBoravlje = PokretacIzvjestaja.izracunajTaksuZaPlovilo(
+                TestFactory.kontejnerski("2"), ULAZAK, ULAZAK.plusSeconds(10));
+
+        assertNotEquals(kratkoBoravlje, duzeBoravlje, 0.001,
+                "Podrazumijevani faktor mora omogućiti da se tarifna ljestvica stvarno odigra "
+                        + "tokom kratke žive demonstracije (boravak reda sekundi/minuta), ne da "
+                        + "svako plovilo plati isti minimum bez obzira na dužinu boravka.");
+    }
+
+    @Test
+    @DisplayName("F6: faktor 1 se ponaša identično kao prije uvođenja skaliranja")
+    void faktorJedanJeNeutralan() {
+        PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA = 1L;
+        assertEquals(500.0, PokretacIzvjestaja.izracunajTaksuZaPlovilo(
+                TestFactory.kontejnerski("1"), ULAZAK, ULAZAK.plusHours(5)), 0.001);
     }
 }

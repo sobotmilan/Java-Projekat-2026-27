@@ -660,6 +660,97 @@ class BrodThreadTest {
         }
     }
 
+    // ------------------------------------------------------------------
+    // F4 — obračun i evidentiranje takse pri konačnom izlasku iz luke
+    // ------------------------------------------------------------------
+
+    private static java.nio.file.Path csvPutanja() {
+        return java.nio.file.Path.of("takse.csv");
+    }
+
+    private static java.nio.file.Path csvBackupPutanja() {
+        return java.nio.file.Path.of("takse.csv.brodthreadtestbackup");
+    }
+
+    private static boolean sacuvajCsvAkoPostoji() throws java.io.IOException {
+        java.nio.file.Path csv = csvPutanja();
+        if (java.nio.file.Files.exists(csv)) {
+            java.nio.file.Files.move(csv, csvBackupPutanja(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        }
+        return false;
+    }
+
+    private static void vratiCsv(boolean postojaoPrijeTesta) throws java.io.IOException {
+        java.nio.file.Files.deleteIfExists(csvPutanja());
+        if (postojaoPrijeTesta) {
+            java.nio.file.Files.move(csvBackupPutanja(), csvPutanja(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    @Test
+    @DisplayName("F4: normalno napuštanje obračunava taksu, upisuje CSV red i briše zapis iz evidencije")
+    void normalnoNapustanjeObracunavaTaksuIBrisEvidenciju() throws Exception {
+        boolean postojaoPrijeTesta = sacuvajCsvAkoPostoji();
+        try {
+            Luka luka = TestFactory.luka(1);
+            BrodThread bt = new BrodThread(TestFactory.kontejnerski("F4-NORMALNO"), luka);
+
+            ExecutorService exec = Executors.newSingleThreadExecutor();
+            Future<?> future = exec.submit(bt);
+            try {
+                cekajPrivezivanje(bt, 10_000);
+                assertTrue(luka.getEvidencijaUlaska().containsKey("F4-NORMALNO"));
+
+                bt.zatraziNapustanje();
+                future.get(10, TimeUnit.SECONDS);
+
+                assertFalse(luka.getEvidencijaUlaska().containsKey("F4-NORMALNO"),
+                        "Zapis mora biti uklonjen iz evidencije nakon obračuna takse pri izlasku.");
+            } finally {
+                exec.shutdownNow();
+                exec.awaitTermination(5, TimeUnit.SECONDS);
+            }
+
+            assertTrue(java.nio.file.Files.exists(csvPutanja()), "takse.csv mora biti kreiran.");
+            List<String> linije = java.nio.file.Files.readAllLines(csvPutanja());
+            assertTrue(linije.stream().anyMatch(l -> l.contains("F4-NORMALNO")),
+                    "CSV mora sadržati red za plovilo koje je upravo napustilo luku.");
+        } finally {
+            vratiCsv(postojaoPrijeTesta);
+        }
+    }
+
+    @Test
+    @DisplayName("F4: obracunajIZabiljeziTaksu() je no-op za plovilo bez zapisa u evidenciji")
+    void obracunajIZabiljeziTaksuNoOpBezEvidencije() {
+        Luka luka = TestFactory.luka(1);
+        BrodThread bt = new BrodThread(TestFactory.kontejnerski("F4-BEZ-EVIDENCIJE"), luka);
+
+        assertDoesNotThrow(bt::obracunajIZabiljeziTaksu);
+        assertFalse(luka.getEvidencijaUlaska().containsKey("F4-BEZ-EVIDENCIJE"));
+    }
+
+    @Test
+    @DisplayName("F4: obracunajIZabiljeziTaksu() radi samostalno, bez obzira ko je poziva (K10-stil test)")
+    void obracunajIZabiljeziTaksuRadiSamostalno() throws Exception {
+        boolean postojaoPrijeTesta = sacuvajCsvAkoPostoji();
+        try {
+            Luka luka = TestFactory.luka(1);
+            Plovilo p = TestFactory.kontejnerski("F4-DIREKTNO");
+            luka.addToEvidencija("F4-DIREKTNO", java.time.LocalDateTime.now().minusHours(2));
+            BrodThread bt = new BrodThread(p, luka);
+
+            bt.obracunajIZabiljeziTaksu();
+
+            assertFalse(luka.getEvidencijaUlaska().containsKey("F4-DIREKTNO"));
+            List<String> linije = java.nio.file.Files.readAllLines(csvPutanja());
+            assertTrue(linije.stream().anyMatch(l -> l.contains("F4-DIREKTNO")));
+        } finally {
+            vratiCsv(postojaoPrijeTesta);
+        }
+    }
+
     @Test
     @DisplayName("REGRESIJA: vez postaje i fizički i po rezervaciji ponovo raspoloživ nakon normalnog napuštanja "
             + "(rezervisiSlobodanDok() se nikad nije oslobađala na uspješnom privezivanju, prije R4)")

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.unibl.etf.pj2.luka.testutil.TestFactory;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -142,6 +143,60 @@ class LukaTest {
 
         assertEquals(brojNiti * poNiti, luka.getEvidencijaUlaska().size(),
                 "Izgubljeni upisi zbog trke — koristi ConcurrentHashMap ili sinhronizuj addToEvidencija().");
+    }
+
+    // ------------------------------------------------------------------
+    // F6 — skaliranje vremena: pomjeranje evidencije za pauzu rada aplikacije
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("F6: pomjeriEvidencijuZaPauzu pomjera postojeći unos unaprijed")
+    void pomjeriEvidencijuZaPauzuPomjeraUnos() {
+        Luka luka = TestFactory.luka(1);
+        LocalDateTime original = LocalDateTime.of(2026, 8, 3, 9, 0);
+        luka.addToEvidencija("1", original);
+
+        luka.pomjeriEvidencijuZaPauzu(Duration.ofHours(3));
+
+        assertEquals(original.plusHours(3), luka.getEvidencijaUlaska().get("1"));
+    }
+
+    @Test
+    @DisplayName("F6: pomjeriEvidencijuZaPauzu pomjera više unosa istovremeno")
+    void pomjeriEvidencijuZaPauzuPomjeraViseUnosa() {
+        Luka luka = TestFactory.luka(1);
+        luka.addToEvidencija("1", LocalDateTime.of(2026, 8, 3, 9, 0));
+        luka.addToEvidencija("2", LocalDateTime.of(2026, 8, 3, 10, 0));
+
+        luka.pomjeriEvidencijuZaPauzu(Duration.ofHours(1));
+
+        assertEquals(LocalDateTime.of(2026, 8, 3, 10, 0), luka.getEvidencijaUlaska().get("1"));
+        assertEquals(LocalDateTime.of(2026, 8, 3, 11, 0), luka.getEvidencijaUlaska().get("2"));
+    }
+
+    @Test
+    @DisplayName("F6: pomjeriEvidencijuZaPauzu ignoriše null, nultu i negativnu pauzu")
+    void pomjeriEvidencijuZaPauzuIgnorisePraznuPauzu() {
+        Luka luka = TestFactory.luka(1);
+        LocalDateTime original = LocalDateTime.of(2026, 8, 3, 9, 0);
+        luka.addToEvidencija("1", original);
+
+        luka.pomjeriEvidencijuZaPauzu(null);
+        luka.pomjeriEvidencijuZaPauzu(Duration.ZERO);
+        luka.pomjeriEvidencijuZaPauzu(Duration.ofMinutes(-5));
+
+        assertEquals(original, luka.getEvidencijaUlaska().get("1"));
+    }
+
+    @Test
+    @DisplayName("F6: vrijemeZadnjegCuvanja je podrazumijevano null i može se postaviti")
+    void vrijemeZadnjegCuvanjaGetterSetter() {
+        Luka luka = TestFactory.luka(1);
+        assertNull(luka.getVrijemeZadnjegCuvanja());
+
+        LocalDateTime vrijeme = LocalDateTime.of(2026, 8, 3, 12, 0);
+        luka.setVrijemeZadnjegCuvanja(vrijeme);
+        assertEquals(vrijeme, luka.getVrijemeZadnjegCuvanja());
     }
 
     @Test

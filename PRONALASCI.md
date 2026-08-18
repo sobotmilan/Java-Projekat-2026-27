@@ -424,6 +424,230 @@ K2/R4 (najveći preostali blok od početka retroaktivnog audita) je zatvoren. Pr
 (admin GUI) → C5/C8 (klijent GUI) → C7/E1/E2 (odlazak i kraj) → F4 (CSV na izlazu), i M6/I5
 (spisak potjera, potjernica) kao samostalan zahtjev van obima R4b.
 
+**Status (15. avgust):** Administratorski GUI (A1–A13) završen — Swing/AWT (odluka i obrazloženje
+u `ZAHTJEVI.md`, "Riješeno 15. avgusta"), novi paket `gui`, `simulation`/`model`/`util` netaknuti.
+Model/logika sloj (`TipPlovila`, `PlovilaFabrika`, `PlovilaValidator`,
+`UredjivanjePlovilaService`, `PregledTerminalaService`) pokriven sa 31 novim testom; Swing
+komponente (`PlovilaFormaDijalog`, `AdminProzor`, `KlijentskiProzor`) provjerene kompajliranjem i
+smoke-testom pokretanja (nema izuzetaka pri startu), ali ne i ručnim klikanjem kroz UI u ovoj
+sesiji — nije bio dostupan alat za snimanje ekrana/kontrolu miša da se to uradi vizuelno, pa ta
+provjera ostaje otvorena za sljedeće pokretanje iz IDE-a.
+
+Vanjski code review istog dana (`GUI_KORAK1_PREGLED.md`) je našao tri nalaza u modelnom sloju,
+sva popravljena — detalji u `ZAHTJEVI.md`, "Popravke nakon code review-a": G1 (izmjena kroz formu
+je tiho regenerisala brzinu plovila, kršeći invarijantu koju `SerializationUtilTest` tvrdi), G2
+(nepotreban rezerviši→postavi→otkaži put u `dodajPlovilo`, zamijenjen jednim atomarnim upisom), G3
+(provjera jedinstvenosti IMO-a je gledala i `evidencijaUlaska`, pa je broj davno otišlog plovila
+ostajao trajno zabranjen — sužena na fizičko prisustvo, uz čišćenje zaostale evidencije pri
+dodavanju). Test paket: **243 ukupno, 0 padova** (208 + 35 novih), pokrenut tri puta zaredom bez
+varijacije. Sljedeće: C5/C7/C8 (klijent GUI, prikaz terminala, odlazak, dinamičko dodavanje) —
+vidi `R4_POTVRDA_I_GUI_ZADATAK.md`.
+
+**Status (15. avgust, kasnije istog dana):** Konačno poređenje cijele specifikacije protiv
+`ZAHTJEVI.md` (`PROPUSTENI_ZAHTJEVI_V2.md`) je našlo šest nalaza (N1–N6), sva zatvorena isti dan.
+
+Najveći: **F6 (skaliranje vremena)** — profesorov eksplicitan zahtjev, dotad vođen samo kao
+"otvoreno pitanje" bez ijedne linije koda. Prvi predlog iz pregled-dokumenta (množenje stvarnog
+proteklog vremena faktorom skaliranja) je provjerom matematike ispao **pogrešnog smjera** — bilo
+koji faktor > 1 primijenjen na sirovu kalendarsku razliku pravi period-dok-je-aplikacija-ugašena
+problem *gorim*, ne boljim (nema načina da skalar razlikuje "živo" vrijeme od "ugašeno" vrijeme).
+Usvojeno rješenje razdvaja dvije stvari koje su u prvom predlogu bile pomiješane: `Luka` sad pamti
+`vrijemeZadnjegCuvanja` i pri učitavanju pomjera cijelu evidenciju ulaska unaprijed za tačno
+onoliko koliko je aplikacija bila zatvorena (`SerializationUtil.primijeniPauzu()`) — to je stvarna
+ispravka; `PokretacIzvjestaja.FAKTOR_SKALIRANJA_VREMENA` (60×) je odvojen, kozmetički tempo koji
+se primjenjuje tek na već "očišćeno" živo vrijeme, radi bržeg odigravanja tarifne ljestvice tokom
+demonstracije. Puna analiza (uključujući zašto je prvi predlog odbačen) u `ZAHTJEVI.md`, "Riješeno
+15. avgusta: F4/F5/F6".
+
+**F4 (naplata pri izlasku)** je bio djelimično urađen mjesecima — `PokretacIzvjestaja` je ispravno
+računala i pisala CSV, ali niko je nije pozivao kad plovilo stvarno napusti luku. Mapirana su tačno
+tri fizička mjesta konačnog izlaska u `BrodThread` (normalan odlazak, prisilan izlazak učesnika
+sudara, izlazak obalske straže poslije potjernice) — `napustiTerminal()` sâm nije bio bezbjedna
+kuka jer se poziva i pri internom prelasku sa terminala na terminal (T7/T8), ne samo pri stvarnom
+napuštanju luke.
+
+**F5 (preuzimanje CSV-a)** i **N3/N4/N6** (login forma — svjesno preskočena; audit svih `catch`
+blokova u `src/` za E3 — nijedan tiho ne guta grešku; T8/T9 dokumentacija — implementacija
+"rezervacija prije ulaska" umjesto doslovnog "kružnog prolaska" kroz terminal) zatvoreni u istom
+prolazu. Puna matrica zahtjeva u `ZAHTJEVI.md` ažurirana u cijelosti (A1–A14 su bili ostali na
+TODO/PART otkad je admin GUI završen ranije istog dana — matrica nije bila sinhronizovana sa
+stvarnim stanjem koda dok ovaj pregled to nije primijetio).
+
+Test paket: **262 ukupno, 0 padova** (243 prije ovog kruga + 19 novih: 4 `LukaTest`, 4
+`SerializationUtilTest`, 4 `PokretacIzvjestajaTest`, 3 `BrodThreadTest` za F4/F6, i 4 nova
+`IzvjestajServiceTest` za F5).
+
+**Status (15. avgust, treći prolaz istog dana):** Code review F5/F6 (`F5_F6_PREGLED.md`) je našao
+dvije stvari, obje popravljene.
+
+**F1 (blokirao) — pogrešno kalibrisan faktor skaliranja.** `FAKTOR_SKALIRANJA_VREMENA = 60L` ("1
+stvarni minut = 1 simulacioni sat") je zvučalo razumno u izolaciji, ali stvarno trajanje boravka
+plovila u luci tokom jedne simulacije je reda **sekundi**, ne desetina minuta (`trajanjeKoraka()`
+20–400ms po polju, T11). Sa faktorom 60, prvi prag tarifne ljestvice (12h) bi zahtijevao 12
+stvarnih *minuta* neprekidnog boravka — u praksi bi svako plovilo platilo tačno minimum od 100 KM,
+i cijela ljestvica iz specifikacije se nikad ne bi vidjela na demonstraciji. Ispravljeno na
+`3600L` (1 stvarna sekunda = 1 simulacioni sat) — ista greška klase kao "testovi prolaze ali
+funkcionalnost nikad ne okine u stvarnoj upotrebi", vrijedan opšti podsjetnik: testovi koji
+pozivaju logiku direktno sa izmišljenim vremenima (kao ovdje) ne hvataju kalibracijske greške u
+odnosu na stvarno trajanje operacija koje ta logika mjeri — potreban je bar jedan test protiv
+podrazumijevane vrijednosti i realističnog opsega ulaza, ne samo protiv proizvoljno odabranih
+testnih vrijednosti koje uvijek "rade" bez obzira na kalibraciju.
+
+**F2 (nisko) — `IzvjestajService` se oslanjao na spoljnu provjeru.** `AdminProzor` je već
+ispravno pozivao `izvjestajPostoji()` prije `FileDialog`-a, ali sâma servisna metoda nije bila
+samodovoljna — pozvana direktno bez te provjere, propustila bi sirov `NoSuchFileException`.
+Dodata eksplicitna provjera sa čitljivom porukom (K10 obrazac). Reviewerov prateći predlog da se
+doda JavaDoc na `IzvjestajService` kao "jedinu klasu bez njega" u `gui` paketu je provjeren i
+odbačen — nijedna klasa u `gui` paketu nema JavaDoc, dosljedno eksplicitnoj instrukciji iz
+`R4_POTVRDA_I_GUI_ZADATAK.md`; reviewerova premisa o trenutnom stanju koda nije bila tačna.
+
+Detalji u `ZAHTJEVI.md`, "F1 ispravka"/"F2 ispravka" (unutar "Riješeno 15. avgusta: F4/F5/F6").
+Test paket: **265 ukupno, 0 padova** (262 + 3 nova: 2 `PokretacIzvjestajaTest` za F1-regresiju i
+faktor 3600, 1 `IzvjestajServiceTest` za F2), pokrenut tri puta zaredom bez varijacije.
+
+**Status (15. avgust, četvrti prolaz):** `PlovilaFormaDijalog.pokusajSacuvaj()` je zaostajao za
+međuvremenskim proširenjem `PlovilaValidator`-a (naziv/broj motora/registarski broj/spisak
+potjernica) — na neuspjelom parsiranju specifičnog brojčanog polja i dalje je bezuslovno pozivao
+`dodajPlovilo()`/`izmijeniPlovilo()`, čiji interni poziv validatora je proizvodio drugu,
+redundantnu poruku o istom polju (npr. "TEU ne smije biti prazno" + "Kapacitet mora biti
+pozitivna vrijednost" istovremeno). Popravljeno: greške se sada sakupljaju, `PlovilaValidator.
+validiraj()` se poziva direktno i spaja sa specifičnom porukom, a `dodajPlovilo()`/
+`izmijeniPlovilo()` se pozivaju samo ako je spojena lista prazna. Detalji u `ZAHTJEVI.md`,
+"Ispravka nakon code review-a — `PlovilaFormaDijalog.pokusajSacuvaj()`". Test paket: **271
+ukupno, 0 padova** (265 + 6 novih u `PlovilaValidatorTest`), pokrenut tri puta zaredom bez
+varijacije.
+
+**Status (15. avgust, peti prolaz) — checkbox rotacije (C6, zadatak 2):** Rotacija se do sada
+mogla upaliti/ugasiti isključivo kroz simulaciju (`KoordinatorUvidjaja`, potjernica), pa se `R`
+oznaka iz C6 nije mogla ni demonstrirati ni ručno provjeriti prije nego što je puna simulacija
+već pokrenuta. `PlovilaFormaDijalog` sad ima checkbox "Rotacija", vidljiv samo za tipove sa
+službom (`TipPlovila.getSluzba() != null`), predpopunjen trenutnim stanjem pri izmjeni.
+
+Sukob sa ranijom G1 popravkom (`izmijeniPlovilo` prenosi rotaciju sa starog plovila na novo, da
+obična izmjena naziva ne bi tiho ugasila rotaciju koju je simulacija upalila) — bez dodatne
+izmjene, taj prenos bi odmah prepisao checkbox-ovu vrijednost starom, i checkbox ne bi imao
+efekta pri izmjeni. Od dvije ponuđene opcije (validator "zna" da li je vrijednost eksplicitno
+postavljena, naspram novog preklopa metode), **odabrano je novo preopterećenje**
+`izmijeniPlovilo(..., boolean rotacijaEksplicitnoZadata)` — prva opcija bi zahtijevala treće,
+nullable stanje na `Plovilo`-vom `boolean rotacija` polju (širi zahvat u `model` sloj) da bi se
+uopšte moglo razlikovati "korisnik je namjerno isključio" od "vrijednost je samo podrazumijevana
+`false`"; preklop metode postiže isto bez ijedne izmjene u `model`-u, a postojeći
+četvoroargumentski poziv (i njegov regresioni test `izmjenaCuvaRotaciju`) ostaje netaknut. Puno
+obrazloženje, uključujući zašto je prva opcija odbačena, u `ZAHTJEVI.md`, "Riješeno 15. avgusta:
+checkbox rotacije u admin formi (C6)".
+
+Testiranje same forme (Swing komponenta bez javnih getter-a) riješeno paket-privatnim test-seam
+metodama (`imaRotacijuCheckbox()`, `postaviRotacijuZaTest()`, `jeRotacijaOznacenaZaTest()`,
+`popuniZaTest()`, `pokusajSacuvaj()` iz `private` u paket-privatno) — isti obrazac kao
+`provjeriSudar()`/`primijeniPauzu()`. Novi `PlovilaFormaDijalogTest` konstruiše i upravlja
+dijalogom programski, nikad ne poziva `setVisible(true)`, pa se tokom `mvn test` ne otvara
+stvaran prozor. Test paket: **277 ukupno, 0 padova** (271 + 6 novih: 4 `PlovilaFormaDijalogTest`,
+2 `UredjivanjePlovilaServiceTest` za novi preklop), pokrenut tri puta zaredom bez varijacije.
+
+**Status (16. avgust) — živa klijentska simulacija (C5/C7/C8/C9/E1/E2):** `KlijentskiProzor` je
+bio samo statički snimak od kad je napravljen — simulacioni motor je postojao i bio testiran, ali
+ga niko nije pokretao iz klijenta. Urađeno u pet koraka (unos+pokretanje, živi prikaz preko
+`javax.swing.Timer`, odlazak 15%, dodavanje tokom simulacije, kraj+serijalizacija), sva logika
+koja nije čisto Swing izvučena u novu `gui.KlijentskaSimulacijaService`.
+
+Najvažnija odluka: `PlovilaFormaDijalog` (ista forma kao admin) je morao dobiti injektovanu
+strategiju dodavanja — admin piše direktno u matricu (`UredjivanjePlovilaService.dodajPlovilo`,
+bezbjedno jer simulacija ne radi), a klijent tokom **žive** simulacije mora ići kroz pravu
+`BrodThread` nit (`Terminal.rezervisiSlobodanDok()` iznutra, ne mimo njega) da se ne utrkuje sa
+postojećim nitima — novi paket-privatni `DodavanjeStrategija` funkcionalni interfejs, admin-ov
+javni konstruktor i dalje delegira na staro ponašanje bez izmjene.
+
+**Otkriven pravi bug tokom pisanja testova, ne u produkcijskom kodu:** prvi pokušaj
+`KlijentskiProzorTest`-a je zamrznuo cijeli `mvn test` proces na 13+ minuta bez ijednog rezultata.
+`jstack` na zaglavljenoj JVM je pokazao tačan uzrok: `JOptionPane.showMessageDialog()` pozvan
+direktno sa test niti (ne sa EDT-a, preko test-seam metode koja poziva `pokreniSimulaciju()`
+sinhrono) pumpa sopstvenu ugniježđenu petlju događaja čekajući da neko zatvori dijalog — a niko
+ga nikad ne zatvara u testu bez pravog korisnika. Nije problem u produkcijskom kodu (u pravoj
+upotrebi poziv dolazi sa EDT-a preko klika na dugme, korisnik postoji da klikne "OK") — problem je
+isključivo u tome KAKO se produkcijski kod poziva iz testa. Popravka: sve pozive
+`JOptionPane.showMessageDialog()` u `KlijentskiProzor` provući kroz jednu override-abilnu metodu
+(`prikaziPoruku()`), test koristi lokalni podrazred koji je preklapa i samo bilježi poruke.
+Isti latentni rizik postoji u `PlovilaFormaDijalog.pokusajSacuvaj()` (dosad neotkriven jer ga
+nijedan postojeći test namjerno ne provocira) — dokumentovano u `ZAHTJEVI.md` kao poznat rizik za
+sljedeći test koji bi tamo pokrio granu greške, nije popravljano danas (van obima).
+
+Puno obrazloženje svih odluka (uključujući rubni slučaj E1-a kad dodato plovilo ne uspije da se
+priveže, i zašto `pripremiPocetnoStanje()` odbacuje admin-ovu tačnu rasporedbu dokova) u
+`ZAHTJEVI.md`, "Riješeno 16. avgusta: živa klijentska simulacija". Test paket: **301 ukupno, 0
+padova** (277 + 24 nova: 18 `KlijentskaSimulacijaServiceTest`, 6 `KlijentskiProzorTest`),
+pokrenut tri puta zaredom bez varijacije — nijedna nestabilnost primijećena.
+
+**Status (16. avgust, drugi bug istog dana) — dvostruka/apsurdna naplata zbog zastarjelog
+admin-ovog stanja.** Prijavljeno sa konkretnim dokazom iz `takse.csv`: isto plovilo naplaćeno
+dvaput za istu posjetu, identično vrijeme ulaska, rastuće vrijeme izlaska, iznosi reda 20–90
+hiljada KM. Dijagnoza je stigla unaprijed formulisana ("AdminProzor drži zastarjeli objekat,
+klijent radi nad drugim") — potvrđena čitanjem oba fajla prije bilo kakve izmjene, kako je i
+traženo, ne pretpostavljena.
+
+Pravi mehanizam: `AdminProzor.luka` se postavlja jednom u konstruktoru i nikad više ne osvježava;
+`KlijentskiProzor.pokreniSimulaciju()` zamjenjuje **sopstveno** polje istoimenom, ali drugom
+instancom (`pripremiPocetnoStanje()`) — admin i klijent od tog trenutka rade nad dva različita
+objekta u memoriji. Klijentov E2 upisuje ispravno stanje (otišla plovila bez zapisa u evidenciji —
+`obracunajIZabiljeziTaksu()` to već ispravno radi, nedirano ovim popravkom). Ali ako se admin
+prozor ne zatvori i korisnik ponovo klikne "Pokreni klijentsku aplikaciju", admin serijalizuje
+**svoju** zamrznutu, pretpokretačku kopiju preko onoga što je klijent upisao — vraćajući otišla
+plovila i njihova ORIGINALNA (davno prošla) vremena ulaska. Naredna simulacija ih ponovo naplati
+od tog davnog trenutka — otud apsurdni iznosi. F6-ov mehanizam pauziranja ne štiti od ovoga jer
+gleda pauzu između zatvaranja i otvaranja aplikacije, ne "starost" pojedinačnog zapisa unutar
+jednog te istog, kontinuirano otvorenog admin prozora.
+
+Popravka: `AdminProzor.napraviKlijentskiProzor()` kači `WindowAdapter` na klijentski prozor koji u
+`windowClosed()` ponovo poziva postojeći `ucitajStanje()` — nula duplirane logike, isti
+SwingWorker koji admin već koristi pri sopstvenom pokretanju. Usput otkriven (probnim programom,
+prije pisanja testova) sitan ali bitan AWT detalj: `KlijentskiProzor` nije imao eksplicitan
+`setDefaultCloseOperation`, pa je pod podrazumijevanim `HIDE_ON_CLOSE`-om `windowClosed` **nikad**
+ne bi ni bio dignut (samo se prozor sakriva) — ispravljeno na `DISPOSE_ON_CLOSE`. Isti probni
+program je otkrio i da `dispose()` na prozoru koji nikad nije bio `setVisible(true)` takođe tiho
+ne diže taj događaj — testovi su morali stvarno prikazati prozor (kratak bljesak tokom `mvn test`)
+da bi vjerodostojno provjerili ovu putanju, za razliku od ostalih GUI testova u projektu koji
+uspješno izbjegavaju prikazivanje pravog prozora.
+
+Test paket: **303 ukupno, 0 padova** (301 + 2 nova `AdminProzorTest`), tri puta zaredom. Prvi
+pokušaj trostrukog pokretanja je javio `BUILD FAILURE` — istraženo i potvrđeno da je uzrok
+prekratka `timeout` granica koju sam sâm postavio (presjekla proces usred inače zdravog,
+sporog `BrodThreadTest`-a), ne stvarna nestabilnost; ponovljeno sa širom granicom, bez varijacije.
+
+**Status (16. avgust, treći bug istog dana) — istraga prijavljenog "C8 plovilo napusti umjesto da
+se priveže", NIJE reprodukovano kroz stvarnu C8 putanju.** Vrijedan slučaj gdje je predložena
+dijagnoza (istek nekog vremenskog budžeta) provjerena i pokazala se neusklađenom sa sopstvenim
+simptomom pri čitanju koda: "Napustio terminal." log zahtijeva `trenutniTerminal != null`, a to
+polje se za plovilo koje ulazi kroz `udjiULuku()` postavlja isključivo tik uz "Ušao u terminal"
+log — nema logičkog puta da se jedno desi bez drugog za genuinski C8-dodato plovilo.
+
+Umjesto da se stane na "ne mogu naći uzrok pukom analizom", napravljena su tri probna Java
+programa (van repozitorija, obrisani nakon istrage) koja direktno pozivaju
+`KlijentskaSimulacijaService.dodajTokomSimulacije()` pod stvarnim konkurentnim opterećenjem — 33
+pokušaja ukupno (maksimalan iznenadni saobraćaj, i realistično postupno oslobađanje vezova koje
+imitira `RAZMAK_ODLAZAKA_MS`), preko više terminala i semenova. **Nijedan nije uspio reprodukovati
+kvar** — svako plovilo je ušlo, logovalo se, i privezalo za par sekundi, čak i pod tadašnjim
+pogrešnim klemom brzine.
+
+Naplaćeni iznos iz prijavljenog reda (1900 KM) je matematički TAČAN za svjež 18-sekundni boravak
+pod F6 skaliranjem — ne apsurdan kao kod bag-a 1, što isključuje bag-1-stil objašnjenje. Kombinacija
+"nema log ulaska" + "normalan iznos" umjesto toga tačno odgovara plovilu ušlom preko **predokovanog**
+konstruktora (početna flota, `pokreniPrivezanaPlovila`), koji nikad ne prolazi kroz `udjiULuku()` —
+najvjerovatnije je IMO 999 dodat preko `AdminProzor`-ovog "Dodaj plovilo" (isti dijalog, lako
+pobrkati sa klijentskim dugmetom istog imena), ne kroz klijentski C8 tok.
+
+Nezavisno od te dijagnoze, **potvrđen je stvaran, opipljiv nalaz** čitanjem koda:
+`BrodThread.trajanjeKoraka()` je klemovao na `[400,800]ms` dok mu JavaDoc (i T11 iz specifikacije)
+kaže `[20,400]ms` — brojevi se tačno poklapaju sa "privremenim usporenjem" koje zahtjev pominje kao
+korišteno pri testiranju, jak znak zaboravljenog ručnog debug-podešavanja. Ispravljeno.
+
+Predstavljena je puna dijagnoza korisniku PRIJE bilo kakve izmjene (kako je i eksplicitno traženo),
+sa tri ponuđene opcije za nastavak; potvrđen izbor: ispraviti klem, dodati logovanje na C8 tok
+(`"[naziv] Dodato tokom simulacije (C8), pokušava ući u luku."`, isti format kao postojeći
+`BrodThread.log()`, da se ubuduće u konzoli odmah vidi da li je plovilo GENUINO ušlo preko C8), i
+dodati tražene testove — bez uvođenja odbrambenog re-provjeravanja u `simulation` paketu, jer nema
+potvrđenog uzroka koji bi to opravdao. Puna dijagnoza u `ZAHTJEVI.md`, "Riješeno 16. avgusta:
+istraga bag-a 2". Test paket: **304 ukupno, 0 padova** (303 + 1 nov test), tri puta zaredom bez
+varijacije.
+
 ## Otvoreno pitanje za tebe
 
 `Duration.toHours()` reže naniže, pa 90 minuta = 100 KM. Ako profesor očekuje
@@ -450,4 +674,79 @@ rotacije (10) i slučaj sa rotacijom (poređenje protiv imenovane konstante, ne 
 ### OTVORENO PITANJE
 
 Package cycle — `model.classes.Luka` imports `simulation.BrodThread`, and `BrodThread` imports `Luka`. Caused by putting `aktivnaPlovila` on `Luka`. Compiles fine, but it's simulation state on a model class. Cleaner alternative if time permits: move the registry to `PokretacSimulacije`. Noted as a known design compromise, not a bug.
+
+## Riješeno (16. avgust): `IntegracijaIncidentaTest` — I1–I8/I5 verifikovani end-to-end
+
+Prije nego što je bilo šta pisano, u working tree su zatečene neopisane, necommit-ovane izmjene u
+`BrodThread.java` (van ove sesije/zadatka) koje su vraćale `trajanjeKoraka()` na klem
+`[400,800]ms` (poništavajući već verifikovanu ispravku bag-a 2, vidi gore) i postavljale
+`VJEROVATNOCA_SUDARA = 1.0` kao **produkcioni podrazumijevani** default (ne samo u testu) — jasno
+zaboravljeno ručno debug stanje iz ranije manuelne provjere kroz GUI. Vraćeno na commit-ovano
+stanje (`git checkout --`) prije početka, po potvrdi korisnika; `luka.properties` (2 umjesto 3
+terminala) i `KlijentskiProzor` (veći prozor, brži tajmer odlaska) ostavljeni netaknuti — to su
+bezopasne pogodnosti za ručno testiranje, ne regresija.
+
+Glavni zadatak: pet determinističkih integracionih testova (`IntegracijaIncidentaTest`, paket
+`simulation`) koji stvarno pokreću `BrodThread` niti (ne pozivaju `KoordinatorUvidjaja` direktno)
+da genuinski izazovu sudar kroz postojeću logiku preticanja — puno obrazloženje zašto je ovo jedini
+pouzdan način provjere I1–I8/I5 (ručna GUI provjera je strukturno neizvodljiva) je u `ZAHTJEVI.md`,
+odmah ispod tabele incidenata.
+
+Jedina produkciona izmjena: novo `BrodThread.DIREKTORIJUM_INCIDENTA_SUDARA` (simetrično postojećem
+`DIREKTORIJUM_INCIDENTA_POTJERNICE`) — obična (SUDAR) putanja incidenta ranije nije imala nikakvu
+kuku za preusmjeravanje direktorijuma upisa, pa bi testovi morali pisati u pravi `user.home`. Nema
+izmjene logike kretanja/preticanja/uviđaja.
+
+Tri stvarna bag-a otkrivena tek pri stvarnom pokretanju (ne pri pisanju koda), sva ispravljena u
+samom testu, ne u produkciji:
+1. `TestFactory.popuniSveDokove()` bezuslovno prepisuje SVAKI dok, uključujući već postavljena
+   patrolna plovila — popravljeno novim `popuniOsimKolone()` koji preskače već zauzete dokove.
+2. Broj raspoloživih vezova se vraća na staru vrijednost ODMAH po otkazivanju rezervacije, mnogo
+   prije nego što plovilo fizički napusti terminal (`napustiTerminal()` hoda korak po korak) — test
+   je pogrešno koristio taj broj kao signal fizičkog odlaska; ispravljeno čekanjem na nestanak niti
+   iz `Luka.getAktivnaPlovila()`.
+3. `KoordinatorUvidjaja` gasi rotaciju patrole TEK POSLIJE `raspetljajPatrole()`, koji asinhrono (u
+   patrolinoj sopstvenoj niti) može stići do `PRIVEZAN` i prije nego što koordinatorova nit stigne
+   do gašenja rotacije — `zadatak == PRIVEZAN` sam po sebi nije dovoljan signal da je rotacija već
+   ugašena; test sad čeka na sam `isRotacija() == false`.
+
+Test paket: **304 → 309** (5 novih). Cijeli paket pušten tri puta zaredom (plus dodatnih 5 izolovanih
+pokretanja same nove klase tokom debagovanja) bez ijednog pada nakon ispravki. `ZAHTJEVI.md`
+ažuriran uz svaki od I1–I8/I5 redova sa pokazivačem na tačan test metod.
 Postoji ciklus uvozenja - Luka uvozi BrodThread, BrodThread uvozi Luku. Donijeti odluku, nije nužno "bug"...
+
+## Riješeno (16. avgust): curenje `javax.swing.Timer`-a u `KlijentskiProzorTest` truje druge testove
+
+Korisnik je ručnim pokretanjem cijelog paketa kroz IntelliJ dobio pad koji se nikad nije pojavio u
+mojih 6+ pokretanja cijelog paketa kroz Maven (3x prije ovog zadatka, 3x poslije):
+`KlijentskaSimulacijaServiceTest.dodatoPloviloNijeNaplaceno` je tvrdio da `takse.csv` ne smije
+postojati (test rezerviše taj fajl kao svoj izolovan prostor), a log je pokazivao
+`[Sirena] Napustio terminal.` — "Sirena" je ime iz `GeneratorPlovila.IMENA`, nikad korišteno u
+ovom testu, dakle plovilo iz neke SASVIM DRUGE, ranije pokrenute niti.
+
+**Uzrok, potvrđen čitanjem koda i empirijskom reprodukcijom:** `KlijentskiProzor.pokreniSimulacija()`/
+`oznaciZaOdlazak()` zakazuju tri `javax.swing.Timer`-a (render tajmer, jednokratni "odgoda" tajmer od
+3000ms prije označavanja za odlazak, i ponavljajući "raspored" tajmer od 300ms koji redom zove
+`zatraziNapustanje()`) kao LOKALNE promjenljive — nigdje sačuvane kao polje, pa ih ništa nije moglo
+zaustaviti. `KlijentskiProzorTest`-ov `@AfterEach` je zvao `prozor.dispose()`, ali `JFrame.dispose()`
+ne dira nezavisne `Timer` objekte — oni nastavljaju da tiču na Swing-ovoj dijeljenoj niti zauvijek
+(dok JVM ne ugasi), i mnogo kasnije, tokom sasvim DRUGOG test razreda, mogu genuinski pozvati
+`zatraziNapustanje()` na plovilu iz prvog testa, koje onda ode i naplati se u pravi (ne test-lokalni)
+`takse.csv`.
+
+Zašto se ovo nikad nije pojavilo u mojih 6 punih pokretanja: Surefire je (bez `-Dtest` argumenta)
+učitavao klase alfabetski, a `KlijentskaSimulacijaServiceTest` < `KlijentskiProzorTest` alfabetski —
+ranjivi test je uvijek stigao na red PRIJE nego što je ijedan `KlijentskiProzor` tajmer i postojao.
+IntelliJ-ov redoslijed očigledno nije isti. Empirijski potvrđeno: sa
+`-Dsurefire.runOrder=reversealphabetical` (tjera `KlijentskiProzorTest` da ide prvi), pad se
+reprodukovao u 2 od 4 pokretanja PRIJE ispravke, i nestao u 8 od 8 pokretanja POSLIJE — dakle
+potvrđen uzrok, ne nagađanje.
+
+**Ispravka:** tri tajmera su postala polja (`odgodaTimer`, `rasporedTimer`, uz postojeći `timer`), i
+`KlijentskiProzor` sad override-uje `dispose()` da ih sve zaustavi prije `super.dispose()` — ovo je
+namjerno produkciona ispravka, ne samo test-kuka, jer je ispravno da se zatvaranje prozora zaista
+prekine sve što on radi u pozadini (npr. kad `AdminProzor` zatvori klijentski prozor preko
+`WindowListener`-a). `KlijentskiProzorTest` nije ni trebalo mijenjati — već je zvao `dispose()` u
+`@AfterEach`. Test paket i dalje **309** (nijedan nov test — ovo je ispravka postojeće infrastrukture,
+ne novi zahtjev), tri puta zaredom + dodatnih 8 ciljanih pokretanja pod forsiranim redoslijedom, sve
+čisto.

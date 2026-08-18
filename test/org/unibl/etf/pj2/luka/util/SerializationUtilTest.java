@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -195,8 +196,69 @@ class SerializationUtilTest {
         assertEquals(TestFactory.SPISAK, spisak, "Putanja do spiska potjernica se promijenila pri round-tripu.");
     }
 
+    // ------------------------------------------------------------------
+    // F6 — skaliranje vremena: pauza (primijeniPauzu) pri učitavanju
+    // ------------------------------------------------------------------
+
     @Test
-    @Order(8)
+    @Order(9)
+    @DisplayName("F6: primijeniPauzu pomjera evidenciju kad je pauza preko praga")
+    void primijeniPauzuPomjeraKadJePauzaVelika() {
+        Luka luka = TestFactory.luka(1);
+        LocalDateTime ulazak = LocalDateTime.now().minusHours(5);
+        luka.addToEvidencija("1", ulazak);
+        luka.setVrijemeZadnjegCuvanja(LocalDateTime.now().minusHours(3));
+
+        SerializationUtil.primijeniPauzu(luka);
+
+        LocalDateTime pomjereno = luka.getEvidencijaUlaska().get("1");
+        long minutaPomjeranja = ChronoUnit.MINUTES.between(ulazak, pomjereno);
+        assertTrue(minutaPomjeranja >= 175 && minutaPomjeranja <= 185,
+                "Očekivano pomjeranje od ~180 minuta (3h pauza), dobijeno: " + minutaPomjeranja);
+    }
+
+    @Test
+    @Order(10)
+    @DisplayName("F6: primijeniPauzu ne dira evidenciju kad je pauza ispod praga")
+    void primijeniPauzuNeDiraKadJePauzaMala() {
+        Luka luka = TestFactory.luka(1);
+        LocalDateTime ulazak = LocalDateTime.of(2026, 8, 3, 9, 0);
+        luka.addToEvidencija("1", ulazak);
+        luka.setVrijemeZadnjegCuvanja(LocalDateTime.now());
+
+        SerializationUtil.primijeniPauzu(luka);
+
+        assertEquals(ulazak, luka.getEvidencijaUlaska().get("1"));
+    }
+
+    @Test
+    @Order(11)
+    @DisplayName("F6: primijeniPauzu je no-op kad vrijemeZadnjegCuvanja nije postavljeno (stari luka.ser)")
+    void primijeniPauzuNoOpBezVremenaCuvanja() {
+        Luka luka = TestFactory.luka(1);
+        LocalDateTime ulazak = LocalDateTime.of(2026, 8, 3, 9, 0);
+        luka.addToEvidencija("1", ulazak);
+
+        SerializationUtil.primijeniPauzu(luka);
+
+        assertEquals(ulazak, luka.getEvidencijaUlaska().get("1"));
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("F6: serijalizujStanjeLuke postavlja vrijemeZadnjegCuvanja")
+    void serijalizujStanjeLukePostavljaVrijemeCuvanja() {
+        Luka original = TestFactory.luka(1);
+        assertNull(original.getVrijemeZadnjegCuvanja());
+
+        SerializationUtil.serijalizujStanjeLuke(original);
+
+        assertNotNull(original.getVrijemeZadnjegCuvanja());
+        assertTrue(original.getVrijemeZadnjegCuvanja().isAfter(LocalDateTime.now().minusMinutes(1)));
+    }
+
+    @Test
+    @Order(13)
     @DisplayName("Registar aktivnih plovila (transient) preživljava deserijalizaciju kao prazan, ne kao null")
     void aktivnaPlovilaPrezivljavaKaoPrazanSkup() {
         // aktivnaPlovila je transient (BrodThread nije Serializable) i NAMJERNO NIJE FINAL -

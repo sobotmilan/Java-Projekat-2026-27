@@ -8,6 +8,7 @@ import org.unibl.etf.pj2.luka.model.classes.Terminal;
 import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
 import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 import org.unibl.etf.pj2.luka.util.LoggerUtil;
+import org.unibl.etf.pj2.luka.util.PokretacIzvjestaja;
 import org.unibl.etf.pj2.luka.util.SpisakPotjeraUtil;
 
 import java.io.File;
@@ -71,6 +72,9 @@ public class BrodThread implements Runnable {
 
     /** Direktorijum u koji se upisuje evidencija potjernice — {@code null} znači podrazumijevani (user.home), testovi ga postavljaju radi izolacije. */
     public static volatile File DIREKTORIJUM_INCIDENTA_POTJERNICE = null;
+
+    /** Direktorijum u koji se upisuje binarni fajl obicnog (SUDAR) incidenta — {@code null} znači podrazumijevani (user.home), testovi ga postavljaju radi izolacije. */
+    public static volatile File DIREKTORIJUM_INCIDENTA_SUDARA = null;
 
     /** Plovilo kojim ova nit upravlja. */
     private final Plovilo plovilo;
@@ -182,6 +186,7 @@ public class BrodThread implements Runnable {
                     krajBoravka = true;
                 }
                 this.zadatak = Zadatak.NAPUSTA;
+                obracunajIZabiljeziTaksu();
                 napustiTerminal();
             } else if (this.sudarMoraNapustiti) {
                 log("Napustio luku — učestvovao je u sudaru.");
@@ -238,6 +243,7 @@ public class BrodThread implements Runnable {
                     t.otkaziRezervaciju(rezervisan);
                     log("Učesnik sudara — napušta terminal " + (idx + 1) + " umjesto privezivanja.");
                     this.zadatak = Zadatak.NAPUSTA;
+                    obracunajIZabiljeziTaksu();
                     napustiTerminal();
                     return false;
                 }
@@ -374,6 +380,27 @@ public class BrodThread implements Runnable {
      */
     private void evidentirajUlazak() {
         luka.addToEvidencija(plovilo.getImoBroj(), LocalDateTime.now());
+    }
+
+    /**
+     * Obračunava i evidentira taksu za konačan izlazak plovila iz luke (F4), koristeći
+     * {@link Luka#getEvidencijaUlaska()} kao vrijeme ulaska. Bez efekta ako plovilo nema zapis u
+     * evidenciji (npr. nikad nije uspjelo ući ni u jedan terminal) — ne baca izuzetak, samo
+     * preskače obračun. Uklanja zapis nakon obračuna: čim je taksa obračunata, dalje čuvanje tog
+     * IMO broja u evidenciji ima jedinu svrhu (O1: sprečavanje kolizije IMO brojača), a G3 (vidi
+     * {@code ZAHTJEVI.md}) je iz istog razloga već napravio da admin GUI oslobađa IMO odmah po
+     * brisanju plovila — konzistentno ponašanje za bilo koji način na koji plovilo definitivno
+     * napušta luku. Paket-privatna vidljivost radi direktnog testiranja bez potrebe da se
+     * plovilo stvarno dovede do fizičkog izlaska iz terminala.
+     */
+    void obracunajIZabiljeziTaksu() {
+        LocalDateTime vrijemeUlaska = luka.getEvidencijaUlaska().remove(plovilo.getImoBroj());
+        if (vrijemeUlaska == null) {
+            return;
+        }
+        LocalDateTime vrijemeIzlaska = LocalDateTime.now();
+        double iznos = PokretacIzvjestaja.izracunajTaksuZaPlovilo(plovilo, vrijemeUlaska, vrijemeIzlaska);
+        PokretacIzvjestaja.evidentirajUCSV(plovilo, vrijemeUlaska, vrijemeIzlaska, iznos);
     }
 
     /**
@@ -593,11 +620,23 @@ public class BrodThread implements Runnable {
 
         if (this.y > Terminal.KOLONA_IZLAZ) {
             if (this.x == 3) {
-                pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak);
+                if (!pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak)) {
+                    LoggerUtil.logWarning("Plovilo " + plovilo.getImoBroj()
+                            + " ne moze uci u kanal sa (" + this.x + "," + this.y + ").");
+                    oslobodiTrenutnoPolje();
+                    log("Napustio terminal.");
+                    return;
+                }
                 Thread.sleep(korak);
             }
             if (this.x != Terminal.KANAL_IZLAZ) {
-                pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, this.y, korak);
+                if (!pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, this.y, korak)) {
+                    LoggerUtil.logWarning("Plovilo " + plovilo.getImoBroj()
+                            + " ne moze preci u izlazni kanal sa (" + this.x + "," + this.y + ").");
+                    oslobodiTrenutnoPolje();
+                    log("Napustio terminal.");
+                    return;
+                }
                 Thread.sleep(korak);
             }
 
@@ -621,10 +660,18 @@ public class BrodThread implements Runnable {
             }
         }
 
+        if (this.y > Terminal.KOLONA_IZLAZ) {
+            LoggerUtil.logWarning("Plovilo " + plovilo.getImoBroj()
+                    + " nije stiglo do izlazne kolone, ostaje na (" + this.x + "," + this.y + ").");
+            oslobodiTrenutnoPolje();
+            log("Napustio terminal.");
+            return;
+        }
+
         int pokusaja = 0;
         int blokada = 0;
         while (this.x > 0 && pokusaja < MAX_POKUSAJA * 2) {
-            if (pomjeriNaPolje(this.x - 1, Terminal.KOLONA_IZLAZ)) {
+            if (pomjeriNaPolje(this.x - 1, this.y)) {
                 Thread.sleep(korak);
             } else {
                 if (cekaZbogBlokade()) {
@@ -984,7 +1031,8 @@ public class BrodThread implements Runnable {
 
     private void pokreniUvidjaj(Plovilo[] ucesnici) {
         KoordinatorUvidjaja koordinator = new KoordinatorUvidjaja(
-                luka, this.trenutniTerminal, List.of(ucesnici[0], ucesnici[1]), this.x, this.y);
+                luka, this.trenutniTerminal, List.of(ucesnici[0], ucesnici[1]), this.x, this.y,
+                DIREKTORIJUM_INCIDENTA_SUDARA);
         Thread nit = new Thread(koordinator, "koordinator-uvidjaja-" + plovilo.getImoBroj());
         nit.setDaemon(true);
         nit.start();
@@ -1039,6 +1087,7 @@ public class BrodThread implements Runnable {
         sacuvajEvidencijuPotjernice(trajanje);
 
         this.zadatak = Zadatak.NAPUSTA;
+        obracunajIZabiljeziTaksu();
         napustiTerminal();
 
         if (this.plovilo instanceof SluzbenoPlovilo sluzbeno) {
