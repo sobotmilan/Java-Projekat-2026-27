@@ -620,11 +620,23 @@ public class BrodThread implements Runnable {
 
         if (this.y > Terminal.KOLONA_IZLAZ) {
             if (this.x == 3) {
-                pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak);
+                if (!pomjeriSaCekanjem(Terminal.KANAL_ULAZ, this.y, korak)) {
+                    LoggerUtil.logWarning("Plovilo " + plovilo.getImoBroj()
+                            + " ne moze uci u kanal sa (" + this.x + "," + this.y + ").");
+                    oslobodiTrenutnoPolje();
+                    log("Napustio terminal.");
+                    return;
+                }
                 Thread.sleep(korak);
             }
             if (this.x != Terminal.KANAL_IZLAZ) {
-                pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, this.y, korak);
+                if (!pomjeriSaCekanjem(Terminal.KANAL_IZLAZ, this.y, korak)) {
+                    LoggerUtil.logWarning("Plovilo " + plovilo.getImoBroj()
+                            + " ne moze preci u izlazni kanal sa (" + this.x + "," + this.y + ").");
+                    oslobodiTrenutnoPolje();
+                    log("Napustio terminal.");
+                    return;
+                }
                 Thread.sleep(korak);
             }
 
@@ -648,10 +660,18 @@ public class BrodThread implements Runnable {
             }
         }
 
+        if (this.y > Terminal.KOLONA_IZLAZ) {
+            LoggerUtil.logWarning("Plovilo " + plovilo.getImoBroj()
+                    + " nije stiglo do izlazne kolone, ostaje na (" + this.x + "," + this.y + ").");
+            oslobodiTrenutnoPolje();
+            log("Napustio terminal.");
+            return;
+        }
+
         int pokusaja = 0;
         int blokada = 0;
         while (this.x > 0 && pokusaja < MAX_POKUSAJA * 2) {
-            if (pomjeriNaPolje(this.x - 1, Terminal.KOLONA_IZLAZ)) {
+            if (pomjeriNaPolje(this.x - 1, this.y)) {
                 Thread.sleep(korak);
             } else {
                 if (cekaZbogBlokade()) {
