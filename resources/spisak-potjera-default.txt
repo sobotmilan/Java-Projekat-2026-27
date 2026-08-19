@@ -1,8 +1,8 @@
-# Podrazumijevani spisak IMO brojeva za kojima je raspisana međunarodna potjernica (M6).
-# Svako slučajno generisano plovilo obalske straže (C2) dobija ovaj fajl, jer specifikacija
+# Podrazumijevani spisak IMO brojeva za kojima je raspisana međunarodna potjernica.
+# Svako slučajno generisano plovilo obalske straže dobija ovaj fajl, jer specifikacija
 # zahtijeva da obalska straža nosi spisak, a generator nema stvaran spisak da dodijeli.
 #
-# Sadržaj je trenutno primjer/placeholder — parsiranje i stvarno poređenje sa IMO brojevima
-# plovila u luci je dio R4 (I5, potjernica), još nije implementirano (vidi ZAHTJEVI.md, M6/I5).
+# Format: jedan IMO broj po liniji. Prazne linije i linije koje počinju sa # se preskaču.
+# Fajl se čita preko SpisakPotjeraUtil, a poređenje se vrši u BrodThread.provjeriPotjernicu().
 0000001
 0000002
