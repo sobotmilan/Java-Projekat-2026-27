@@ -84,8 +84,8 @@ public final class PokretacSimulacije {
         Map<String, LocalDateTime> evidencija = new HashMap<>();
 
         if (postojeca != null) {
-            // Mora se pozvati PRIJE generisanja bilo kojeg novog plovila (O1/S6: sprečava
-            // koliziju IMO brojeva sa flotom koja se upravo izvlači iz stare luke).
+            // Mora se pozvati PRIJE generisanja bilo kojeg novog plovila — sprečava
+            // koliziju IMO brojeva sa flotom koja se upravo izvlači iz stare luke.
             GeneratorPlovila.obezbijediJedinstvenostImoZa(postojeca);
             zatecenaFlota = izvuciDokovanaPlovila(postojeca);
             evidencija = new HashMap<>(postojeca.getEvidencijaUlaska());
@@ -131,7 +131,7 @@ public final class PokretacSimulacije {
     }
 
     /**
-     * Skuplja sva plovila trenutno privezana na dokove luke (C3), obilazeći matrice svih
+     * Skuplja sva plovila trenutno privezana na dokove luke, obilazeći matrice svih
      * terminala.
      *
      * @param luka Luka čija se privezana plovila skupljaju.
@@ -151,7 +151,7 @@ public final class PokretacSimulacije {
     }
 
     /**
-     * Raspoređuje zatečenu flotu (C3) na slučajne slobodne dokove nove strukture terminala,
+     * Raspoređuje zatečenu flotu na slučajne slobodne dokove nove strukture terminala,
      * direktno postavljajući plovilo u ćeliju matrice (ne preko {@link Terminal#rezervisiSlobodanDok}).
      * Ako nova struktura nema dovoljno kapaciteta, višak plovila se tiho izostavlja (uz upozorenje
      * u logu) i briše iz evidencije ulaska — nema specifikacije šta drugo raditi u tom rubnom slučaju.
@@ -177,7 +177,7 @@ public final class PokretacSimulacije {
 
     /**
      * Dopunjava svaki terminal slučajno generisanim plovilima ({@link GeneratorPlovila#generisiSlucajno(Random)})
-     * dok broj dokovanih plovila ne dostigne {@code minimumPoTerminalu} (C1/C4). Zatečena flota
+     * dok broj dokovanih plovila ne dostigne {@code minimumPoTerminalu}. Zatečena flota
      * se računa u minimum, ne dodaje preko njega. Ako terminal nema dovoljno vezova da dostigne
      * minimum, prekida se uz upozorenje u logu.
      *

@@ -9,7 +9,7 @@ import java.io.File;
  * Klasa koja predstavlja podtip klase {@link PutnickiKruzer} namijenjen za reprezentovanje putničkih kruzera u upotrebi od strane obalske straže.
  *
  * <p>Za razliku od roditeljske klase {@link PutnickiKruzer}, ova klasa implementira ugovor nametnut od strane interfejsa {@link ObalskaStraza} kroz atribut instance {@code rotacija}.
- * Ova klasa takođe definiše atribut instance {@code spisakPotjera}, koji čuva putanju do datoteke sa spiskom IMO brojeva plovila za kojima je raspisana međunarodna potjernica (M6).</p>
+ * Ova klasa takođe definiše atribut instance {@code spisakPotjera}, koji čuva putanju do datoteke sa spiskom IMO brojeva plovila za kojima je raspisana međunarodna potjernica.</p>
  *
  * @author Milan Šobot
  * @version 1.0

@@ -17,22 +17,24 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Zapis jednog incidenta (I6): plovila koja su učestvovala u sudaru, službena plovila koja su se
+ * Klasa koja predstavlja zapis jednog incidenta.
+ *
+ * <p>plovila koja su učestvovala u sudaru, službena plovila koja su se
  * odazvala, vrijeme incidenta, apsolutne putanje do fotografija svih učesnika, trajanje uviđaja i
- * terminal na kojem se incident desio.
+ * terminal na kojem se incident desio.</p>
  *
- * <p>Ovo je čist model podataka i njegov I/O (R4a) — ne bira učesnike sudara ni najbližu patrolu,
+ * <p>Ovo je čist model podataka i njegov API, ne bira učesnike sudara ni najbližu patrolu,
  * ne pokreće blokadu terminala niti sam upravlja trajanjem uviđaja. Ko konstruiše ovu klasu i kada
- * (koordinator uviđaja, po D1 iz {@code ZAHTJEVI.md}) je predmet R4b.</p>
+ * (koordinator uviđaja) je nerelevantno u kontekstu definicije ove klase.</p>
  *
- * <p><b>Fotografije (D6):</b> čuvaju se apsolutne putanje ({@link File#getAbsolutePath()}), ne
- * bajtovi fotografija — jednostavnije i manje od bajtova, a apsolutna forma čini zapis čitljivim
+ * <p><b>Fotografije:</b> čuvaju se apsolutne putanje ({@link File#getAbsolutePath()}), ne
+ * bajtovi fotografija, jer je jednostavnije i manje od bajtova, a apsolutna forma čini zapis čitljivim
  * bez obzira iz kojeg je radnog direktorijuma simulacija pokrenuta u trenutku nastanka incidenta
- * (za razliku od nekih drugih putanja u projektu koje ostaju relativne, vidi O2 u
- * {@code ZAHTJEVI.md}).</p>
+ * (za razliku od nekih drugih putanja u projektu koje ostaju relativne).</p>
  *
  * @author Milan Šobot
  * @version 1.0
+ * @see KoordinatorUvidjaja
  */
 public class Incident implements Serializable {
     @Serial
@@ -47,16 +49,16 @@ public class Incident implements Serializable {
     /** Vrijeme kada je incident zabilježen. */
     private final LocalDateTime vrijeme;
 
-    /** Apsolutne putanje do fotografija svih učesnika (sudar + odazvana službena plovila), D6. */
+    /** Apsolutne putanje do fotografija svih učesnika (sudar + odazvana službena plovila). */
     private final List<String> apsolutnePutanjeFotografija;
 
-    /** Trajanje uviđaja, u milisekundama (I3/I5). */
+    /** Trajanje uviđaja, u milisekundama. */
     private final long trajanjeUvidjajaMs;
 
     /** Redni broj terminala na kojem se incident desio. */
     private final int idTerminala;
 
-    /** Vrsta incidenta (I5) — sudar ili potjernica. */
+    /** Vrsta incidenta (sudar ili potjernica). */
     private final TipIncidenta tip;
 
     /**
@@ -74,6 +76,19 @@ public class Incident implements Serializable {
         this(ucesniciSudara, odazvanaSluzbenaPlovila, vrijeme, trajanjeUvidjajaMs, idTerminala, TipIncidenta.SUDAR);
     }
 
+    /**
+     * Kreira zapis incidenta zadatog tipa. Apsolutne putanje fotografija se izvode automatski iz
+     * {@link Plovilo#getFotografija()} svih proslijeđenih plovila u trenutku konstrukcije.
+     *
+     * @param ucesniciSudara Plovila koja su učestvovala u sudaru, odnosno traženo plovilo (jedini
+     *                       element liste) u slučaju potjernice.
+     * @param odazvanaSluzbenaPlovila Službena plovila koja su se odazvala na incident, odnosno
+     *                                obalska straža koja je izvršila potjeru (jedini element liste).
+     * @param vrijeme Vrijeme incidenta.
+     * @param trajanjeUvidjajaMs Trajanje uviđaja, u milisekundama.
+     * @param idTerminala Redni broj terminala na kojem se incident desio.
+     * @param tip Vrsta incidenta.
+     */
     public Incident(List<Plovilo> ucesniciSudara, List<Plovilo> odazvanaSluzbenaPlovila,
                      LocalDateTime vrijeme, long trajanjeUvidjajaMs, int idTerminala, TipIncidenta tip) {
         this.ucesniciSudara = new ArrayList<>(ucesniciSudara);
@@ -85,6 +100,12 @@ public class Incident implements Serializable {
         this.apsolutnePutanjeFotografija = prikupiApsolutnePutanje();
     }
 
+    /**
+     * Sakuplja apsolutne putanje do fotografija svih učesnika sudara i svih odazvanih službenih
+     * plovila.
+     *
+     * @return Lista apsolutnih putanja do fotografija, redoslijedom učesnici pa odazvana plovila.
+     */
     private List<String> prikupiApsolutnePutanje() {
         List<String> putanje = new ArrayList<>();
         dodajPutanje(putanje, ucesniciSudara);
@@ -92,6 +113,13 @@ public class Incident implements Serializable {
         return putanje;
     }
 
+    /**
+     * Dodaje apsolutnu putanju do fotografije svakog plovila iz zadate liste u {@code putanje},
+     * preskačući plovila bez dodijeljene fotografije.
+     *
+     * @param putanje Lista u koju se putanje dodaju.
+     * @param plovila Plovila čije se fotografije dodaju.
+     */
     private static void dodajPutanje(List<String> putanje, List<Plovilo> plovila) {
         for (Plovilo p : plovila) {
             if (p != null && p.getFotografija() != null) {
@@ -128,7 +156,7 @@ public class Incident implements Serializable {
     }
 
     /**
-     * Omogućava dobijanje apsolutnih putanja do fotografija svih učesnika (D6).
+     * Omogućava dobijanje apsolutnih putanja do fotografija svih učesnika.
      *
      * @return Lista apsolutnih putanja do fotografija.
      */
@@ -154,13 +182,19 @@ public class Incident implements Serializable {
         return idTerminala;
     }
 
+    /**
+     * Omogućava dobijanje tipa incidenta (sudar ili potjernica)
+     *
+     * @return Tip incidenta.
+     *
+     */
     public TipIncidenta getTip() {
         return tip;
     }
 
     /**
-     * Upisuje ovaj incident kao binarni fajl u korisnički home direktorijum
-     * ({@code System.getProperty("user.home")}), jedan fajl po slučaju (I7).
+     * Upisuje ovaj incident kao binarni fajl u korisnički direktorijum
+     * ({@code System.getProperty("user.home")}), jedan fajl po slučaju.
      *
      * @return Fajl u koji je incident upisan, ili {@code null} ako upis nije uspio.
      */
@@ -169,8 +203,8 @@ public class Incident implements Serializable {
     }
 
     /**
-     * Upisuje ovaj incident kao binarni fajl u zadati direktorijum — preopterećenje radi
-     * testabilnosti (isti princip kao S5/R3 u ostatku projekta), da testovi ne moraju pisati u
+     * Upisuje ovaj incident kao binarni fajl u zadati direktorijum, <i>overload</i>-ovana metoda radi
+     * testiranja, da testovi ne moraju pisati u
      * stvarni korisnički home direktorijum. Naziv fajla je jedinstven po pozivu
      * ({@code incident-<uuid>.ser}), tako da uzastopni incidenti na istom terminalu ne prepisuju
      * jedan drugog.
@@ -191,7 +225,7 @@ public class Incident implements Serializable {
     }
 
     /**
-     * Učitava prethodno sačuvan incident iz zadatog fajla.
+     * Deserijalizuje prethodno sačuvan incident iz zadatog fajla.
      *
      * @param fajl Fajl iz kojeg se incident učitava.
      * @return Učitan incident, ili {@code null} ako čitanje nije uspjelo.

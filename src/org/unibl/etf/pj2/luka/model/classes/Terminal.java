@@ -7,7 +7,7 @@ import org.unibl.etf.pj2.luka.model.classes.Polje;
 import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 
 /**
- * Jedan terminal luke: matrica polja dimenzija 4×17 (T2) sa 30 vezova (dokova) i dvotračnim
+ * Jedan terminal luke: matrica polja dimenzija 4×17 sa 30 vezova (dokova) i dvotračnim
  * plovnim kanalom kroz sredinu.
  *
  * <p><b>Raspored matrice</b> (red, kolona), po uzoru na šematski prikaz iz specifikacije:</p>
@@ -16,12 +16,12 @@ import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
  *     silazi sa/izlazi na gornju granicu terminala prema kanalu.</li>
  *     <li>Red 0 i red 3 su redovi dokova (30 vezova, po 15 sa svake strane) — {@link Dok}.</li>
  *     <li>Red {@link #KANAL_ULAZ} (2) je istočni (dolazni) trak kanala, red {@link #KANAL_IZLAZ}
- *     (1) je zapadni (odlazni/trak za preticanje) trak kanala — plovidba desnom stranom kanala
- *     (T3). Ulazak u dok je pomjeraj za jedan red gore/dolje sa kanala, nikad kretanje kroz
- *     redove dokova (R0 — ranija verzija je greškom vodila plovila kroz red 3).</li>
+ *     (1) je zapadni (odlazni/trak za preticanje) trak kanala — plovidba desnom stranom kanala.
+ *     Ulazak u dok je pomjeraj za jedan red gore/dolje sa kanala, nikad kretanje kroz
+ *     redove dokova (ranija verzija je greškom vodila plovila kroz red 3).</li>
  * </ul>
  *
- * <p><b>Rezervacija doka (R2, K5):</b> {@link #rezervisiSlobodanDok(Plovilo)} pronalazi i
+ * <p><b>Rezervacija doka:</b> {@link #rezervisiSlobodanDok(Plovilo)} pronalazi i
  * zauzima slobodan dok u jednoj atomarnoj {@code synchronized} operaciji, umjesto da to budu dva
  * odvojena koraka — time se sprečava trka u kojoj dva broda "pronađu" isti slobodan dok prije
  * nego što ijedan stigne da ga zauzme.</p>
@@ -34,7 +34,7 @@ import org.unibl.etf.pj2.luka.model.interfaces.SluzbenoPlovilo;
 public class Terminal implements Serializable {
     private static final long serialVersionUID;
 
-    /** Matrica polja terminala, dimenzija 4×17 (T2). */
+    /** Matrica polja terminala, dimenzija 4×17. */
     private final Polje[][] matrica;
 
     /** Svi vezovi (dokovi) terminala, 30 ukupno — po 15 u redu 0 i redu 3. */
@@ -43,10 +43,10 @@ public class Terminal implements Serializable {
     /** Redni broj terminala unutar luke. */
     private final int idTerminala;
 
-    /** Red matrice koji predstavlja istočni (dolazni) trak plovnog kanala (T3). */
+    /** Red matrice koji predstavlja istočni (dolazni) trak plovnog kanala. */
     public static final int KANAL_ULAZ = 2;
 
-    /** Red matrice koji predstavlja zapadni (odlazni, i trak za preticanje) trak plovnog kanala (T3, T4). */
+    /** Red matrice koji predstavlja zapadni (odlazni, i trak za preticanje) trak plovnog kanala. */
     public static final int KANAL_IZLAZ = 1;
 
     /** Kolona kroz koju plovilo ulazi u terminal sa gornje/lijeve strane. */
@@ -59,12 +59,12 @@ public class Terminal implements Serializable {
      * Redni brojevi vezova koji su trenutno rezervisani (dodijeljeni plovilu koje je još u
      * kanalu na putu ka doku, prije nego što ga fizički zauzme). Odvojeno od {@link Dok#isSlobodan()}
      * jer se fizičko zauzimanje ćelije matrice dešava tek kad plovilo stvarno stigne do veza —
-     * rezervacija sprečava da drugo plovilo u međuvremenu krene ka istom, još praznom, vezu (R2/K5).
+     * rezervacija sprečava da drugo plovilo u međuvremenu krene ka istom, još praznom, vezu.
      */
     private transient java.util.Set<Integer> rezervisaniVezovi;
 
     /**
-     * Da li je saobraćaj na ovom terminalu trenutno blokiran zbog uviđaja incidenta (I3/I4).
+     * Da li je saobraćaj na ovom terminalu trenutno blokiran zbog uviđaja incidenta.
      * {@code transient} jer je ovo prolazno stanje trajanja simulacije, ne dio trajnog stanja
      * luke koje se čuva u {@code luka.ser} — blokada koja postoji u trenutku gašenja JVM-a nema
      * smisla nakon ponovnog pokretanja (uviđaj koji ju je izazvao više ne postoji). {@code volatile}
@@ -123,7 +123,7 @@ public class Terminal implements Serializable {
 
 
     /**
-     * Broji vezove koji trenutno nemaju privezano plovilo (T6). Ne uzima u obzir rezervacije u
+     * Broji vezove koji trenutno nemaju privezano plovilo. Ne uzima u obzir rezervacije u
      * toku — za tu svrhu koristiti {@link #getBrojRaspolozivihVezova()}.
      *
      * @return Broj fizički slobodnih vezova terminala.
@@ -141,7 +141,7 @@ public class Terminal implements Serializable {
     /**
      * Broji vezove koji su i fizički slobodni i trenutno nisu rezervisani od strane nekog drugog
      * plovila u tranzitu ka njima. Ovo je vrijednost koju treba koristiti prilikom odlučivanja
-     * da li terminal ima mjesta za novo plovilo (T7/T8), jer {@link #getBrojSlobodnihVezova()}
+     * da li terminal ima mjesta za novo plovilo, jer {@link #getBrojSlobodnihVezova()}
      * ne vidi rezervacije u toku.
      *
      * @return Broj stvarno raspoloživih (slobodnih i nerezervisanih) vezova terminala.
@@ -166,7 +166,7 @@ public class Terminal implements Serializable {
 
     /**
      * Pronalazi slobodan, nerezervisan vez i odmah ga rezerviše za dato plovilo — u jednoj
-     * atomarnoj {@code synchronized} operaciji (R2), čime se sprečava trka opisana u K5: bez
+     * atomarnoj {@code synchronized} operaciji, čime se sprečava trka: bez
      * atomarnosti, dva plovila koja istovremeno traže slobodan dok mogu oba "pronaći" isti dok
      * prije nego što ijedno stigne da ga zauzme.
      *
@@ -200,13 +200,13 @@ public class Terminal implements Serializable {
     }
 
     /**
-     * Blokira saobraćaj na ovom terminalu (I3) — poziva se kad počne uviđaj incidenta. Nakon ovog
+     * Blokira saobraćaj na ovom terminalu — poziva se kad počne uviđaj incidenta. Nakon ovog
      * poziva {@link #smijeProci(Plovilo)} propušta samo plovila pod aktivnom rotacijom (službena
      * plovila koja idu ka mjestu incidenta), sva ostala plovila u ovom terminalu stoje u mjestu.
-     * Ostali terminali luke nisu pogođeni (I4) — blokada je po instanci {@code Terminal}-a.
+     * Ostali terminali luke nisu pogođeni — blokada je po instanci {@code Terminal}-a.
      *
      * <p>Samo postavlja zastavicu, ne čeka niti uspavljuje pozivaoca — sama logika trajanja
-     * uviđaja i njegov redoslijed su predmet R4b (dispečovanje/koordinacija), ne ove metode.</p>
+     * uviđaja i njegov redoslijed su predmet dispečovanja/koordinacije uviđaja, ne ove metode.</p>
      */
     public void blokirajSaobracaj() {
         this.saobracajBlokiran = true;
@@ -231,14 +231,14 @@ public class Terminal implements Serializable {
 
     /**
      * Provjerava da li dato plovilo smije da se pomjeri unutar ovog terminala u trenutnom stanju
-     * saobraćaja (I3). Ako terminal nije blokiran, prolaze sva plovila. Ako jeste, prolaze samo
+     * saobraćaja. Ako terminal nije blokiran, prolaze sva plovila. Ako jeste, prolaze samo
      * plovila pod aktivnom rotacijom — službena plovila (obalska straža/carina/vatrogasci) koja su
      * upravo pozvana na mjesto incidenta ({@link SluzbenoPlovilo#isRotacija()}).
      *
      * <p>Poziva se iz pokreta broda ({@code BrodThread.pomjeriNaPolje()}) prije svakog fizičkog
      * pomjeranja — samo čita {@link #saobracajBlokiran}, ne ulazi u {@code synchronized(this)}
      * blok i ne čeka ni na čemu, pa se poziv smije nalaziti bilo gdje u putanji kretanja bez rizika
-     * po {@link org.unibl.etf.pj2.luka.view.PrikazTerminala#render(Terminal)} (D4).</p>
+     * po {@link org.unibl.etf.pj2.luka.view.PrikazTerminala#render(Terminal)}.</p>
      *
      * @param p Plovilo za koje se provjerava da li smije da se pomjeri.
      * @return {@code true} ako plovilo smije da se pomjeri, {@code false} ako je terminal blokiran

@@ -78,7 +78,7 @@ public final class GeneratorPlovila {
 
 
     /** Podrazumijevana putanja do placeholder fotografije koju dobija svako generisano plovilo, budući da je fotografija obavezno polje. */
-    private static final File FOTOGRAFIJA_PLACEHOLDER = new File("resources/placeholder-photo.txt");
+    private static final File FOTOGRAFIJA_PLACEHOLDER = new File("resources/placeholder-photo.jpg");
 
     /** Podrazumijevana putanja do <i>placeholder</i> spiska potjera koju dobija svako plovilo obalske straže, budući da je spisak potjera obavezno polje. */
     private static final File SPISAK_POTJERA_PLACEHOLDER = new File("resources/spisak-potjera-default.txt");

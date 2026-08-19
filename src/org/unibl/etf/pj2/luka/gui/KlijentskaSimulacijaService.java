@@ -10,14 +10,32 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Sve nesvingovske operacije koje pokreće klijentski prozor tokom žive simulacije: validacija
+ * unosa, biranje plovila za odlazak, dodavanje novih plovila i provjera kraja simulacije.
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ * @see BrodThread
+ */
 public final class KlijentskaSimulacijaService {
 
+    /** Najveći dozvoljeni minimalan broj plovila po terminalu, odgovara kapacitetu jednog terminala. */
     public static final int MAX_MINIMUM_PO_TERMINALU = 30;
+
+    /** Udio plovila po terminalu koji se bira za odlazak nakon pokretanja simulacije. */
     public static final double UDIO_ODLASKA = 0.15;
 
     private KlijentskaSimulacijaService() {
     }
 
+    /**
+     * Provjerava da li je uneseni tekst ispravan minimalan broj plovila po terminalu: mora biti
+     * cio, pozitivan broj koji ne prelazi {@link #MAX_MINIMUM_PO_TERMINALU}.
+     *
+     * @param tekst Tekst unesen u polje za minimalan broj plovila.
+     * @return Prazna lista ako je unos ispravan, inače lista opisa grešaka.
+     */
     public static List<String> validirajMinimum(String tekst) {
         List<String> greske = new ArrayList<>();
         int vrijednost;
@@ -36,8 +54,16 @@ public final class KlijentskaSimulacijaService {
         return greske;
     }
 
+    /**
+     * Bira {@link #UDIO_ODLASKA} (zaokruženo naviše) plovila sa jednog terminala koja treba da
+     * napuste luku nakon pokretanja simulacije.
+     *
+     * @param naTerminalu Sve niti plovila trenutno privezanih na jednom terminalu.
+     * @return Odabrane niti plovila koja treba da napuste luku, prazna lista ako terminal nema
+     *         nijedno plovilo.
+     */
     // Bira 15% (zaokruženo naviše, bar jedno ako terminal ima plovila) plovila jednog terminala
-    // za odlazak (C7) — preferira komercijalna plovila, službena bira samo ako komercijalnih nema
+    // za odlazak — preferira komercijalna plovila, službena bira samo ako komercijalnih nema
     // dovoljno (potrebna su za odziv na incidente).
     public static List<BrodThread> odaberiZaOdlazak(List<BrodThread> naTerminalu) {
         if (naTerminalu.isEmpty()) {
@@ -71,6 +97,12 @@ public final class KlijentskaSimulacijaService {
         return odabrani;
     }
 
+    /**
+     * Provjerava da li luka ima bar jedan slobodan, nerezervisan vez u bilo kojem terminalu.
+     *
+     * @param luka Luka koja se provjerava.
+     * @return {@code true} ako bar jedan terminal ima slobodan vez.
+     */
     public static boolean imaSlobodnogVezaBiloGdje(Luka luka) {
         for (Terminal t : luka.getTerminali()) {
             if (t.getBrojRaspolozivihVezova() > 0) {
@@ -80,7 +112,15 @@ public final class KlijentskaSimulacijaService {
         return false;
     }
 
-    // Dodavanje plovila TOKOM simulacije (C8/C9) — ide kroz punu navigacionu logiku
+    /**
+     * Dodaje novo plovilo u luku dok je simulacija u toku, pokrećući za njega pravu nit koja
+     * prolazi kroz isti ulazni kanal i istu rezervaciju veza kao svako drugo plovilo.
+     *
+     * @param luka Luka u koju se plovilo dodaje.
+     * @param kandidat Novo plovilo koje treba dodati.
+     * @return Prazna lista ako je pokretanje uspjelo, inače lista opisa grešaka (npr. luka je puna).
+     */
+    // Dodavanje plovila TOKOM simulacije — ide kroz punu navigacionu logiku
     // BrodThread-a (ulazak kroz kanal, rezervacija veza), NIKAD kroz
     // UredjivanjePlovilaService.dodajPlovilo() koji je setup-only i piše direktno u matricu bez
     // rezervacije, što bi se utrkivalo sa živim nitima simulacije.
@@ -91,11 +131,11 @@ public final class KlijentskaSimulacijaService {
             return greske;
         }
         // Isti format kao BrodThread.log() ("[naziv] poruka") — namjerno, da se u konzoli vidi
-        // da je BAŠ OVAJ zapis pokrenuo ulazak kroz udjiULuku() (C8), za razliku od plovila koje je
+        // da je BAŠ OVAJ zapis pokrenuo ulazak kroz udjiULuku(), za razliku od plovila koje je
         // već bilo dokovano kad je nit napravljena (npr. dodato preko AdminProzor-a prije pokretanja
         // klijenta) — takvo plovilo NIKAD ne loguje "Ušao u terminal"/"Usidren na vezu", jer
         // predokovani konstruktor uopšte ne prolazi kroz udjiULuku().
-        System.out.println("[" + kandidat.getNaziv() + "] Dodato tokom simulacije (C8), pokušava ući u luku.");
+        System.out.println("[" + kandidat.getNaziv() + "] Dodato tokom simulacije, pokušava ući u luku.");
         BrodThread bt = new BrodThread(kandidat, luka);
         Thread nit = new Thread(bt, "Brod-" + kandidat.getImoBroj());
         nit.setDaemon(true);
@@ -103,6 +143,14 @@ public final class KlijentskaSimulacijaService {
         return List.of();
     }
 
+    /**
+     * Pronalazi aktivnu nit plovila sa zadatim IMO brojem.
+     *
+     * @param luka Luka čiji se registar aktivnih plovila pretražuje.
+     * @param imoBroj IMO broj traženog plovila.
+     * @return Nit koja upravlja plovilom, ili {@code null} ako trenutno nije aktivno (još nije
+     *         pokrenuto ili je već napustilo luku).
+     */
     public static BrodThread pronadjiAktivnuNit(Luka luka, String imoBroj) {
         for (BrodThread bt : luka.getAktivnaPlovila()) {
             if (bt.getPlovilo().getImoBroj().equals(imoBroj)) {
@@ -112,7 +160,17 @@ public final class KlijentskaSimulacijaService {
         return null;
     }
 
-    // Kraj simulacije (E1): sva plovila označena za odlazak (Korak 3) su napustila luku (niti se
+    /**
+     * Provjerava da li je simulacija stigla do kraja: sva plovila označena za odlazak su
+     * napustila luku, a sva plovila dodata tokom simulacije su ili privezana ili su njihove niti
+     * već završile (bez obzira jesu li se stigle privezati).
+     *
+     * @param luka Luka čije se stanje provjerava.
+     * @param imoZaOdlazak IMO brojevi plovila označenih da napuste luku.
+     * @param imoDodataTokomSimulacije IMO brojevi plovila dodatih tokom simulacije.
+     * @return {@code true} ako je simulacija završena.
+     */
+    // Kraj simulacije: sva plovila označena za odlazak (Korak 3) su napustila luku (niti se
     // više ne nalaze u Luka.getAktivnaPlovila()), I sva plovila dodata tokom simulacije (Korak 4)
     // su privezana. Svjesna odluka: plovilo dodato tokom simulacije čija je nit završila BEZ
     // privezivanja (npr. luka se napunila taman prije nego što je stvarno pokušalo ući — uska,

@@ -4,7 +4,7 @@ package org.unibl.etf.pj2.luka.simulation;
  * Enumeracija trenutnog zadatka {@link BrodThread}-a.
  *
  * <p>Zamjenjuje podrazumijevanu pretpostavku da nit broda
- * završava čim se plovilo priveže, jer plovilo pod rotacijom mora ostati adresabilno i mora
+ * završava čim se plovilo priveže, jer plovilo pod rotacijom mora ostati adresibilno i mora
  * moći biti pozvano da napusti terminal čak i nakon što se priveže na dok i privremeno suspenduje.</p>
  *
  * @author Milan Šobot
@@ -23,5 +23,6 @@ public enum Zadatak {
     NA_INCIDENTU,
     /** Plovilo se kreće ka izlazu iz terminala i napušta luku.*/
     NAPUSTA,
+    /** Plovilo napušta terminal pod pratnjom službenog plovila.*/
     POD_PRATNJOM
 }

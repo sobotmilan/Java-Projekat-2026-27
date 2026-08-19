@@ -26,31 +26,61 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.util.*;
 
+/**
+ * Glavni prozor klijentske aplikacije: pokreće i prikazuje živu simulaciju kretanja plovila kroz
+ * luku, omogućava dodavanje novih plovila u toku simulacije, i po završetku ponovo serijalizuje
+ * stanje luke.
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ * @see KlijentskaSimulacijaService
+ */
 public class KlijentskiProzor extends JFrame {
 
+    /** Razmak između uzastopnih napuštanja terminala plovila označenih za odlazak, u milisekundama. */
     private static final int RAZMAK_ODLAZAKA_MS = 300;
 
+    /** Trenutno stanje luke koje ovaj prozor prikazuje i kojim upravlja. */
     private Luka luka;
 
+    /** Polje za unos minimalnog broja plovila po terminalu prije pokretanja simulacije. */
     private final JTextField minimumPolje = new JTextField("1", 4);
+    /** Dugme koje pokreće simulaciju sa unesenim minimumom. */
     private final JButton pokreniDugme = new JButton("Pokreni simulaciju");
 
+    /** Padajući meni za izbor terminala čiji se prikaz trenutno gleda. */
     private final JComboBox<Terminal> terminalCombo = new JComboBox<>();
+    /** Tekstualno polje koje prikazuje trenutno stanje odabranog terminala. */
     private final JTextArea prikazPolje = new JTextArea();
+    /** Oznaka koja prikazuje broj slobodnih vezova na trenutno odabranom terminalu. */
     private final JLabel slobodniVezoviLabel = new JLabel(" ");
 
+    /** Padajući meni za izbor tipa plovila koje se dodaje tokom simulacije. */
     private final JComboBox<TipPlovila> tipCombo = new JComboBox<>(TipPlovila.values());
+    /** Dugme koje otvara formu za dodavanje novog plovila tokom simulacije. */
     private final JButton dodajDugme = new JButton("Dodaj plovilo");
 
+    /** IMO brojevi plovila označenih da napuste luku nakon pokretanja simulacije. */
     private final Set<String> imoZaOdlazak = new HashSet<>();
+    /** IMO brojevi plovila dodatih tokom trajanja simulacije. */
     private final Set<String> imoDodataTokomSimulacije = new HashSet<>();
 
+    /** Tajmer koji periodično osvježava prikaz terminala i provjerava kraj simulacije. */
     private Timer timer;
+    /** Jednokratni tajmer koji, nekoliko sekundi nakon pokretanja simulacije, označava plovila za odlazak. */
     private Timer odgodaTimer;
+    /** Ponavljajući tajmer koji redom, sa razmakom od {@link #RAZMAK_ODLAZAKA_MS}, poziva označena plovila da napuste terminal. */
     private Timer rasporedTimer;
+    /** Postavlja se na {@code true} kad simulacija stigne do kraja, sprečava ponovno pokretanje završetka. */
     private boolean simulacijaZavrsena = false;
+    /** Postavlja se na {@code true} nakon što su plovila za odlazak označena, uslov za provjeru kraja simulacije. */
     private boolean odlasciOznaceni = false;
 
+    /**
+     * Kreira klijentski prozor nad zadatim stanjem luke i izgrađuje njegov korisnički interfejs.
+     *
+     * @param luka Početno stanje luke koje prozor prikazuje.
+     */
     public KlijentskiProzor(Luka luka) {
         super("Klijentska aplikacija");
         this.luka = luka;
@@ -64,6 +94,10 @@ public class KlijentskiProzor extends JFrame {
         izgradiUI();
     }
 
+    /**
+     * Sastavlja i raspoređuje sve komponente prozora: gornju traku sa unosom i dugmadima, prikaz
+     * terminala u sredini, i donju traku sa oznakom slobodnih vezova.
+     */
     private void izgradiUI() {
         terminalCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -114,6 +148,10 @@ public class KlijentskiProzor extends JFrame {
         osvjeziPrikaz();
     }
 
+    /**
+     * Ponovo puni padajući meni terminala prema trenutnoj listi terminala u {@link #luka}, i bira
+     * prvi terminal ako meni prethodno nije imao izbor.
+     */
     private void osvjeziTerminalCombo() {
         DefaultComboBoxModel<Terminal> model = new DefaultComboBoxModel<>();
         for (Terminal t : luka.getTerminali()) {
@@ -125,6 +163,10 @@ public class KlijentskiProzor extends JFrame {
         }
     }
 
+    /**
+     * Osvježava tekstualni prikaz i oznaku slobodnih vezova prema trenutnom stanju odabranog
+     * terminala.
+     */
     private void osvjeziPrikaz() {
         Terminal t = (Terminal) terminalCombo.getSelectedItem();
         if (t == null) {
@@ -140,6 +182,11 @@ public class KlijentskiProzor extends JFrame {
     // Korak 1 — unos i pokretanje simulacije
     // ------------------------------------------------------------------
 
+    /**
+     * Validira uneseni minimum, pa u pozadinskoj niti priprema početno stanje simulacije i
+     * pokreće niti privezanih plovila, kako aplikacija ne bi "zamrzla" korisnički interfejs dok
+     * traje priprema. Nakon uspješne pripreme omogućava dodavanje plovila i pokreće živi prikaz.
+     */
     private void pokreniSimulaciju() {
         List<String> greske = KlijentskaSimulacijaService.validirajMinimum(minimumPolje.getText());
         if (!greske.isEmpty()) {
@@ -182,9 +229,16 @@ public class KlijentskiProzor extends JFrame {
     }
 
     // ------------------------------------------------------------------
-    // Korak 3 — odlazak 15% plovila po terminalu (C7)
+    // Korak 3 — odlazak 15% plovila po terminalu
     // ------------------------------------------------------------------
 
+    /**
+     * Grupiše sve niti po terminalu na kojem su privezane, bira dio plovila sa svakog terminala
+     * za odlazak, i zakazuje njihovo napuštanje jedno po jedno, sa razmakom od
+     * {@link #RAZMAK_ODLAZAKA_MS} između uzastopnih odlazaka.
+     *
+     * @param sveNiti Sve niti pokrenute za privezana plovila.
+     */
     private void oznaciZaOdlazak(List<BrodThread> sveNiti) {
         Map<Terminal, List<BrodThread>> poTerminalu = new HashMap<>();
         for (BrodThread bt : sveNiti) {
@@ -213,14 +267,21 @@ public class KlijentskiProzor extends JFrame {
     }
 
     // ------------------------------------------------------------------
-    // Korak 2 — živi prikaz (C5)
+    // Korak 2 — živi prikaz
     // ------------------------------------------------------------------
 
+    /**
+     * Pokreće tajmer koji periodično poziva {@link #tik()} dok simulacija traje.
+     */
     private void zapocniZiviPrikaz() {
         timer = new Timer((int) PokretacSimulacije.INTERVAL_RENDEROVANJA_MS, e -> tik());
         timer.start();
     }
 
+    /**
+     * Osvježava prikaz i provjerava da li je simulacija stigla do kraja, pozivano periodično dok
+     * je {@link #timer} aktivan.
+     */
     private void tik() {
         osvjeziPrikaz();
         if (odlasciOznaceni && !simulacijaZavrsena
@@ -231,9 +292,13 @@ public class KlijentskiProzor extends JFrame {
     }
 
     // ------------------------------------------------------------------
-    // Korak 4 — dodavanje plovila tokom simulacije (C8/C9)
+    // Korak 4 — dodavanje plovila tokom simulacije
     // ------------------------------------------------------------------
 
+    /**
+     * Otvara formu za dodavanje novog plovila zadatog tipa na odabrani terminal, i ako je
+     * plovilo uspješno sačuvano, pamti njegov IMO broj kao dodat tokom simulacije.
+     */
     private void dodajPloviloTokomSimulacije() {
         TipPlovila tip = (TipPlovila) tipCombo.getSelectedItem();
         Terminal odabraniTerminal = (Terminal) terminalCombo.getSelectedItem();
@@ -248,9 +313,13 @@ public class KlijentskiProzor extends JFrame {
     }
 
     // ------------------------------------------------------------------
-    // Korak 5 — kraj simulacije i serijalizacija (E1/E2)
+    // Korak 5 — kraj simulacije i serijalizacija
     // ------------------------------------------------------------------
 
+    /**
+     * Zaustavlja živi prikaz, onemogućava dalje dodavanje plovila, i u pozadinskoj niti
+     * serijalizuje stanje luke, a nakon toga obavještava korisnika da je simulacija završena.
+     */
     private void zavrsiSimulaciju() {
         timer.stop();
         dodajDugme.setEnabled(false);
@@ -271,6 +340,9 @@ public class KlijentskiProzor extends JFrame {
         }.execute();
     }
 
+    /**
+     * Zatvara prozor, prethodno zaustavljajući sve tajmere koje je pokrenuo.
+     */
     // Zaustavlja sve javax.swing.Timer instance koje ovaj prozor može pokrenuti — bez ovoga,
     // pokreniSimulaciju()/oznaciZaOdlazak() zakazani tajmeri (render, jednokratni "odgoda" prije
     // označavanja za odlazak, i ponavljajući "raspored" koji redom zove zatraziNapustanje()) nastave
@@ -284,6 +356,9 @@ public class KlijentskiProzor extends JFrame {
         super.dispose();
     }
 
+    /**
+     * Zaustavlja render tajmer i oba tajmera vezana za odlazak plovila, ako su pokrenuti.
+     */
     void zaustaviSveTajmereZaTest() {
         if (timer != null) {
             timer.stop();
@@ -296,7 +371,14 @@ public class KlijentskiProzor extends JFrame {
         }
     }
 
-    // Paket-privatna, override-abilna kuka za sve JOptionPane dijaloge (K10-stil samodovoljnosti):
+    /**
+     * Prikazuje poruku korisniku u dijalogu.
+     *
+     * @param poruka Tekst poruke.
+     * @param naslov Naslov dijaloga.
+     * @param tip Tip poruke ({@link JOptionPane} konstanta, npr. {@code ERROR_MESSAGE}).
+     */
+    // Paket-privatna, override-abilna kuka za sve JOptionPane dijaloge (samodovoljna, ne oslanja se na spoljni kod):
     // JOptionPane.showMessageDialog() pumpa svoju UGNIJEŽDENU petlju događaja i blokira dok se
     // dijalog ne zatvori — u pravoj upotrebi to radi jer korisnik klikne "OK" na EDT-u, ali pozvano
     // direktno sa test niti (bez EDT-a, bez ijednog klika) blokira ZAUVIJEK. Testovi preklapaju ovu
@@ -305,43 +387,89 @@ public class KlijentskiProzor extends JFrame {
         JOptionPane.showMessageDialog(this, poruka, naslov, tip);
     }
 
-    // Paket-privatna vidljivost radi direktnog testiranja, isti obrazac kao PlovilaFormaDijalog.
+    /**
+     * Postavlja tekst polja za minimalan broj plovila po terminalu, paket-privatna vidljivost
+     * radi direktnog testiranja, isti obrazac kao PlovilaFormaDijalog.
+     *
+     * @param vrijednost Tekst koji se postavlja u polje.
+     */
     void postaviMinimumZaTest(String vrijednost) {
         minimumPolje.setText(vrijednost);
     }
 
+    /**
+     * Poziva {@link #pokreniSimulaciju()} direktno, bez potrebe za simuliranjem klika na dugme.
+     */
     void pokreniSimulacijuZaTest() {
         pokreniSimulaciju();
     }
 
+    /**
+     * Omogućava dobijanje trenutnog stanja luke.
+     *
+     * @return Trenutna luka.
+     */
     Luka getLukaZaTest() {
         return luka;
     }
 
+    /**
+     * Omogućava dobijanje skupa IMO brojeva plovila označenih za odlazak.
+     *
+     * @return Skup IMO brojeva.
+     */
     Set<String> getImoZaOdlazakZaTest() {
         return imoZaOdlazak;
     }
 
+    /**
+     * Omogućava dobijanje skupa IMO brojeva plovila dodatih tokom simulacije.
+     *
+     * @return Skup IMO brojeva.
+     */
     Set<String> getImoDodataTokomSimulacijeZaTest() {
         return imoDodataTokomSimulacije;
     }
 
+    /**
+     * Provjerava da li je simulacija označena kao završena.
+     *
+     * @return {@code true} ako je simulacija završena.
+     */
     boolean jeSimulacijaZavrsenaZaTest() {
         return simulacijaZavrsena;
     }
 
+    /**
+     * Poziva {@link #tik()} direktno, umjesto čekanja na sljedeći okidaj tajmera.
+     */
     void tikZaTest() {
         tik();
     }
 
+    /**
+     * Provjerava da li je dugme za dodavanje plovila trenutno omogućeno.
+     *
+     * @return {@code true} ako je dugme omogućeno.
+     */
     boolean jeDodajDugmeOmoguceno() {
         return dodajDugme.isEnabled();
     }
 
+    /**
+     * Postavlja odabrani terminal u padajućem meniju.
+     *
+     * @param t Terminal koji treba odabrati.
+     */
     void postaviOdabraniTerminalZaTest(Terminal t) {
         terminalCombo.setSelectedItem(t);
     }
 
+    /**
+     * Omogućava dobijanje tekstualnog polja koje prikazuje stanje terminala.
+     *
+     * @return Polje sa prikazom terminala.
+     */
     JTextArea getPrikazPoljeZaTest() {
         return prikazPolje;
     }

@@ -25,42 +25,101 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Jedinstvena forma za unos podataka o plovilu, sa poljima koja se dinamički prikazuju u
+ * zavisnosti od izabranog tipa plovila, korištena i za dodavanje novog i za izmjenu postojećeg
+ * plovila.
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ * @see TipPlovila
+ * @see PlovilaValidator
+ */
 public class PlovilaFormaDijalog extends JDialog {
 
+    /**
+     * Način na koji se novi kandidat "dodaje" u luku, zavisi od konteksta u kojem je forma
+     * otvorena (miran administratorski unos ili živa simulacija).
+     */
     // Kako se kandidat "dodaje" zavisi od konteksta u kojem je forma otvorena: admin dodaje
     // direktno u matricu (UredjivanjePlovilaService.dodajPlovilo — simulacija ne radi, bezbjedno),
-    // a klijent tokom žive simulacije mora ići kroz punu BrodThread navigaciju (K8/C9) —
+    // a klijent tokom žive simulacije mora ići kroz punu BrodThread navigaciju —
     // vidi KlijentskaSimulacijaService.dodajTokomSimulacije(). Izmjena (postojece != null) uvijek
     // ide kroz UredjivanjePlovilaService.izmijeniPlovilo(), bez obzira na kontekst — izmjena
     // postojećeg plovila na terminalu ne pokreće novu nit.
     @FunctionalInterface
     interface DodavanjeStrategija {
+        /**
+         * Pokušava dodati kandidata u luku na zadatom terminalu.
+         *
+         * @param luka Luka u koju se plovilo dodaje.
+         * @param terminal Terminal na koji se plovilo dodaje.
+         * @param kandidat Kandidat koji se dodaje.
+         * @return Prazna lista ako je dodavanje uspjelo, inače lista opisa grešaka.
+         */
         List<String> dodaj(Luka luka, Terminal terminal, Plovilo kandidat);
     }
 
+    /** Luka kojoj terminal na koji se plovilo dodaje ili izmjenjuje pripada. */
     private final Luka luka;
+    /** Terminal na koji se plovilo dodaje ili na kojem se izmjenjuje. */
     private final Terminal terminal;
+    /** Tip plovila koje se dodaje, ili tip postojećeg plovila koje se izmjenjuje. */
     private final TipPlovila tip;
+    /** Plovilo koje se izmjenjuje, ili {@code null} ako se dodaje novo. */
     private final Plovilo postojece;
+    /** Strategija dodavanja kandidata, zavisna od konteksta u kojem je forma otvorena. */
     private final DodavanjeStrategija dodavanjeStrategija;
 
+    /** Polje za unos naziva plovila. */
     private final JTextField nazivPolje = new JTextField();
+    /** Polje za unos IMO broja plovila. */
     private final JTextField imoPolje = new JTextField();
+    /** Polje za unos broja motora plovila. */
     private final JTextField brojMotoraPolje = new JTextField();
+    /** Polje za unos registarske oznake plovila. */
     private final JTextField registarskiBrojPolje = new JTextField();
+    /** Neuredivo polje koje prikazuje putanju do izabrane fotografije. */
     private final JTextField fotografijaPrikaz = new JTextField();
+    /** Polje za unos vrijednosti specifične za trup plovila (kapacitet, broj putnika ili zapremina). */
     private final JTextField specificnoPolje = new JTextField();
+    /** Neuredivo polje koje prikazuje putanju do izabranog spiska potjera. */
     private final JTextField spisakPotjeraPrikaz = new JTextField();
+    /** Checkbox za uključivanje rotacije, prikazan samo za tipove plovila koji pripadaju nekoj državnoj službi. */
     private final JCheckBox rotacijaCheckbox;
 
+    /** Putanja do izabrane fotografije plovila. */
     private File fotografija;
+    /** Putanja do izabranog spiska potjera, relevantno samo za plovila obalske straže. */
     private File spisakPotjera;
+    /** Postavlja se na {@code true} kad je plovilo uspješno sačuvano (dodato ili izmijenjeno). */
     private boolean sacuvano = false;
 
+    /**
+     * Kreira formu za dodavanje novog ili izmjenu postojećeg plovila, koristeći podrazumijevanu
+     * strategiju dodavanja (miran administratorski unos direktno u matricu terminala).
+     *
+     * @param vlasnik Prozor vlasnik ovog modalnog dijaloga.
+     * @param luka Luka kojoj terminal pripada.
+     * @param terminal Terminal na koji se plovilo dodaje ili na kojem se izmjenjuje.
+     * @param tip Tip plovila koje se dodaje, ili tip postojećeg plovila koje se izmjenjuje.
+     * @param postojece Plovilo koje se izmjenjuje, ili {@code null} za dodavanje novog.
+     */
     public PlovilaFormaDijalog(Frame vlasnik, Luka luka, Terminal terminal, TipPlovila tip, Plovilo postojece) {
         this(vlasnik, luka, terminal, tip, postojece, UredjivanjePlovilaService::dodajPlovilo);
     }
 
+    /**
+     * Kreira formu za dodavanje novog ili izmjenu postojećeg plovila, sa zadatom strategijom
+     * dodavanja.
+     *
+     * @param vlasnik Prozor vlasnik ovog modalnog dijaloga.
+     * @param luka Luka kojoj terminal pripada.
+     * @param terminal Terminal na koji se plovilo dodaje ili na kojem se izmjenjuje.
+     * @param tip Tip plovila koje se dodaje, ili tip postojećeg plovila koje se izmjenjuje.
+     * @param postojece Plovilo koje se izmjenjuje, ili {@code null} za dodavanje novog.
+     * @param dodavanjeStrategija Strategija kojom se novi kandidat dodaje u luku.
+     */
     PlovilaFormaDijalog(Frame vlasnik, Luka luka, Terminal terminal, TipPlovila tip, Plovilo postojece,
                         DodavanjeStrategija dodavanjeStrategija) {
         super(vlasnik, postojece == null ? "Dodaj plovilo" : "Izmijeni plovilo", true);
@@ -80,14 +139,30 @@ public class PlovilaFormaDijalog extends JDialog {
         setLocationRelativeTo(vlasnik);
     }
 
+    /**
+     * Provjerava da li je plovilo uspješno sačuvano (dodato ili izmijenjeno) prije zatvaranja
+     * dijaloga.
+     *
+     * @return {@code true} ako je sačuvano.
+     */
     public boolean jeSacuvano() {
         return sacuvano;
     }
 
+    /**
+     * Omogućava dobijanje IMO broja sačuvanog plovila.
+     *
+     * @return IMO broj unesen u polje za IMO.
+     */
     public String getSacuvaniImo() {
         return imoPolje.getText().trim();
     }
 
+    /**
+     * Sastavlja i raspoređuje sva polja forme, prilagođena tipu plovila (specifično polje trupa,
+     * spisak potjera samo za obalsku stražu, checkbox rotacije samo za državna plovila), i dugmad
+     * za čuvanje/otkazivanje.
+     */
     private void izgradiUI() {
         fotografijaPrikaz.setEditable(false);
         spisakPotjeraPrikaz.setEditable(false);
@@ -140,6 +215,15 @@ public class PlovilaFormaDijalog extends JDialog {
         add(dugmad, BorderLayout.SOUTH);
     }
 
+    /**
+     * Sastavlja jedan red forme koji se sastoji od neuredivog polja za prikaz putanje i dugmeta
+     * koje otvara dijalog za izbor fajla.
+     *
+     * @param prikaz Polje koje prikazuje izabranu putanju.
+     * @param natpisDugmeta Tekst na dugmetu.
+     * @param akcija Radnja koju dugme pokreće.
+     * @return Sastavljeni red forme.
+     */
     private JPanel redSaDugmetom(JTextField prikaz, String natpisDugmeta, java.awt.event.ActionListener akcija) {
         JPanel red = new JPanel(new BorderLayout(4, 0));
         red.add(prikaz, BorderLayout.CENTER);
@@ -149,6 +233,10 @@ public class PlovilaFormaDijalog extends JDialog {
         return red;
     }
 
+    /**
+     * Otvara dijalog za izbor fotografije i, ako je fajl izabran, postavlja njegovu apsolutnu
+     * putanju u {@link #fotografija} i prikazuje je u {@link #fotografijaPrikaz}.
+     */
     private void izaberiFotografiju() {
         FileDialog fd = new FileDialog(this, "Izaberi fotografiju", FileDialog.LOAD);
         fd.setVisible(true);
@@ -158,6 +246,10 @@ public class PlovilaFormaDijalog extends JDialog {
         }
     }
 
+    /**
+     * Otvara dijalog za izbor spiska potjera i, ako je fajl izabran, postavlja njegovu apsolutnu
+     * putanju u {@link #spisakPotjera} i prikazuje je u {@link #spisakPotjeraPrikaz}.
+     */
     private void izaberiSpisakPotjera() {
         FileDialog fd = new FileDialog(this, "Izaberi spisak potjera", FileDialog.LOAD);
         fd.setVisible(true);
@@ -167,6 +259,10 @@ public class PlovilaFormaDijalog extends JDialog {
         }
     }
 
+    /**
+     * Predpopunjava sva polja forme vrijednostima iz {@link #postojece}, korišteno pri otvaranju
+     * forme za izmjenu postojećeg plovila.
+     */
     private void popuniPostojecimVrijednostima() {
         nazivPolje.setText(postojece.getNaziv());
         imoPolje.setText(postojece.getImoBroj());
@@ -192,6 +288,13 @@ public class PlovilaFormaDijalog extends JDialog {
         }
     }
 
+    /**
+     * Formatira vrijednost polja specifičnog za trup plovila kao tekst pogodan za predpopunjavanje
+     * forme.
+     *
+     * @param p Plovilo čiji se specifičan atribut formatira.
+     * @return Tekstualni prikaz specifičnog atributa, ili prazan tekst ako trup nije prepoznat.
+     */
     private String specificnaVrijednostZa(Plovilo p) {
         if (p instanceof KontejnerskiBrod kb) {
             return String.valueOf(kb.getKapacitetTEU());
@@ -205,22 +308,50 @@ public class PlovilaFormaDijalog extends JDialog {
         return "";
     }
 
+    /**
+     * Provjerava da li ova forma prikazuje checkbox rotacije, tj. da li tip plovila pripada
+     * nekoj državnoj službi.
+     *
+     * @return {@code true} ako je checkbox rotacije prisutan.
+     */
     // Paket-privatna vidljivost radi direktnog testiranja checkbox-a rotacije, bez potrebe za
     // stvarnim klikanjem kroz UI (isti obrazac kao provjeriSudar()/primijeniPauzu()).
     boolean imaRotacijuCheckbox() {
         return rotacijaCheckbox != null;
     }
 
+    /**
+     * Postavlja stanje checkbox-a rotacije, bez efekta ako checkbox nije prisutan.
+     *
+     * @param vrijednost Nova vrijednost checkbox-a.
+     */
     void postaviRotacijuZaTest(boolean vrijednost) {
         if (rotacijaCheckbox != null) {
             rotacijaCheckbox.setSelected(vrijednost);
         }
     }
 
+    /**
+     * Provjerava da li je checkbox rotacije trenutno označen.
+     *
+     * @return {@code true} ako je checkbox prisutan i označen.
+     */
     boolean jeRotacijaOznacenaZaTest() {
         return rotacijaCheckbox != null && rotacijaCheckbox.isSelected();
     }
 
+    /**
+     * Direktno popunjava sva polja forme zadatim vrijednostima, bez potrebe za stvarnim
+     * kucanjem/klikanjem kroz korisnički interfejs.
+     *
+     * @param naziv Naziv plovila.
+     * @param imo IMO broj plovila.
+     * @param brojMotora Broj motora plovila.
+     * @param registarskiBroj Registarska oznaka plovila.
+     * @param foto Putanja do fotografije plovila.
+     * @param specificnoTekst Tekst za polje specifično za trup plovila.
+     * @param spisak Putanja do spiska potjera.
+     */
     void popuniZaTest(String naziv, String imo, String brojMotora, String registarskiBroj,
                        File foto, String specificnoTekst, File spisak) {
         nazivPolje.setText(naziv);
@@ -232,6 +363,12 @@ public class PlovilaFormaDijalog extends JDialog {
         spisakPotjera = spisak;
     }
 
+    /**
+     * Pokušava sačuvati kandidata sastavljenog od trenutnih vrijednosti polja forme: parsira
+     * specifično polje trupa, validira kandidata, pa ga dodaje ili izmjenjuje preko odgovarajuće
+     * strategije. Ako bilo koji korak prijavi grešku, prikazuje je korisniku i ostavlja dijalog
+     * otvorenim; u suprotnom označava plovilo kao sačuvano i zatvara dijalog.
+     */
     void pokusajSacuvaj() {
         List<String> greske = new ArrayList<>();
 

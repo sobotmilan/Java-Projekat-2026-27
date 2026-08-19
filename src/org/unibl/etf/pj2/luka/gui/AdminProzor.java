@@ -31,20 +31,40 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+/**
+ * Glavni prozor administratorske aplikacije: prikazuje sadržaj svakog terminala u tabeli, i
+ * omogućava dodavanje, izmjenu i brisanje plovila, preuzimanje CSV izvještaja o taksama, i
+ * pokretanje klijentske aplikacije.
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ * @see KlijentskiProzor
+ */
 public class AdminProzor extends JFrame {
 
+    /** Trenutno stanje luke koje ovaj prozor prikazuje i kojim upravlja. */
     private Luka luka;
 
+    /** Padajući meni za izbor tipa plovila koje se dodaje. */
     private final JComboBox<TipPlovila> tipCombo = new JComboBox<>(TipPlovila.values());
+
+    /** Padajući meni za izbor terminala čiji se sadržaj trenutno prikazuje u tabeli. */
     private final JComboBox<Terminal> terminalCombo = new JComboBox<>();
+
+    /** Model tabele sa sadržajem odabranog terminala, sa svim ćelijama neuredivim direktno u tabeli. */
     private final DefaultTableModel tabelaModel = new DefaultTableModel(PregledTerminalaService.ZAGLAVLJA, 0) {
         @Override
         public boolean isCellEditable(int red, int kolona) {
             return false;
         }
     };
+
+    /** Tabela koja prikazuje sadržaj odabranog terminala. */
     private final JTable tabela = new JTable(tabelaModel);
 
+    /**
+     * Kreira administratorski prozor i odmah pokreće učitavanje postojećeg stanja luke.
+     */
     public AdminProzor() {
         super("Administratorska aplikacija");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -55,6 +75,11 @@ public class AdminProzor extends JFrame {
         ucitajStanje();
     }
 
+    /**
+     * Sastavlja i raspoređuje sve komponente prozora: gornju traku sa izborom terminala/tipa i
+     * dugmadima za dodavanje/izmjenu/brisanje, tabelu u sredini, i donju traku sa preuzimanjem
+     * izvještaja i pokretanjem klijentske aplikacije.
+     */
     private void izgradiUI() {
         terminalCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -79,7 +104,7 @@ public class AdminProzor extends JFrame {
         JButton izmijeniDugme = new JButton("Izmijeni");
         izmijeniDugme.addActionListener(e -> izmijeniAkciju());
 
-        JButton obrisiDugme = new JButton("Obriši");
+        JButton obrisiDugme = new JButton("Izbriši");
         obrisiDugme.addActionListener(e -> obrisiAkciju());
 
         JPanel gornjaTraka = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -115,6 +140,11 @@ public class AdminProzor extends JFrame {
         add(donjaTraka, BorderLayout.SOUTH);
     }
 
+    /**
+     * Učitava stanje luke sa diska u pozadinskoj niti (a ako nikad nije sačuvano, gradi praznu
+     * luku sa brojem terminala iz konfiguracije), pa nakon učitavanja popunjava padajući meni
+     * terminala i tabelu.
+     */
     private void ucitajStanje() {
         new SwingWorker<Luka, Void>() {
             @Override
@@ -152,6 +182,9 @@ public class AdminProzor extends JFrame {
         }.execute();
     }
 
+    /**
+     * Ponovo puni tabelu sadržajem trenutno odabranog terminala.
+     */
     private void osvjeziTabelu() {
         tabelaModel.setRowCount(0);
         Terminal t = (Terminal) terminalCombo.getSelectedItem();
@@ -163,10 +196,20 @@ public class AdminProzor extends JFrame {
         }
     }
 
+    /**
+     * Omogućava dobijanje trenutno odabranog terminala u padajućem meniju.
+     *
+     * @return Odabrani terminal, ili {@code null} ako ništa nije odabrano.
+     */
     private Terminal odabraniTerminal() {
         return (Terminal) terminalCombo.getSelectedItem();
     }
 
+    /**
+     * Omogućava dobijanje IMO broja plovila iz trenutno odabranog reda tabele.
+     *
+     * @return IMO broj odabranog plovila, ili {@code null} ako nijedan red nije odabran.
+     */
     private String odabraniImo() {
         int red = tabela.getSelectedRow();
         if (red < 0) {
@@ -175,6 +218,10 @@ public class AdminProzor extends JFrame {
         return (String) tabelaModel.getValueAt(red, 0);
     }
 
+    /**
+     * Otvara formu za dodavanje novog plovila odabranog tipa na odabrani terminal, i osvježava
+     * tabelu ako je plovilo uspješno sačuvano.
+     */
     private void dodajAkcija() {
         Terminal t = odabraniTerminal();
         if (t == null || luka == null) {
@@ -188,6 +235,10 @@ public class AdminProzor extends JFrame {
         }
     }
 
+    /**
+     * Otvara formu (unaprijed popunjenu postojećim podacima) za izmjenu plovila odabranog u tabeli, i
+     * osvježava tabelu ako je izmjena uspješno sačuvana.
+     */
     private void izmijeniAkciju() {
         Terminal t = odabraniTerminal();
         String imo = odabraniImo();
@@ -206,6 +257,9 @@ public class AdminProzor extends JFrame {
         }
     }
 
+    /**
+     * Traži potvrdu, pa nakon nje briše plovilo odabrano u tabeli i osvježava prikaz.
+     */
     private void obrisiAkciju() {
         Terminal t = odabraniTerminal();
         String imo = odabraniImo();
@@ -220,6 +274,11 @@ public class AdminProzor extends JFrame {
         }
     }
 
+    /**
+     * Otvara dijalog za izbor odredišta, pa u pozadinskoj niti kopira CSV izvještaj tamo. Ako
+     * izvještaj još ne postoji, samo obavještava korisnika bez otvaranja dijaloga za izbor
+     * odredišta.
+     */
     private void preuzmiCsvIzvjestaj() {
         if (!IzvjestajService.izvjestajPostoji()) {
             JOptionPane.showMessageDialog(this, "Nema još evidentiranih taksi.",
@@ -259,6 +318,10 @@ public class AdminProzor extends JFrame {
         }.execute();
     }
 
+    /**
+     * Serijalizuje trenutno stanje luke u pozadinskoj niti, pa nakon uspješnog upisa otvara
+     * klijentski prozor.
+     */
     private void pokreniKlijentskuAplikaciju() {
         if (luka == null) {
             return;
@@ -277,13 +340,19 @@ public class AdminProzor extends JFrame {
         }.execute();
     }
 
+    /**
+     * Kreira klijentski prozor nad trenutnim stanjem luke, i registruje osluškivač koji, čim se
+     * klijentski prozor zatvori, ponovo učitava stanje luke sa diska.
+     *
+     * @return Novokreirani, još nevidljivi klijentski prozor.
+     */
     // Klijent radi nad SOPSTVENOM kopijom luke (KlijentskiProzor.pokreniSimulaciju() zamjenjuje
-    // svoje polje luka rezultatom PokretacSimulacije.pripremiPocetnoStanje() — admin i klijent od
+    // svoje polje luka rezultatom PokretacSimulacije.pripremiPocetnoStanje(), admin i klijent od
     // tog trenutka gledaju DVA RAZLIČITA objekta). Admin-ovo polje luka bi bez ovog listenera
-    // ostalo zauvijek zastarjelo (postavljeno samo jednom, u ucitajStanje()) — sljedeći klik na
+    // ostalo zauvijek zastarjelo (postavljeno samo jednom, u ucitajStanje()), sljedeći klik na
     // "Pokreni klijentsku aplikaciju" bi tim zastarjelim objektom prepisao ono što je klijent na
-    // kraju simulacije (E2) upisao, vraćajući otišla plovila i njihove STARE zapise u
-    // evidencijaUlaska (otud apsurdne takse pri sljedećoj naplati — vidi ZAHTJEVI.md). Zato admin
+    // kraju simulacije upisao, vraćajući otišla plovila i njihove STARE zapise u
+    // evidencijaUlaska (otud apsurdne takse pri sljedećoj naplati). Zato admin
     // ponovo učitava luka.ser sa diska čim se klijentski prozor zatvori, umjesto da nastavi da
     // vjeruje sopstvenom, potencijalno zastarjelom stanju u memoriji.
     KlijentskiProzor napraviKlijentskiProzor() {
@@ -297,10 +366,21 @@ public class AdminProzor extends JFrame {
         return klijent;
     }
 
+    /**
+     * Omogućava dobijanje trenutnog stanja luke.
+     *
+     * @return Trenutna luka.
+     */
     Luka getLukaZaTest() {
         return luka;
     }
 
+    /**
+     * Ulazna tačka administratorske aplikacije: otvara administratorski prozor na niti za
+     * događaje korisničkog interfejsa.
+     *
+     * @param args Argumenti komandne linije, trenutno se ne koriste.
+     */
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new AdminProzor().setVisible(true));
     }

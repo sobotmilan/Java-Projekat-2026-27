@@ -61,7 +61,7 @@ public class Luka implements Serializable {
     private transient Set<BrodThread> aktivnaPlovila;
 
     /**
-     * Vrijeme posljednjeg čuvanja stanja luke (F6), postavlja ga {@code SerializationUtil} pri
+     * Vrijeme posljednjeg čuvanja stanja luke, postavlja ga {@code SerializationUtil} pri
      * svakom pozivu {@code serijalizujStanjeLuke()}. Koristi se pri sljedećem učitavanju da se
      * period dok je JVM bio ugašen (aplikacija zatvorena) isključi iz obračuna proteklog vremena
      * boravka plovila u evidenciji ulaska — bez ovoga bi plovilo zatečeno u {@code luka.ser} od
@@ -73,7 +73,7 @@ public class Luka implements Serializable {
 
     /**
      * Kreira luku sa zadatim terminalima i evidencijom ulaska. Evidencija se kopira u novu
-     * {@link ConcurrentHashMap} (S3) bez obzira na implementaciju proslijeđene mape.
+     * {@link ConcurrentHashMap} bez obzira na implementaciju proslijeđene mape.
      *
      * @param terminali Terminali koji čine luku.
      * @param evidencijaUlaska Početna evidencija vremena ulaska po IMO broju (npr. prazna mapa
@@ -115,7 +115,7 @@ public class Luka implements Serializable {
     }
 
     /**
-     * Omogućava dobijanje evidencije vremena ulaska po IMO broju plovila (F1).
+     * Omogućava dobijanje evidencije vremena ulaska po IMO broju plovila.
      *
      * @return Mapa IMO broj → vrijeme ulaska.
      */
@@ -126,7 +126,7 @@ public class Luka implements Serializable {
     /**
      * Evidentira vrijeme ulaska plovila u luku, ako za taj IMO broj već ne postoji zapis.
      * Atomarna operacija ({@link ConcurrentHashMap#putIfAbsent}) — sprečava da dva broda sa istim
-     * IMO brojem (npr. usljed kolizije IMO brojača, vidi O1) prepišu tuđe vrijeme ulaska (S3).
+     * IMO brojem (npr. usljed kolizije IMO brojača) prepišu tuđe vrijeme ulaska.
      *
      * @param imoBroj IMO broj plovila koje ulazi.
      * @param time Vrijeme ulaska.
@@ -146,7 +146,7 @@ public class Luka implements Serializable {
     }
 
     /**
-     * Omogućava dobijanje vremena posljednjeg čuvanja stanja luke (F6).
+     * Omogućava dobijanje vremena posljednjeg čuvanja stanja luke.
      *
      * @return Vrijeme posljednjeg poziva {@code serijalizujStanjeLuke()}, ili {@code null} ako
      *         luka još nije sačuvana ili je učitana iz starijeg fajla bez ovog polja.
@@ -157,7 +157,7 @@ public class Luka implements Serializable {
     }
 
     /**
-     * Omogućava postavljanje vremena posljednjeg čuvanja stanja luke (F6). Poziva ga
+     * Omogućava postavljanje vremena posljednjeg čuvanja stanja luke. Poziva ga
      * {@code SerializationUtil} neposredno prije upisa u {@code luka.ser}.
      *
      * @param vrijemeZadnjegCuvanja Vrijeme čuvanja koje treba zapamtiti.
@@ -167,7 +167,7 @@ public class Luka implements Serializable {
     }
 
     /**
-     * Pomjera sve postojeće timestampove u evidenciji ulaska unaprijed za zadatu pauzu (F6) —
+     * Pomjera sve postojeće timestampove u evidenciji ulaska unaprijed za zadatu pauzu —
      * "preskače" period koji pauza predstavlja, kao da plovila nisu čekala dok je aplikacija bila
      * ugašena. Bez efekta ako je {@code pauza} {@code null}, nula ili negativna.
      *

@@ -12,11 +12,31 @@ import org.unibl.etf.pj2.luka.model.interfaces.ObalskaStraza;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Provjerava ispravnost podataka unesenih u administratorsku formu prije nego što se plovilo doda
+ * ili izmijeni.
+ *
+ * @author Milan Šobot
+ * @version 1.0
+ */
 public final class PlovilaValidator {
 
     private PlovilaValidator() {
     }
 
+    /**
+     * Provjerava kandidata za dodavanje ili izmjenu: obavezna tekstualna polja ne smiju biti
+     * prazna, IMO broj mora biti jedinstven u cijeloj luci, fotografija je obavezna, plovila
+     * obalske straže moraju imati spisak potjera, a specifično polje trupa (kapacitet, broj
+     * putnika ili zapremina) mora biti pozitivno.
+     *
+     * @param luka Luka protiv čije se cjelokupne flote provjerava jedinstvenost IMO broja.
+     * @param kandidat Plovilo čiji se podaci provjeravaju.
+     * @param izuzetiImo IMO broj koji se izuzima iz provjere jedinstvenosti (sopstveni IMO
+     *                   plovila koje se izmjenjuje, kad se ne mijenja), ili {@code null} pri
+     *                   dodavanju novog plovila.
+     * @return Lista tekstualnih opisa svih pronađenih grešaka, prazna ako je kandidat ispravan.
+     */
     public static List<String> validiraj(Luka luka, Plovilo kandidat, String izuzetiImo) {
         List<String> greske = new ArrayList<>();
 
@@ -57,6 +77,15 @@ public final class PlovilaValidator {
         return greske;
     }
 
+    /**
+     * Provjerava da li je zadati IMO broj slobodan u cijeloj luci — obilazi svako polje svakog
+     * terminala tražeći plovilo sa istim IMO brojem.
+     *
+     * @param luka Luka čija se flota pretražuje.
+     * @param imo IMO broj čija se slobodnost provjerava.
+     * @param izuzetiImo IMO broj koji se izuzima iz provjere (uvijek smatran slobodnim).
+     * @return {@code true} ako nijedno plovilo u luci (osim eventualno izuzetog) nema zadati IMO.
+     */
     private static boolean imoJeSlobodan(Luka luka, String imo, String izuzetiImo) {
         if (imo.equals(izuzetiImo)) {
             return true;

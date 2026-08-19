@@ -10,8 +10,8 @@ import org.unibl.etf.pj2.luka.model.interfaces.Vatrogasci;
 import java.util.function.Predicate;
 
 /**
- * Pretraga najbliže patrole (vatrogasci/obalska straža/carina) na nivou cijele luke (D2), koju
- * R4b (dispečovanje) koristi da odabere koje se službeno plovilo šalje na incident.
+ * Pretraga najbliže patrole (vatrogasci/obalska straža/carina) na nivou cijele luke, koju
+ * dispečovanje koristi da odabere koje se službeno plovilo šalje na incident.
  *
  * <p>Pretraga je namjerno port-wide (preko {@link Luka#getAktivnaPlovila()}), ne ograničena na
  * terminal incidenta: sa ~2.5% vatrogasnih plovila u tipičnoj floti (vidi napomenu u
@@ -40,7 +40,7 @@ public final class PretragaPatrole {
      * "Cijena" prelaska jednog terminala u odnosu na jedno polje lokalnog Menhetn rastojanja —
      * širina matrice terminala ({@link Terminal#KOLONA_IZLAZ}/dokovi se protežu kroz svih 17
      * kolona), tako da terminalska razlika uvijek dominira nad lokalnim rastojanjem unutar
-     * terminala, u skladu sa D2 (port-wide pretraga, ne ograničena na jedan terminal).
+     * terminala, u skladu sa pretragom na nivou cijele luke, ne ograničenom na jedan terminal.
      */
     static final int TEZINA_PRELASKA_TERMINALA = 17;
 
@@ -50,7 +50,7 @@ public final class PretragaPatrole {
     /**
      * Pronalazi najbliže aktivno (živo) plovilo koje implementira {@link Vatrogasci},
      * {@link ObalskaStraza} ili {@link Carina}, tražeći preko cijele luke
-     * ({@link Luka#getAktivnaPlovila()}), ne samo unutar zadatog terminala (D2).
+     * ({@link Luka#getAktivnaPlovila()}), ne samo unutar zadatog terminala.
      *
      * @param luka Luka čiji se registar aktivnih plovila pretražuje.
      * @param terminal Terminal u kojem se nalazi cilj (npr. mjesto incidenta).
@@ -63,6 +63,20 @@ public final class PretragaPatrole {
         return najblizaPatrola(luka, terminal, x, y, PretragaPatrole::jePatrola);
     }
 
+    /**
+     * Pronalazi najbliže aktivno plovilo koje je instanca zadate klase (npr. isključivo obalska
+     * straža), tražeći preko cijele luke na isti način kao
+     * {@link #najblizaPatrola(Luka, Terminal, int, int)}.
+     *
+     * @param luka Luka čiji se registar aktivnih plovila pretražuje.
+     * @param terminal Terminal u kojem se nalazi cilj (npr. mjesto incidenta).
+     * @param x Red ciljne ćelije u matrici {@code terminal}-a.
+     * @param y Kolona ciljne ćelije u matrici {@code terminal}-a.
+     * @param tip Klasa ili interfejs kojoj kandidat mora pripadati.
+     * @param <T> Tip traženog plovila.
+     * @return Nit najbliže patrole traženog tipa, ili {@code null} ako nijedno odgovarajuće
+     *         plovilo trenutno nije aktivno i pozicionirano u luci, ili je {@code tip null}.
+     */
     public static <T> BrodThread najblizaPatrola(Luka luka, Terminal terminal, int x, int y, Class<T> tip) {
         if (tip == null) {
             return null;
@@ -111,6 +125,14 @@ public final class PretragaPatrole {
         return p instanceof Vatrogasci || p instanceof ObalskaStraza || p instanceof Carina;
     }
 
+    /**
+     * Provjerava da li je kandidat trenutno slobodan da bude poslat na novi zadatak, plovilo koje
+     * je već na putu ka incidentu, koje je već na mjestu incidenta, ili koje napušta luku se ne
+     * uzima u obzir.
+     *
+     * @param kandidat Plovilo čija se dostupnost provjerava.
+     * @return {@code true} ako kandidat trenutno nije angažovan na drugom zadatku.
+     */
     private static boolean jeDostupna(BrodThread kandidat) {
         Zadatak zadatak = kandidat.getZadatak();
         return zadatak != Zadatak.KA_INCIDENTU && zadatak != Zadatak.NA_INCIDENTU && zadatak != Zadatak.NAPUSTA;

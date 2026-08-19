@@ -194,7 +194,7 @@ abstract public class Plovilo implements Serializable {
 
     /**
      * Dva plovila su jednaka ako imaju isti IMO broj, jer on je jedinstveni međunarodni identifikator
-     * plovila (M1) i jedini prirodan ključ identiteta plovila (u suštini, primarni ključ).
+     * plovila i jedini prirodan ključ identiteta plovila (u suštini, primarni ključ).
      *
      * @param o Objekat sa kojim se tekući objekat poredi.
      * @return true ako su oba objekta koja se porede tipovi plovila i imaju isti, ne-{@code null} IMO broj.
